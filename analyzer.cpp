@@ -1,0 +1,873 @@
+#include <set>
+#include <vector>
+
+#include "analyzer.hpp"
+
+// グローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
+static const int g_global_base_addr = 0x0000000;
+
+// ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
+// 読み書き可否はハードウェア実装(mypc/alu.svh)に従う．型は全てunsigned int扱い
+static const std::vector<symbol_t> g_hw_vars = {
+    // 名前        型                置き場所       番地   読み   書き
+    {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
+    {"DIPSW",     {BASE_INT, false}, LOC_REGISTER, 0x21, true,  false},  // DIPスイッチ
+    {"LED",       {BASE_INT, false}, LOC_REGISTER, 0x22, false, true},   // LED
+    {"RGBLED",    {BASE_INT, false}, LOC_REGISTER, 0x23, false, true},   // RGB LED
+    {"PMOD_A",    {BASE_INT, false}, LOC_REGISTER, 0x24, true,  true},   // Pmod A
+    {"PMOD_B",    {BASE_INT, false}, LOC_REGISTER, 0x25, true,  true},   // Pmod B
+    {"AR8_13",    {BASE_INT, false}, LOC_REGISTER, 0x26, true,  true},   // Arduinoピン AR8～AR13
+    {"AR_I2C",    {BASE_INT, false}, LOC_REGISTER, 0x27, true,  true},   // A，AR_SDA，AR_SCL
+    {"AR0_7",     {BASE_INT, false}, LOC_REGISTER, 0x28, true,  true},   // Arduinoピン AR0～AR7
+    {"AR_RST",    {BASE_INT, false}, LOC_REGISTER, 0x29, true,  false},  // Arduinoリセット
+    {"AR_SPI",    {BASE_INT, false}, LOC_REGISTER, 0x2a, true,  true},   // AR_MISO，AR_SCK，AR_MOSI，AR_SS
+    {"GPIO0_7",   {BASE_INT, false}, LOC_REGISTER, 0x2d, true,  true},   // GPIO0～7
+    {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, true,  true},   // GPIO8～15
+    {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, true,  true},   // GPIO16～23
+    {"GPIO24_27", {BASE_INT, false}, LOC_REGISTER, 0x30, true,  true},   // GPIO24～27
+};
+
+// コンストラクタ: ASTを受け取る
+Analyzer::Analyzer(node_t *root) : root_(root), next_addr_(g_global_base_addr) {}
+
+// 意味解析を実行してシンボルテーブルを返す
+std::map<std::string, const symbol_t *> Analyzer::operator()() {
+    // ハードウェア変数をあらかじめシンボルテーブルに登録する (静的領域の実体を直接指す)
+    for (const symbol_t &hw : g_hw_vars) {
+        this->symbols_[hw.name] = &hw;
+    }
+
+    // 1パス目: グローバル変数の登録と関数名の収集を行う
+    this->collect_globals();
+
+    // プログラムの開始点となるmain関数が必要
+    if (this->func_names_.find("main") == this->func_names_.end()) {
+        throw std::string("compiler error: 'main' function is not defined");
+    }
+
+    // 2パス目: 各関数本体を検査する
+    // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
+    //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
+    this->analyze_functions();
+
+    // 呼び出しグラフを検査する (再帰の検出，最大ネスト段数の超過検出)
+    this->check_call_depth();
+
+    // レジスタ退避領域を，全変数のアドレス割り当て後の空き番地に確保する
+    this->scratch_base_ = this->next_addr_;
+    this->next_addr_ += MAX_REG * 4;
+
+    // 全変数の合計アドレスがアドレス空間(28ビット)を超えていないか確認する
+    if (this->next_addr_ > 0x10000000) {
+        throw std::string("compiler error: total variable memory exceeds address space (28-bit)");
+    }
+
+    return this->symbols_;
+}
+
+// パラメータシンボル表を返す
+const std::map<std::string, std::vector<const symbol_t *>> &Analyzer::func_params() const {
+    return this->func_params_;
+}
+
+// レジスタ退避領域の先頭番地を返す
+int Analyzer::scratch_base() const {
+    return this->scratch_base_;
+}
+
+// 1パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
+// 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする
+void Analyzer::collect_globals() {
+    for (node_t *child : this->root_->children) {
+        // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
+        if (this->symbols_.count(child->sval) || this->func_names_.count(child->sval)) {
+            throw std::string("compiler error: redefinition of '") + child->sval
+                  + "' at line " + std::to_string(child->line);
+        }
+
+        // グローバル変数宣言: 初期化子を評価し，アドレスを割り当てて登録する
+        if (child->kind == ND_VAR_DECL) {
+            if (child->type.is_array) {
+                if (!child->children.empty() && child->children[0]->kind == ND_STRING_LIT) {
+                    // 文字列リテラルによる初期化: char msg[] = "hello";
+                    if (child->type.base != BASE_CHAR) {
+                        throw std::string("compiler error: string literal can only initialize char array at line ")
+                              + std::to_string(child->children[0]->line);
+                    }
+                    // サイズは文字列長 + 1(ヌル終端)
+                    const int size = static_cast<int>(child->children[0]->sval.size()) + 1;
+                    child->type.array_size = size;
+                } else {
+                    // サイズ明示の配列宣言: int table[10];
+                    const long long size = Analyzer::eval_const_expr(child->children[0]);
+                    if (size <= 0) {
+                        throw std::string("compiler error: array size must be positive at line ")
+                              + std::to_string(child->children[0]->line);
+                    }
+                    child->type.array_size = static_cast<int>(size);
+                    // サイズ式を畳み込み済みリテラルに置き換える
+                    node_t *folded = new node_t;
+                    folded->kind = ND_INT_LIT;
+                    folded->ival = size;
+                    folded->line = child->children[0]->line;
+                    child->children[0] = folded;
+                }
+                // アドレスを割り当てて登録する (確保ワード数は型に応じて計算)
+                symbol_t *sym =
+                    new symbol_t{child->sval, child->type, LOC_GLOBAL, this->next_addr_, true, true};
+                this->symbols_[child->sval] = sym;
+                child->sym = sym;
+                this->next_addr_ += Analyzer::calc_array_words(child->type) * 4;
+            } else {
+                // スカラー変数: 初期化子があればコンパイル時に計算し，リテラルに置き換える(定数畳み込み)
+                if (!child->children.empty()) {
+                    node_t *folded = new node_t;
+                    folded->kind = ND_INT_LIT;
+                    folded->ival = Analyzer::eval_const_expr(child->children[0]);
+                    folded->line = child->children[0]->line;
+                    // 差し替え前の旧部分木はあえて解放しない
+                    // (ASTは全ノードをdeleteせず，プロセス終了時のOS回収に任せる方針のため)
+                    child->children[0] = folded;  // 初期化式の子要素を計算済みのリテラルで更新する
+                }
+                // ソース宣言のグローバル変数はnewでヒープ確保し解放しない
+                symbol_t *sym =
+                    new symbol_t{child->sval, child->type, LOC_GLOBAL, this->next_addr_, true, true};
+                this->symbols_[child->sval] = sym;
+                child->sym = sym;   // 宣言ノード自身もシンボルを指す (コード生成でアドレス参照に使う)
+                this->next_addr_ += 4;   // 型に関係なく1変数=1ワード(4バイト)使う
+            }
+        }
+        // 関数定義: 関数名・戻り値型・パラメータのシンボルを登録する
+        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は2パス目より前に全関数のパラメータが必要なため，
+        // パラメータの番地割り当てもここ(1パス目)で行う．2パス目(analyze_functions)はここで作った
+        // シンボルをスコープに積んで本体を検査するだけになる
+        else if (child->kind == ND_FUNC_DEF) {
+            this->func_names_[child->sval] = child->type;
+
+            std::vector<const symbol_t *> params;
+            for (size_t i = 0; i + 1 < child->children.size(); i++) {
+                node_t *param = child->children[i];
+
+                // 同一関数内でのパラメータ名重複はエラー
+                for (const symbol_t *p : params) {
+                    if (p->name == param->sval) {
+                        throw std::string("compiler error: duplicate parameter name '") + param->sval
+                              + "' at line " + std::to_string(param->line);
+                    }
+                }
+                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタを上書きしないように)
+                const auto hw_it = this->symbols_.find(param->sval);
+                if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
+                    throw std::string("compiler error: cannot shadow hardware register '") + param->sval
+                          + "' at line " + std::to_string(param->line);
+                }
+
+                symbol_t *sym = new symbol_t{param->sval, param->type, LOC_LOCAL, this->next_addr_, true, true};
+                this->next_addr_ += 4;
+                param->sym = sym;
+                params.push_back(sym);
+            }
+            this->func_params_[child->sval] = params;
+        }
+    }
+}
+
+// コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
+// 呼び出し元 (=定数式が要求される文脈): グローバル配列のサイズ指定・グローバルスカラー変数の初期化子・
+// ローカル配列のサイズ指定・switch文のcase値
+// 変数参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
+// ただし sizeof(変数名) だけは例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
+// 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
+long long Analyzer::eval_const_expr(const node_t *expr) {
+    // リテラルはそのまま値を返す
+    if (expr->kind == ND_INT_LIT || expr->kind == ND_CHAR_LIT) {
+        return expr->ival;
+    }
+
+    // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない)
+    if (expr->kind == ND_SIZEOF) {
+        if (expr->children.empty()) {
+            // sizeof(型名)
+            return Analyzer::type_size_bytes(expr->type);
+        }
+        // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
+        const node_t *inner = expr->children[0];
+        if (inner->kind != ND_VAR) {
+            throw std::string("compiler error: sizeof argument in a constant expression "
+                               "must be a type name or variable name at line ")
+                  + std::to_string(inner->line);
+        }
+        const symbol_t *sym = this->lookup_symbol(inner->sval);
+        if (sym == nullptr) {
+            throw std::string("compiler error: use of undeclared identifier '") + inner->sval
+                  + "' at line " + std::to_string(inner->line);
+        }
+        // 関数引数の配列が使用される可能性もあるのでそれをチェック
+        if (sym->type.is_array && sym->type.array_size == 0) {
+            throw std::string("compiler error: sizeof of an array parameter (size unknown) at line ")
+                  + std::to_string(inner->line);
+        }
+        return Analyzer::type_size_bytes(sym->type);
+    }
+
+    // 前置単項演算
+    if (expr->kind == ND_UNOP) {
+        const long long v = this->eval_const_expr(expr->children[0]);
+        if      (expr->sval == "-") return -v;
+        else if (expr->sval == "+") return v;
+        else if (expr->sval == "~") return ~v;
+        else if (expr->sval == "!") return (v == 0) ? 1 : 0;
+        // ++/-- は変数にしか使えないので定数式では不可 (下のエラーに落ちる)
+    }
+
+    // 二項演算
+    if (expr->kind == ND_BINOP) {
+        const long long l = this->eval_const_expr(expr->children[0]);
+        const long long r = this->eval_const_expr(expr->children[1]);
+        // ゼロ除算はコンパイル時に検出する
+        if ((expr->sval == "/" || expr->sval == "%") && r == 0) {
+            throw std::string("compiler error: division by zero at line ")
+                  + std::to_string(expr->line);
+        }
+        if      (expr->sval == "+")  return l + r;
+        else if (expr->sval == "-")  return l - r;
+        else if (expr->sval == "*")  return l * r;
+        else if (expr->sval == "/")  return l / r;
+        else if (expr->sval == "%")  return l % r;
+        else if (expr->sval == "&")  return l & r;
+        else if (expr->sval == "|")  return l | r;
+        else if (expr->sval == "^")  return l ^ r;
+        else if (expr->sval == "<<") return l << r;
+        else if (expr->sval == ">>") return l >> r;
+        else if (expr->sval == "&&") return (l != 0 && r != 0) ? 1 : 0;
+        else if (expr->sval == "||") return (l != 0 || r != 0) ? 1 : 0;
+        else if (expr->sval == "==") return (l == r) ? 1 : 0;
+        else if (expr->sval == "!=") return (l != r) ? 1 : 0;
+        else if (expr->sval == "<")  return (l < r) ? 1 : 0;
+        else if (expr->sval == ">")  return (l > r) ? 1 : 0;
+        else if (expr->sval == "<=") return (l <= r) ? 1 : 0;
+        else if (expr->sval == ">=") return (l >= r) ? 1 : 0;
+    }
+
+    // 三項演算
+    if (expr->kind == ND_TERNARY) {
+        return Analyzer::eval_const_expr(expr->children[0])
+             ? Analyzer::eval_const_expr(expr->children[1])
+             : Analyzer::eval_const_expr(expr->children[2]);
+    }
+
+    // 変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
+    throw std::string("compiler error: global variable initializer must be a constant expression at line ")
+          + std::to_string(expr->line);
+}
+
+// 配列が占有するワード数を計算する (int=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
+int Analyzer::calc_array_words(const type_t &type) {
+    const int n = type.array_size;
+    switch (type.base) {
+        case BASE_INT:   return n;             // 32ビット: 1要素=1ワード
+        case BASE_SHORT: return (n + 1) / 2;   // 16ビット: 2要素=1ワード
+        case BASE_CHAR:  return (n + 3) / 4;   // 8ビット: 4要素=1ワード
+        default:
+            throw std::string("compiler error: unsupported array element type");
+    }
+}
+
+// 型の論理バイト数を返す (sizeof用．C言語準拠で実メモリのワード境界は考慮しない)
+// 配列は「要素数 × 要素型のバイト数」を返す
+int Analyzer::type_size_bytes(const type_t &type) {
+    int elem_bytes;
+    switch (type.base) {
+        case BASE_CHAR:  elem_bytes = 1; break;
+        case BASE_SHORT: elem_bytes = 2; break;
+        case BASE_INT:   elem_bytes = 4; break;
+        default:
+            throw std::string("compiler error: sizeof of unsupported type");
+    }
+    return type.is_array ? elem_bytes * type.array_size : elem_bytes;
+}
+
+// 2パス目: 各関数本体を検査する
+// ND_FUNC_DEFのchildren = [param0, param1, ..., block] (パラメータがなければchildren[0]がブロック)
+void Analyzer::analyze_functions() {
+    for (node_t *child : this->root_->children) {
+        if (child->kind != ND_FUNC_DEF) continue;
+
+        // 現在解析中の関数名・戻り値型を記録する (呼び出しグラフ構築・return文の整合性検査用)
+        this->current_function_ = child->sval;
+        this->current_return_type_ = child->type;
+        this->call_graph_[child->sval];   // 呼び出し先が無い関数もグラフに登録しておく(空集合)
+
+        // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
+        this->scopes_.push_back({});
+
+        // パラメータをスコープに登録する (シンボル自体は1パス目のcollect_globalsで作成済み)
+        for (const symbol_t *sym : this->func_params_[child->sval]) {
+            this->scopes_.back()[sym->name] = sym;
+        }
+
+        // 関数本体ブロック(最後の子)を検査する
+        this->analyze_block(child->children.back());
+
+        // 関数スコープを閉じる
+        this->scopes_.pop_back();
+    }
+}
+
+// 呼び出しグラフを検査する (再帰の検出，最大ネスト段数MAX_CALL_DEPTHの超過検出)
+// mainを起点に深さ優先探索する(mainはCALLされないため，ネスト段数の起点として数えない)
+void Analyzer::check_call_depth() {
+    std::set<std::string> path;   // 現在の呼び出し経路(再帰検出用)
+    this->check_call_depth_dfs("main", path);
+}
+
+// funcから辿れる呼び出し経路を深さ優先探索し，再帰とネスト段数超過を検査する
+// pathには現在の探索経路上にある関数名が入っている(再帰=pathに既にある関数への到達で検出する)
+// 戻り値: funcを起点とした場合の最大ネスト段数(func自身は含まず，呼び出し先の段数のみ)
+int Analyzer::check_call_depth_dfs(const std::string &func, std::set<std::string> &path) {
+    // 現在の経路に既にfuncがあれば，直接・間接を問わず再帰(循環)
+    if (path.count(func)) {
+        throw std::string("compiler error: recursive function call detected involving '") + func + "'";
+    }
+
+    path.insert(func);   // 経路にfuncを追加してから子を探索する
+
+    int max_depth = 0;   // funcの呼び出し先の中で最も深いネスト段数
+    for (const std::string &callee : this->call_graph_[func]) {
+        const int callee_depth = this->check_call_depth_dfs(callee, path);
+        if (callee_depth + 1 > max_depth) {
+            max_depth = callee_depth + 1;
+        }
+    }
+
+    path.erase(func);   // 探索し終えたので経路から外す(他の兄弟経路と共有しないため)
+
+    if (max_depth > MAX_CALL_DEPTH) {
+        throw std::string("compiler error: function call nesting exceeds maximum depth (")
+              + std::to_string(MAX_CALL_DEPTH) + ") at '" + func + "'";
+    }
+
+    return max_depth;
+}
+
+// ブロックを検査する (新しいローカルスコープを積み，抜けるときに捨てる)
+void Analyzer::analyze_block(node_t *block) {
+    this->scopes_.push_back({});   // 新しいスコープを積む
+    for (node_t *stmt : block->children) {
+        this->analyze_stmt(stmt);
+    }
+    this->scopes_.pop_back();      // スコープを捨てる
+}
+
+// 文を検査する
+void Analyzer::analyze_stmt(node_t *stmt) {
+    // 変数宣言
+    if (stmt->kind == ND_VAR_DECL) {
+        this->analyze_local_decl(stmt);
+    }
+    // ブロック (入れ子の { ... })
+    else if (stmt->kind == ND_BLOCK) {
+        this->analyze_block(stmt);
+    }
+    // return文: 関数の戻り値型とreturn文の有無・値が一致するか検査する
+    else if (stmt->kind == ND_RETURN) {
+        if (stmt->children.empty()) {
+            // void関数はreturn文自体が任意なので，値なしのreturn;はvoid以外のときのみエラー
+            if (this->current_return_type_.base != BASE_VOID) {
+                throw std::string("compiler error: non-void function '") + this->current_function_
+                      + "' must return a value at line " + std::to_string(stmt->line);
+            }
+        } else {
+            if (this->current_return_type_.base == BASE_VOID) {
+                throw std::string("compiler error: void function '") + this->current_function_
+                      + "' cannot return a value at line " + std::to_string(stmt->line);
+            }
+            this->analyze_expr(stmt->children[0]);
+        }
+    }
+    // if文 (children: 条件, then節, [else節])
+    else if (stmt->kind == ND_IF) {
+        this->analyze_expr(stmt->children[0]);     // 条件
+        this->analyze_stmt(stmt->children[1]);     // then節
+        if (stmt->children.size() == 3) {
+            this->analyze_stmt(stmt->children[2]); // else節
+        }
+    }
+    // while文 (children: 条件, 本体)
+    else if (stmt->kind == ND_WHILE) {
+        this->analyze_expr(stmt->children[0]);     // 条件
+        this->loop_depth_++;
+        this->analyze_stmt(stmt->children[1]);     // 本体
+        this->loop_depth_--;
+    }
+    // for文 (children: 初期化, 条件, 更新, 本体．省略された部分はnullptr)
+    else if (stmt->kind == ND_FOR) {
+        // for全体で1つのスコープを張る (初期化部で宣言した変数を条件・更新・本体から見えるようにする)
+        this->scopes_.push_back({});
+        if (stmt->children[0]) this->analyze_stmt(stmt->children[0]);  // 初期化
+        if (stmt->children[1]) this->analyze_expr(stmt->children[1]);  // 条件
+        if (stmt->children[2]) this->analyze_expr(stmt->children[2]);  // 更新
+        this->loop_depth_++;
+        this->analyze_stmt(stmt->children[3]);                         // 本体
+        this->loop_depth_--;
+        this->scopes_.pop_back();
+    }
+    // do-while文 (children: 本体, 条件)
+    else if (stmt->kind == ND_DO_WHILE) {
+        this->loop_depth_++;
+        this->analyze_stmt(stmt->children[0]);     // 本体
+        this->loop_depth_--;
+        this->analyze_expr(stmt->children[1]);     // 条件
+    }
+    // switch文
+    else if (stmt->kind == ND_SWITCH) {
+        this->analyze_switch(stmt);
+    }
+    // break文 (ループまたはswitchの中でのみ許される)
+    else if (stmt->kind == ND_BREAK) {
+        if (this->loop_depth_ == 0 && this->switch_depth_ == 0) {
+            throw std::string("compiler error: 'break' outside loop or switch at line ")
+                  + std::to_string(stmt->line);
+        }
+    }
+    // continue文 (ループの中でのみ許される)
+    else if (stmt->kind == ND_CONTINUE) {
+        if (this->loop_depth_ == 0) {
+            throw std::string("compiler error: 'continue' outside loop at line ")
+                  + std::to_string(stmt->line);
+        }
+    }
+    // それ以外は式文として検査する
+    else {
+        this->analyze_expr(stmt);
+    }
+}
+
+// switch文を検査する (children: 条件式, 本体の文とcase/defaultラベルが平坦に並ぶ)
+void Analyzer::analyze_switch(node_t *stmt) {
+    this->analyze_expr(stmt->children[0]);   // 条件式
+
+    this->switch_depth_++;            // switchの中ではbreakが許される
+    this->scopes_.push_back({});      // switch本体のスコープ
+
+    std::set<long long> case_values;  // case値の重複検出用
+    bool has_default = false;         // defaultの重複検出用
+
+    // 本体(children[1..])を順に検査する
+    for (size_t i = 1; i < stmt->children.size(); i++) {
+        node_t *child = stmt->children[i];
+        // case節: 値は定数式．畳み込んで重複チェックし，結果をivalに保存する
+        if (child->kind == ND_CASE) {
+            const long long v = Analyzer::eval_const_expr(child->children[0]);
+            if (case_values.count(v)) {
+                throw std::string("compiler error: duplicate case value at line ")
+                      + std::to_string(child->line);
+            }
+            case_values.insert(v);
+            child->ival = v;   // コード生成器が参照できるよう畳み込み結果を保存する
+        }
+        // default節: 重複は不可
+        else if (child->kind == ND_DEFAULT) {
+            if (has_default) {
+                throw std::string("compiler error: multiple default labels at line ")
+                      + std::to_string(child->line);
+            }
+            has_default = true;
+        }
+        // それ以外は通常の文として検査する
+        else {
+            this->analyze_stmt(child);
+        }
+    }
+
+    this->scopes_.pop_back();
+    this->switch_depth_--;
+}
+
+// ローカル変数宣言を検査し，現在のスコープに登録する
+void Analyzer::analyze_local_decl(node_t *decl) {
+    // 同一スコープ内での二重宣言はエラー (外側スコープの同名はシャドーイングとして許容)
+    if (this->scopes_.back().count(decl->sval)) {
+        throw std::string("compiler error: redefinition of '") + decl->sval
+              + "' at line " + std::to_string(decl->line);
+    }
+
+    // ハードウェア変数と同名のローカル変数は宣言できない (I/Oレジスタを上書きしないように禁止する)
+    const symbol_t *shadowed = this->lookup_symbol(decl->sval);
+    if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
+        throw std::string("compiler error: cannot redeclare hardware register '") + decl->sval
+              + "' at line " + std::to_string(decl->line);
+    }
+
+    if (decl->type.is_array) {
+        if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
+            // 文字列リテラルによる初期化: char msg[] = "hello";
+            if (decl->type.base != BASE_CHAR) {
+                throw std::string("compiler error: string literal can only initialize char array at line ")
+                      + std::to_string(decl->children[0]->line);
+            }
+            // サイズは文字列長 + 1(ヌル終端)
+            const int size = static_cast<int>(decl->children[0]->sval.size()) + 1;
+            decl->type.array_size = size;
+        } else {
+            // サイズ明示の配列宣言: int table[10];
+            const long long size = Analyzer::eval_const_expr(decl->children[0]);
+            if (size <= 0) {
+                throw std::string("compiler error: array size must be positive at line ")
+                      + std::to_string(decl->children[0]->line);
+            }
+            decl->type.array_size = static_cast<int>(size);
+            // サイズ式を畳み込み済みリテラルに置き換える
+            node_t *folded = new node_t;
+            folded->kind = ND_INT_LIT;
+            folded->ival = size;
+            folded->line = decl->children[0]->line;
+            decl->children[0] = folded;
+        }
+        // アドレスを割り当てて登録する
+        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL, this->next_addr_, true, true};
+        this->next_addr_ += Analyzer::calc_array_words(decl->type) * 4;
+        this->scopes_.back()[decl->sval] = sym;
+        decl->sym = sym;
+    } else {
+        // スカラー変数: 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
+        if (!decl->children.empty()) {
+            this->analyze_expr(decl->children[0]);
+            // void関数の戻り値(値を持たない)で初期化することはできない
+            if (decl->children[0]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot initialize with void value at line ")
+                      + std::to_string(decl->line);
+            }
+        }
+        // メモリ番地を割り当てて登録する (ローカルも静的割り当てで固定番地)
+        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL, this->next_addr_, true, true};
+        this->next_addr_ += 4;
+        this->scopes_.back()[decl->sval] = sym;
+        decl->sym = sym;   // 宣言ノード自身もシンボルを指す
+    }
+}
+
+// 式を検査し，名前解決と型注釈を行う
+// ノード種別ごとに固有の検査を行い，子を持つノードは子へ再帰する．
+//   リテラル: 末端なので何もしない
+//   変数参照・代入・インクリメント/デクリメント・関数呼び出し: それぞれ固有の検査を行う
+//   二項演算・三項演算など(default): 固有の検査はなく，子を再帰検査するだけ
+// 式文(a + b; のような文)もanalyze_stmtからこの関数で検査される
+void Analyzer::analyze_expr(node_t *expr) {
+    switch (expr->kind) {
+        // リテラル: 検査は不要だが，後段のコード生成のため型を注釈する
+        case ND_INT_LIT:
+            expr->type = type_t{BASE_INT, true};    // 整数リテラルはint(符号付き)
+            return;
+        case ND_CHAR_LIT:
+            expr->type = type_t{BASE_CHAR, true};   // 文字リテラルはchar(符号付き)
+            return;
+
+        // 文字列リテラル: 匿名のグローバルchar配列としてメモリを確保する
+        case ND_STRING_LIT: {
+            // サイズは文字列長 + 1(ヌル終端)
+            type_t str_type = {BASE_CHAR, true, true, static_cast<int>(expr->sval.size()) + 1};
+            symbol_t *sym = new symbol_t{"", str_type, LOC_GLOBAL, this->next_addr_, true, false};
+            this->next_addr_ += Analyzer::calc_array_words(str_type) * 4;
+            expr->sym = sym;
+            expr->type = str_type;
+            return;
+        }
+
+        // sizeof: 型のバイト数をコンパイル時に確定するintリテラルとして扱う (実行時命令は生成しない)
+        case ND_SIZEOF: {
+            int size;
+            if (expr->children.empty()) {
+                // sizeof(型名): パーサがexpr->typeに型を格納済み
+                size = Analyzer::type_size_bytes(expr->type);
+            } else {
+                // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
+                // (analyze_exprではなくlookup_symbolで直接型を取得する．readable=falseの
+                //  書き込み専用ハードウェア変数(LED等)もsizeofの対象になり得るため)
+                node_t *inner = expr->children[0];
+                if (inner->kind != ND_VAR) {
+                    throw std::string("compiler error: sizeof argument must be a type name or "
+                                       "variable name at line ") + std::to_string(inner->line);
+                }
+                const symbol_t *sym = this->lookup_symbol(inner->sval);
+                if (sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + inner->sval + "' at line " + std::to_string(inner->line);
+                }
+                inner->sym  = sym;
+                inner->type = sym->type;
+                size = Analyzer::type_size_bytes(sym->type);
+            }
+            expr->ival = size;
+            expr->type = type_t{BASE_INT, true};   // sizeofの結果はint
+            return;
+        }
+
+        // 変数参照: 名前を解決し，読み取り可能か確認する
+        case ND_VAR: {
+            const symbol_t *sym = this->lookup_symbol(expr->sval);
+            if (sym == nullptr) {
+                throw std::string("compiler error: use of undeclared identifier '")
+                      + expr->sval + "' at line " + std::to_string(expr->line);
+            }
+            if (!sym->readable) {
+                throw std::string("compiler error: '") + expr->sval
+                      + "' is not readable at line " + std::to_string(expr->line);
+            }
+            expr->sym  = sym;        // 名前解決の結果を結びつける
+            expr->type = sym->type;  // 型を注釈する
+            return;
+        }
+
+        // 代入: 左辺は書き込み可能な変数または配列要素でなければならない
+        case ND_ASSIGN: {
+            node_t *lhs = expr->children[0];
+            // 配列要素への代入: 左辺を先に解析して名前解決する
+            if (lhs->kind == ND_ARRAY_ACCESS) {
+                this->analyze_expr(lhs);                // 左辺(配列要素)の名前解決
+                this->analyze_expr(expr->children[1]);  // 右辺の式を検査する
+                // void関数の戻り値(値を持たない)を代入することはできない
+                if (expr->children[1]->type.base == BASE_VOID) {
+                    throw std::string("compiler error: cannot assign void value at line ")
+                          + std::to_string(expr->line);
+                }
+                expr->type = lhs->type;
+                return;
+            }
+            if (lhs->kind != ND_VAR) {
+                throw std::string("compiler error: left side of assignment must be a variable at line ")
+                      + std::to_string(expr->line);
+            }
+            const symbol_t *sym = this->lookup_symbol(lhs->sval);
+            if (sym == nullptr) {
+                throw std::string("compiler error: use of undeclared identifier '")
+                      + lhs->sval + "' at line " + std::to_string(lhs->line);
+            }
+            if (!sym->writable) {
+                throw std::string("compiler error: '") + lhs->sval
+                      + "' is not writable at line " + std::to_string(lhs->line);
+            }
+            // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
+            if (expr->sval != "=" && !sym->readable) {
+                throw std::string("compiler error: '") + lhs->sval
+                      + "' is not readable at line " + std::to_string(lhs->line);
+            }
+            lhs->sym  = sym;
+            lhs->type = sym->type;
+            this->analyze_expr(expr->children[1]);   // 右辺を検査する
+            // void関数の戻り値(値を持たない)を代入することはできない
+            if (expr->children[1]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot assign void value at line ")
+                      + std::to_string(expr->line);
+            }
+            expr->type = sym->type;
+            return;
+        }
+
+        // インクリメント・デクリメント: 対象は読み書き両方可能な変数でなければならない
+        case ND_UNOP:
+        case ND_POST_UNOP:
+            if (expr->sval == "++" || expr->sval == "--") {
+                node_t *operand = expr->children[0];
+                if (operand->kind != ND_VAR) {
+                    throw std::string("compiler error: operand of '") + expr->sval
+                          + "' must be a variable at line " + std::to_string(expr->line);
+                }
+                const symbol_t *sym = this->lookup_symbol(operand->sval);
+                if (sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + operand->sval + "' at line " + std::to_string(operand->line);
+                }
+                if (!sym->readable || !sym->writable) {
+                    throw std::string("compiler error: '") + operand->sval
+                          + "' is not readable and writable at line " + std::to_string(operand->line);
+                }
+                operand->sym  = sym;
+                operand->type = sym->type;
+                expr->type    = sym->type;
+                return;
+            }
+            // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
+            this->analyze_expr(expr->children[0]);
+            if (expr->children[0]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot use void value in expression at line ")
+                      + std::to_string(expr->line);
+            }
+            expr->type = expr->children[0]->type;
+            return;
+
+        // 関数呼び出し: 関数の定義確認・引数数の検証・各引数式の検査・戻り値型の設定
+        case ND_CALL: {
+            auto it = this->func_names_.find(expr->sval);
+            if (it == this->func_names_.end()) {
+                throw std::string("compiler error: call to undefined function '")
+                      + expr->sval + "' at line " + std::to_string(expr->line);
+            }
+            // 呼び出しグラフに記録する (再帰・ネスト段数の検査用)
+            this->call_graph_[this->current_function_].insert(expr->sval);
+            // 引数の数がパラメータの数と一致するか検証する
+            const auto &params = this->func_params_[expr->sval];
+            if (expr->children.size() != params.size()) {
+                throw std::string("compiler error: function '") + expr->sval + "' expects "
+                      + std::to_string(params.size()) + " argument(s) but got "
+                      + std::to_string(expr->children.size())
+                      + " at line " + std::to_string(expr->line);
+            }
+            // 各引数式を検査する
+            for (size_t i = 0; i < expr->children.size(); i++) {
+                this->analyze_expr(expr->children[i]);
+                // void値(戻り値のない関数呼び出し)は引数に使えない
+                if (expr->children[i]->type.base == BASE_VOID) {
+                    throw std::string("compiler error: cannot use void value in expression at line ")
+                          + std::to_string(expr->children[i]->line);
+                }
+                // 配列パラメータには配列変数または文字列リテラルを，スカラーパラメータにはスカラー式を渡す
+                node_t *arg = expr->children[i];
+                if (params[i]->type.is_array) {
+                    if ((arg->kind != ND_VAR && arg->kind != ND_STRING_LIT) || !arg->sym->type.is_array) {
+                        throw std::string("compiler error: argument for array parameter '")
+                              + params[i]->name + "' must be an array variable or string literal at line "
+                              + std::to_string(arg->line);
+                    }
+                    // TODO: スカラ変数の対応後にコメントアウトを外す
+                    // // 要素型の不一致チェック (char配列をint配列パラメータに渡す等を防ぐ)
+                    // if (arg->sym->type.base != params[i]->type.base) {
+                    //     throw std::string("compiler error: array element type mismatch for parameter '")
+                    //           + params[i]->name + "' at line " + std::to_string(arg->line);
+                    // }
+                } else {
+                    if (arg->kind == ND_VAR && arg->sym->type.is_array) {
+                        throw std::string("compiler error: cannot pass array '")
+                              + arg->sval + "' to scalar parameter '"
+                              + params[i]->name + "' at line " + std::to_string(arg->line);
+                    }
+                    // TODO: func(1 + 2) など計算式を引数に与えた場合に型を正確に推論する仕組みが出来たらコメントアウトを外す
+                    // // スカラー引数の型不一致チェック (charをintパラメータに渡す等を防ぐ)
+                    // if (arg->type.base != params[i]->type.base) {
+                    //     throw std::string("compiler error: argument type mismatch for parameter '")
+                    //           + params[i]->name + "' at line " + std::to_string(arg->line);
+                    // }
+                }
+            }
+            expr->type = it->second;
+            return;
+        }
+
+        // 組み込み関数print: char配列(直接配列)のみ対応．ヌル終端まで出力する
+        case ND_PRINT: {
+            node_t *target = expr->children[0];
+            this->analyze_expr(target);
+            if (!target->type.is_array || target->type.base != BASE_CHAR) {
+                throw std::string("compiler error: print requires a char array at line ")
+                      + std::to_string(target->line);
+            }
+            if (target->type.array_size == 0) {
+                throw std::string("compiler error: print does not support array parameters (size unknown) at line ")
+                      + std::to_string(target->line);
+            }
+            // printは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
+            expr->type = type_t{BASE_VOID, true};
+            return;
+        }
+
+        // 組み込み関数scan: char配列(直接配列，2要素以上)のみ対応．改行までの1行をヌル終端付きで格納する
+        case ND_SCAN: {
+            node_t *target = expr->children[0];   // 格納先配列 (parserがND_VARで構築)
+            const symbol_t *sym = this->lookup_symbol(target->sval);
+            if (sym == nullptr) {
+                throw std::string("compiler error: use of undeclared identifier '")
+                      + target->sval + "' at line " + std::to_string(target->line);
+            }
+            if (!sym->writable) {
+                throw std::string("compiler error: '") + target->sval
+                      + "' is not writable at line " + std::to_string(target->line);
+            }
+            target->sym  = sym;        // 名前解決の結果を結びつける
+            target->type = sym->type;
+            if (!sym->type.is_array || sym->type.base != BASE_CHAR) {
+                throw std::string("compiler error: scan requires a char array at line ")
+                      + std::to_string(target->line);
+            }
+            if (sym->type.array_size == 0) {
+                throw std::string("compiler error: scan does not support array parameters (size unknown) at line ")
+                      + std::to_string(target->line);
+            }
+            if (sym->type.array_size < 2) {
+                throw std::string("compiler error: scan target array must have at least 2 elements "
+                                   "(1 for content plus 1 for null terminator) at line ")
+                      + std::to_string(target->line);
+            }
+            // scanは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
+            expr->type = type_t{BASE_VOID, true};
+            return;
+        }
+
+        // 配列要素アクセス: 配列変数の名前解決とインデックス式の検査を行う
+        case ND_ARRAY_ACCESS: {
+            const symbol_t *sym = this->lookup_symbol(expr->sval);
+            if (sym == nullptr) {
+                throw std::string("compiler error: use of undeclared identifier '")
+                      + expr->sval + "' at line " + std::to_string(expr->line);
+            }
+            if (!sym->type.is_array) {
+                throw std::string("compiler error: '") + expr->sval
+                      + "' is not an array at line " + std::to_string(expr->line);
+            }
+            expr->sym = sym;
+            // 要素の型は配列のbase型(スカラー)
+            expr->type = {sym->type.base, sym->type.is_signed};
+            // インデックス式を検査する
+            this->analyze_expr(expr->children[0]);
+            // void値(戻り値のない関数呼び出し)は配列インデックスに使えない
+            if (expr->children[0]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot use void value in expression at line ")
+                      + std::to_string(expr->children[0]->line);
+            }
+            return;
+        }
+
+        // 二項演算: 両辺を検査し，どちらかがvoid値(戻り値のない関数呼び出し)なら使用を禁止する
+        case ND_BINOP:
+            this->analyze_expr(expr->children[0]);
+            this->analyze_expr(expr->children[1]);
+            if (expr->children[0]->type.base == BASE_VOID || expr->children[1]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot use void value in expression at line ")
+                      + std::to_string(expr->line);
+            }
+            expr->type = expr->children[0]->type;
+            return;
+
+        // 三項演算 a ? b : c: 条件・両分岐を検査し，いずれかがvoid値なら使用を禁止する
+        case ND_TERNARY:
+            this->analyze_expr(expr->children[0]);
+            this->analyze_expr(expr->children[1]);
+            this->analyze_expr(expr->children[2]);
+            if (expr->children[0]->type.base == BASE_VOID ||
+                expr->children[1]->type.base == BASE_VOID ||
+                expr->children[2]->type.base == BASE_VOID) {
+                throw std::string("compiler error: cannot use void value in expression at line ")
+                      + std::to_string(expr->line);
+            }
+            expr->type = expr->children[1]->type;
+            return;
+
+        // 到達しない (式ノードの全種類は上記いずれかのcaseで処理される)．
+        // 将来式ノードを追加した際に検査漏れとなるのを防ぐため，未対応として即エラーにする
+        default:
+            throw std::string("compiler error: unsupported expression node kind at line ")
+                  + std::to_string(expr->line);
+    }
+}
+
+// 名前からシンボルを探す (内側のローカルスコープから順に，最後にグローバル・ハードウェア変数)
+const symbol_t *Analyzer::lookup_symbol(const std::string &name) const {
+    // ローカルスコープを内側から外側へ探す
+    for (auto it = this->scopes_.rbegin(); it != this->scopes_.rend(); ++it) {
+        const auto found = it->find(name);
+        if (found != it->end()) return found->second;
+    }
+    // グローバル変数・ハードウェア変数を探す
+    const auto found = this->symbols_.find(name);
+    if (found != this->symbols_.end()) return found->second;
+    return nullptr;
+}
