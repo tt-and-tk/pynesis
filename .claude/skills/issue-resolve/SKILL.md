@@ -33,6 +33,9 @@ GitHub issueへの対応 (調査・ブランチ作成・修正・PR作成) を�
       ```
    5. ソースレビューを行い，指摘があれば修正してコミット・pushする．レビューと修正は1回で終わるとは限らず，このコミット・push は複数回繰り返してよい
       ```
+      claude -p --tools "Read,Grep,Glob" -- "コードレビューを依頼する文言" > review.md
+      ```
+      ```
       git add <変更したファイル>
       git commit -m "<コミットメッセージ>"
       git push
