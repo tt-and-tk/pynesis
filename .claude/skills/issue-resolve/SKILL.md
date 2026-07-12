@@ -1,7 +1,7 @@
 ---
 name: issue-resolve
 description: GitHub issueに対応する。1issue=1回の実行で，複数リポジトリにまたがる修正もスキル内部で完結させる。「issue #Nに対応して」で起動。
-allowed-tools: Edit, Write, Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(git pull) Bash(git branch -d *) Bash(gh pr create *) Bash(gh pr ready *) Bash(gh pr edit *) Bash(gh api *) Bash(gh issue view *) Bash(claude -p --tools "Read,Grep,Glob" -- "*" > review.md)
+allowed-tools: Edit, Write, Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(git pull) Bash(git branch -d *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh api *) Bash(gh issue view *) Bash(claude -p --tools "Read,Grep,Glob" -- "*" > review.md)
 ---
 
 # 概要
@@ -41,16 +41,18 @@ git checkout -b fix/issue-<番号>-<内容を表す短い語句>
 
 手順3で承認された方針に基づいて修正を行う．
 
-### 4.3 コミット・push・Draft PR作成
+### 4.3 コミット・push・PR作成
 
 ```
 git add <変更したファイル>
 git commit -m "<コミットメッセージ>"
 git push -u origin fix/issue-<番号>-<内容を表す短い語句>
-gh pr create --repo <owner>/<repo> --draft --title "<タイトル>" --body "<本文>"
+gh pr create --repo <owner>/<repo> --title "<タイトル>" --body "<本文>" [--draft]
 ```
 
 PR作成時の`--body`に，closeキーワード (`Closes owner/repo#番号`) またはリンクのみ (`Related to owner/repo#番号`) を含める．closeキーワードは1issueにつき1箇所のPRのみに付与する (issueが存在するリポジトリのPR，またはユーザーが指定したPR)．それ以外のリポジトリのPRは`Related to owner/repo#番号`のみを記載する．  
+
+**`--draft`は，closeキーワードを持つPRにのみ付ける．** マージするとissueが閉じるPRであることを一目で分かるようにするための運用．closeキーワードを持たない(`Related to`のみの)PRはissueを閉じないため，通常のPR(Ready)として作成する．  
 
 ### 4.4 自動レビューループ
 
@@ -70,11 +72,7 @@ git push
 
 ### 4.5 人間レビューへの対応
 
-自動レビューループが完了したら，Draftを解除する．
-
-```
-gh pr ready <PR番号> --repo <owner>/<repo>
-```
+Draftの解除はユーザーが手動で行う (AIは行わない)．  
 
 ユーザーがPRにレビューコメントを追加した場合は取得して確認し，指摘があれば修正してコミット・pushする．
 
