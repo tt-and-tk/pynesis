@@ -64,6 +64,10 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 `.claude/coding_conventions.md` に従うこと．  
 アセンブラ(`../assembler/`)のコードを実装の参考にすること．
 
+## Issue対応の徹底
+
+ファイルを修正する場合は，必ず対応するGitHub issueを起票し，そのissue用のブランチ(`fix/issue-<番号>-<内容を表す短い語句>`)を作成してから行う．デフォルトブランチを直接編集しない．
+
 ## 自作CPUアーキテクチャ概要
 
 コンパイラ設計に関わる主要な仕様を記載する．詳細は `../specification/` を参照．
