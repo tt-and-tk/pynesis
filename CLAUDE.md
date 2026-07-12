@@ -2,24 +2,24 @@
 
 ## プロジェクト概要
 
-C系独自言語で書かれたソースコードを，自作CPUのアセンブリ言語に翻訳するコンパイラ．  
+Pynesis(独自言語)で書かれたソースコードを，自作CPUのアセンブリ言語に翻訳するコンパイラ．  
 C言語に見た目が似ているが独自ルールを持つ言語であり，厳密なC言語仕様には従わない．  
 実装言語はC++．  
 コンパイラがアセンブリ言語への翻訳を完了したら，そのままアセンブラ(`../assembler/`)を呼び出してSystemVerilog ROM(`.sv`)に変換する．
 
 ```
-入力(.c) → [コンパイラ] → アセンブリ(.asm) → [アセンブラ] → SystemVerilog ROM(.sv)
+入力(.pn) → [コンパイラ] → アセンブリ(.pt) → [アセンブラ] → SystemVerilog ROM(.sv)
 ```
 
-`c2bin.cpp`(`c2bin.exe`)が，Cソースから`.sv`まで一貫して変換する今後の入口となる．  
-内部では`c2asm.cpp`(Cソース→アセンブリ)と`../assembler/asm2bin.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_c_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
+`c2bin.cpp`(`c2bin.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
+内部では`c2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2bin.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_c_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
 `c2asm.exe`・`../assembler/asm2bin.exe`は単体の実行ファイルとしても引き続き動作する．  
 **このプロジェクトのテスト対象は`c2asm.cpp`(アセンブリ生成まで)のままとする**．`c2bin`はビルド確認のみで自動テストの対象外．
 
-CLIフラグ(3ツール共通で`-a`がアセンブリファイルを指す):
-- `c2asm.exe`: `-c`(入力Cファイル) `-a`(出力アセンブリファイル，省略時は`.c`から自動導出)
-- `asm2bin.exe`: `-a`(入力アセンブリファイル) `-b`(出力`.sv`ファイル，省略時は`.asm`から自動導出)
-- `c2bin.exe`: `-c` `-a` `-b` の3つ全てを指定する(自動導出はサポートしない．省略すると内部でエラーになる)
+CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
+- `c2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出)
+- `asm2bin.exe`: `-pt`(入力アセンブリファイル) `-bin`(出力`.sv`ファイル，省略時は`.pt`から自動導出)
+- `c2bin.exe`: `-pn` `-pt` `-bin` の3つ全てを指定する(自動導出はサポートしない．省略すると内部でエラーになる)
 
 `c2bin.exe`のビルドには，`c2asm.cpp`・`../assembler/asm2bin.cpp`それぞれの`main`定義を無効化するマクロ(`C2ASM_NO_MAIN`・`ASM2BIN_NO_MAIN`)を指定し，両者の本処理ソースを`c2bin.cpp`と一緒にコンパイルする．
 ```
@@ -51,7 +51,7 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 | `analyzer.hpp` / `analyzer.cpp` | 意味解析 | `symbol_t` |
 | `generator.hpp` / `generator.cpp` | コード生成 | (なし) |
 | `c2asm.hpp` / `c2asm.cpp` | main・引数処理・パイプライン接続 | `args_t` (ファイル内のみ) |
-| `c2bin.cpp` | Cソース→アセンブリ→`.sv`まで一貫して変換する入口(`compile_c_to_asm`と`assemble_asm_to_sv`を順に呼ぶだけ) | (なし) |
+| `c2bin.cpp` | Pynesisソース→アセンブリ→`.sv`まで一貫して変換する入口(`compile_c_to_asm`と`assemble_asm_to_sv`を順に呼ぶだけ) | (なし) |
 
 設計原則:
 
@@ -156,7 +156,7 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 
 アセンブラのテスト方針を踏襲する．
 
-1. テスト用のCソースファイルを用意する
+1. テスト用のPynesisソースファイルを用意する
 2. 期待値のアセンブリファイルを手動で用意する
 3. コンパイラで翻訳した結果が期待値と一致するか確認する
 
@@ -164,23 +164,23 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 
 | パス | 内容 |
 |:-|:-|
-| `test/src/` | 入力Cソースファイル(`NN.c`，正常系) |
-| `test/asm/` | コンパイラの出力アセンブリ(`NN.asm`，自動生成) |
-| `test/asm_ans/` | 期待値アセンブリ(`NN.asm`，手動作成) |
+| `test/src/` | 入力Pynesisソースファイル(`NN.pn`，正常系) |
+| `test/asm/` | コンパイラの出力アセンブリ(`NN.pt`，自動生成) |
+| `test/asm_ans/` | 期待値アセンブリ(`NN.pt`，手動作成) |
 | `test/test.py` | 正常系テストスクリプト |
-| `test/src_err/` | 異常系Cソースファイル(`NN.c`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
+| `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
 | `test/test_err.py` | 異常系テストスクリプト(アセンブラの`test_err.py`と同じ方針) |
 
 ### 実行方法
 
-- 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`の全`.c`を`asm/`に変換して`asm_ans/`の期待値と比較する．
-- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`の全`.c`をコンパイルし，全てエラー(非0終了コードまたはエラーメッセージ)になることを確認する．
+- 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`の全`.pn`を`asm/`に変換して`asm_ans/`の期待値と比較する．
+- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`の全`.pn`をコンパイルし，全てエラー(非0終了コードまたはエラーメッセージ)になることを確認する．
 
 ## 開発フロー
 
-1. `c2asm`がCソースファイルをアセンブリファイル(`.asm`)に翻訳する
+1. `c2asm`がPynesisソースファイルをアセンブリファイル(`.pt`)に翻訳する
 2. `asm2bin`(アセンブラ)がアセンブリファイルをSystemVerilog ROMファイル(`.sv`)に変換する
-3. `c2bin`は上記1・2を順に呼び出し，Cソースから`.sv`まで一貫して変換する
+3. `c2bin`は上記1・2を順に呼び出し，Pynesisソースから`.sv`まで一貫して変換する
 4. テストでは`c2asm`の翻訳結果(アセンブリ)が期待値と一致するか確認する(`c2bin`はテスト対象外)
 
 ## レビュー依頼
