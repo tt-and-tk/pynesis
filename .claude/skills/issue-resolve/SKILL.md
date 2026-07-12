@@ -40,12 +40,22 @@ GitHub issueへの対応 (調査・ブランチ作成・修正・PR作成) を�
       git commit -m "<コミットメッセージ>"
       git push
       ```
-   6. レビューで問題がなくなったら，Draftを解除する
+   6. ユーザーがPRにレビューコメントを追加した場合は取得して確認し，指摘があれば修正してコミット・pushする
+      ```
+      gh api repos/<owner>/<repo>/pulls/<PR番号>/comments
+      gh api repos/<owner>/<repo>/issues/<PR番号>/comments
+      ```
+      ```
+      git add <変更したファイル>
+      git commit -m "<コミットメッセージ>"
+      git push
+      ```
+   7. レビューで問題がなくなったら，Draftを解除する
       ```
       gh pr ready <PR番号> --repo <owner>/<repo>
       ```
-   7. closeキーワード (`Closes owner/repo#番号`) は1箇所のPRのみに付与する．issueが存在するリポジトリのPR，またはユーザーが指定したPRに付与する (PR作成時の`--body`，またはマージ前に`gh pr edit <PR番号> --repo <owner>/<repo> --body "<本文>"`で追記する)
-   8. それ以外のリポジトリのPRは `Related to owner/repo#番号` のみを記載し，closeキーワードは使わない
+   8. closeキーワード (`Closes owner/repo#番号`) は1箇所のPRのみに付与する．issueが存在するリポジトリのPR，またはユーザーが指定したPRに付与する (PR作成時の`--body`，またはマージ前に`gh pr edit <PR番号> --repo <owner>/<repo> --body "<本文>"`で追記する)
+   9. それ以外のリポジトリのPRは `Related to owner/repo#番号` のみを記載し，closeキーワードは使わない
 5. マージはユーザー自身が行う (共有状態を変更する操作のため，スキルは代行しない)
 6. マージ完了の報告を受けたら，issueがクローズされたことを確認し，各リポジトリのローカルを最新化してローカルブランチを削除する
    ```
