@@ -1,6 +1,6 @@
 """
-test/src/*.c を全てコンパイルして test/asm/ へ出力するテストスクリプト。
-コンパイラをビルドしてから各 .c を .asm に変換し、期待値と一致するか確認する。
+test/src/*.pn を全てコンパイルして test/asm/ へ出力するテストスクリプト。
+コンパイラをビルドしてから各 .pn を .pt に変換し、期待値と一致するか確認する。
 asm_ans/ に期待値ファイルがなければ FAIL とする。
 """
 
@@ -38,7 +38,7 @@ def main():
     os.makedirs(ASM_DIR, exist_ok=True)
 
     src_files = sorted(
-        f for f in os.listdir(SRC_DIR) if f.endswith(".c")
+        f for f in os.listdir(SRC_DIR) if f.endswith(".pn")
     )
 
     if not src_files:
@@ -52,12 +52,12 @@ def main():
 
     for src_file in src_files:
         src_path = os.path.join(SRC_DIR, src_file)
-        asm_name = src_file.replace(".c", ".asm")
+        asm_name = src_file.replace(".pn", ".pt")
         asm_path = os.path.join(ASM_DIR, asm_name)
         ans_path = os.path.join(ASM_ANS_DIR, asm_name)
 
         result = subprocess.run(
-            [C2ASM, "-c", src_path, "-a", asm_path],
+            [C2ASM, "-pn", src_path, "-pt", asm_path],
             capture_output=True,
             text=True,
         )
