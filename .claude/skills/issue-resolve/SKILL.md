@@ -1,7 +1,6 @@
 ---
 name: issue-resolve
 description: GitHub issueに対応する。1issue=1回の実行で，複数リポジトリにまたがる修正もスキル内部で完結させる。「issue #Nに対応して」で起動。
-allowed-tools: Edit, Write, Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(git pull) Bash(git branch -d *) Bash(git branch --show-current) Bash(git status *) Bash(git diff *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh api *) Bash(gh issue view *) Bash(claude -p --allowedTools "Read,Grep,Glob,Skill(issue-create),Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*)" -- "*" > review.md)
 ---
 
 # 概要
@@ -60,6 +59,8 @@ PR作成時の`--body`に，closeキーワード (`Closes owner/repo#番号`) �
 
 レビューはgit diffの確認だけでなく，変更対象ファイルのソース全体も改めて確認し，既存不具合・新規不具合の有無をチェックする対応とする．`claude -p`には対象issue番号・リポジトリを渡し，必要なら`claude -p`自身が`gh issue view`でissue詳細を取得できるようにする．
 
+**`--allowedTools`だけでは不十分**．このリポジトリの`.claude/settings.json`が許可しているツール(`Edit`・`Write`・`git commit`・`git push`・`gh pr create`等)は，`--allowedTools`に含めなくても素通りしてしまう(settings.jsonの許可は`--allowedTools`と加算的に効くため)．レビュー用の`claude -p`には，settings.jsonが許可している項目のうち意図的に残す3つ(`Bash(git status:*)`・`Bash(git diff:*)`・`Bash(gh issue view:*)`)を除く全てを`--disallowedTools`で明示的に禁止すること．`claude -p`自身の再帰呼び出しも禁止対象に含める．
+
 - 今回の変更で新たに持ち込んだ不具合は，このissue対応の中で修正する
 - 今回の変更とは無関係に以前から存在する不具合を見つけた場合は，このissue対応では修正せず，`claude -p`自身に`issue-create`スキルを起動して別issueを起票してもらう．`claude -p`が起動できるスキルは`issue-create`のみに限定し，`issue-resolve`自身を含む他のスキルは呼び出せないようにする．`issue-create`は起動元プロンプトに非対話的な自動レビューループからの起動である旨が明示されていないと承認待ちの挙動になるため，`claude -p`に渡すプロンプト文言には「`issue-resolve`の自動レビューループから非対話的に起動している (人間は介在しない)．不具合を見つけた場合は承認を待たずそのまま`issue-create`スキルで起票してよい．深い検証は不要で，「〜の可能性がある」程度の疑いでも起票してよい」という趣旨を必ず含める
 
@@ -68,7 +69,7 @@ PR作成時の`--body`に，closeキーワード (`Closes owner/repo#番号`) �
 レビュー結果の修正が他のプロジェクトにも及ぶ場合は，同じissueに対応する設定のブランチを切ってから対応する．  
 
 ```
-claude -p --allowedTools "Read,Grep,Glob,Skill(issue-create),Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*)" -- "issue #<番号>(<owner>/<repo>)の対応について，git diffとソース全体のレビューを依頼する文言" > review.md
+claude -p --allowedTools "Read,Grep,Glob,Skill(issue-create),Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*)" --disallowedTools "Edit,Write,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git pull),Bash(git branch -d:*),Bash(git branch --show-current),Bash(git branch),Bash(git log:*),Bash(git show:*),Bash(git remote -v),Bash(gh pr create:*),Bash(gh api repos/*/pulls/*/comments),Bash(gh api repos/*/issues/*/comments),Bash(gh issue create:*),Bash(claude -p:*)" -- "issue #<番号>(<owner>/<repo>)の対応について，git diffとソース全体のレビューを依頼する文言" > review.md
 ```
 ```
 git add <変更したファイル>
