@@ -11,8 +11,8 @@
 
 // コマンドライン引数情報
 typedef struct {
-    std::string c_file_name;    // 入力Cソースファイル名
-    std::string asm_file_name;  // 出力アセンブリファイル名
+    std::string pn_file_name;   // 入力Pynesisソースファイル名
+    std::string pt_file_name;   // 出力アセンブリファイル名
 } args_t;
 
 // 前宣言
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 }
 #endif
 
-// Cソースをアセンブリに変換する本処理
+// Pynesisソースをアセンブリに変換する本処理
 // 処理に成功したら0，失敗したら1を返す
 int compile_c_to_asm(int argc, char **argv) {
     args_t args;                                // コマンドライン引数
@@ -36,25 +36,25 @@ int compile_c_to_asm(int argc, char **argv) {
 
     // コマンドライン引数を取得する
     get_args(argc, argv, args);
-    if (args.c_file_name.empty() || args.asm_file_name.empty()) {
+    if (args.pn_file_name.empty() || args.pt_file_name.empty()) {
         return 1;
     }
 
-    // Cソースファイルをまとめて読み込む
-    std::ifstream c_file(args.c_file_name);
-    if (!c_file) {
-        std::cout << "cannot open c file: " << args.c_file_name << std::endl;
+    // Pynesisソースファイルをまとめて読み込む
+    std::ifstream pn_file(args.pn_file_name);
+    if (!pn_file) {
+        std::cout << "cannot open pn file: " << args.pn_file_name << std::endl;
         return 1;
     }
     std::ostringstream ss;
-    ss << c_file.rdbuf();
+    ss << pn_file.rdbuf();
     const std::string src = ss.str();
-    c_file.close();
+    pn_file.close();
 
     // 出力アセンブリファイルを開く
-    std::ofstream asm_file(args.asm_file_name);
+    std::ofstream asm_file(args.pt_file_name);
     if (!asm_file) {
-        std::cout << "cannot open asm file: " << args.asm_file_name << std::endl;
+        std::cout << "cannot open asm file: " << args.pt_file_name << std::endl;
         return 1;
     }
 
@@ -80,7 +80,7 @@ int compile_c_to_asm(int argc, char **argv) {
         // 出力命令数がROMの上限(MAX_INSTRUCTION_COUNT)を超えていないか確認する
         // (命令行は先頭が半角スペース．ラベル行・.global行は先頭にスペースを付けない規約で判定する．
         //  ただしコメント行(先頭の空白を除いた最初の文字が';')は命令行に含めない)
-        std::ifstream check_file(args.asm_file_name);
+        std::ifstream check_file(args.pt_file_name);
         int instruction_count = 0;
         std::string line;
         while (std::getline(check_file, line)) {
@@ -97,7 +97,7 @@ int compile_c_to_asm(int argc, char **argv) {
         }
 
         // 正常終了を報告する
-        std::cout << "compiled: " << args.asm_file_name << std::endl;
+        std::cout << "compiled: " << args.pt_file_name << std::endl;
     }
     catch (std::string msg) {
         std::cout << msg << std::endl;
@@ -109,9 +109,9 @@ int compile_c_to_asm(int argc, char **argv) {
 }
 
 // コマンドライン引数を取得する
-// -c: 必須引数．入力Cソースファイル名．
-// -a: 出力アセンブリファイル名．省略した場合，Cファイル名の拡張子を .asm に変更して使用．
-// 何も指定せずに引数を置いた場合，入力Cソースファイル名と解釈される．
+// -pn: 必須引数．入力Pynesisソースファイル名．
+// -pt: 出力アセンブリファイル名．省略した場合，Pynesisファイル名の拡張子を .pt に変更して使用．
+// 何も指定せずに引数を置いた場合，入力Pynesisソースファイル名と解釈される．
 void get_args(int argc, char **argv, args_t &args) {
     // 全ての引数でループ (コマンド名は飛ばす)
     for (int i = 1; i < argc; i++) {
@@ -126,42 +126,42 @@ void get_args(int argc, char **argv, args_t &args) {
             if (i >= argc) break;
 
             // 指定されたパラメータを保存する
-            if      (kind == "-c") args.c_file_name   = argv[i];
-            else if (kind == "-a") args.asm_file_name = argv[i];
+            if      (kind == "-pn") args.pn_file_name = argv[i];
+            else if (kind == "-pt") args.pt_file_name = argv[i];
         }
         // 指定子なしの引数は入力ファイル名と解釈する
         else {
-            args.c_file_name = argv[i];
+            args.pn_file_name = argv[i];
         }
     }
 
-    // 入力ファイル名が .c で終わっているか確認する (短い名前での範囲外アクセスを防ぐ)
-    const bool c_name_ok =
-        args.c_file_name.length() >= 2
-        && args.c_file_name.substr(args.c_file_name.length() - 2) == ".c";
+    // 入力ファイル名が .pn で終わっているか確認する (短い名前での範囲外アクセスを防ぐ)
+    const bool pn_name_ok =
+        args.pn_file_name.length() >= 3
+        && args.pn_file_name.substr(args.pn_file_name.length() - 3) == ".pn";
 
-    // 出力ファイル名が省略されていたら，入力ファイル名の末尾の ".c" を ".asm" に変えて使う
-    if (c_name_ok && args.asm_file_name.empty()) {
-        args.asm_file_name =
-            args.c_file_name.substr(0, args.c_file_name.length() - 2) + ".asm";
+    // 出力ファイル名が省略されていたら，入力ファイル名の末尾の ".pn" を ".pt" に変えて使う
+    if (pn_name_ok && args.pt_file_name.empty()) {
+        args.pt_file_name =
+            args.pn_file_name.substr(0, args.pn_file_name.length() - 3) + ".pt";
     }
 
-    // 出力ファイル名が .asm で終わっているか確認する
-    const bool asm_name_ok =
-        args.asm_file_name.length() >= 4
-        && args.asm_file_name.substr(args.asm_file_name.length() - 4) == ".asm";
+    // 出力ファイル名が .pt で終わっているか確認する
+    const bool pt_name_ok =
+        args.pt_file_name.length() >= 3
+        && args.pt_file_name.substr(args.pt_file_name.length() - 3) == ".pt";
 
     // コマンドライン引数が不正ではないことをチェックする
-    if (!c_name_ok || !asm_name_ok) {
+    if (!pn_name_ok || !pt_name_ok) {
         // メッセージを出力する
         std::cout << "args fail" << std::endl
-                  << "-c: c source file name. e.g. ~~.c" << std::endl
-                  << "    actual: " << args.c_file_name << std::endl
-                  << "-a: output asm file name. e.g. ~~.asm" << std::endl
-                  << "    actual: " << args.asm_file_name << std::endl;
+                  << "-pn: pynesis source file name. e.g. ~~.pn" << std::endl
+                  << "    actual: " << args.pn_file_name << std::endl
+                  << "-pt: output asm file name. e.g. ~~.pt" << std::endl
+                  << "    actual: " << args.pt_file_name << std::endl;
 
         // 後の処理でエラーになるよう，コマンドライン引数をクリアする
-        args.c_file_name.clear();
-        args.asm_file_name.clear();
+        args.pn_file_name.clear();
+        args.pt_file_name.clear();
     }
 }

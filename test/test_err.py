@@ -1,5 +1,5 @@
 """
-test/src_err/*.c を全てコンパイルし，エラーが出ることを確認するテストスクリプト。
+test/src_err/*.pn を全てコンパイルし，エラーが出ることを確認するテストスクリプト。
 - 終了コードが非0、またはエラーメッセージが出力されることを「成功（エラー検出）」とする。
 - エラーが出なかった場合は「失敗（エラー未検出）」として報告する。
 """
@@ -20,7 +20,7 @@ def main():
         sys.exit(1)
 
     src_files = sorted(
-        f for f in os.listdir(SRC_ERR_DIR) if f.endswith(".c")
+        f for f in os.listdir(SRC_ERR_DIR) if f.endswith(".pn")
     )
 
     if not src_files:
@@ -33,10 +33,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         for src_file in src_files:
             src_path = os.path.join(SRC_ERR_DIR, src_file)
-            asm_path = os.path.join(tmpdir, src_file.replace(".c", ".asm"))
+            asm_path = os.path.join(tmpdir, src_file.replace(".pn", ".pt"))
 
             result = subprocess.run(
-                [C2ASM, "-c", src_path, "-a", asm_path],
+                [C2ASM, "-pn", src_path, "-pt", asm_path],
                 capture_output=True,
                 text=True,
             )
