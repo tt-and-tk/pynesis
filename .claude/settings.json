@@ -4,13 +4,53 @@
       "Read(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
       "Glob(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
       "Grep(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
+      "Edit(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
+      "Write(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
       "Read(C:\\D\\program\\xilinx\\pynq-z2\\pc\\assembler\\**)",
       "Glob(C:\\D\\program\\xilinx\\pynq-z2\\pc\\assembler\\**)",
-      "Grep(C:\\D\\program\\xilinx\\pynq-z2\\pc\\assembler\\**)"
+      "Grep(C:\\D\\program\\xilinx\\pynq-z2\\pc\\assembler\\**)",
+      "Edit(C:\\D\\program\\xilinx\\pynq-z2\\pc\\compiler\\**)",
+      "Write(C:\\D\\program\\xilinx\\pynq-z2\\pc\\compiler\\**)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull)",
+      "Bash(git branch -d:*)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git remote -v)",
+      "Bash(gh pr create:*)",
+      "Bash(gh api repos/*/pulls/*/comments)",
+      "Bash(gh api repos/*/issues/*/comments)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue create:*)",
+      "Bash(claude -p --allowedTools \"Read,Grep,Glob,Skill(issue-create),Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*)\" --disallowedTools \"Edit,Write,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git pull),Bash(git branch -d:*),Bash(git branch --show-current),Bash(git branch),Bash(git log:*),Bash(git show:*),Bash(git remote -v),Bash(gh pr create:*),Bash(gh api repos/*/pulls/*/comments),Bash(gh api repos/*/issues/*/comments),Bash(gh issue create:*),Bash(claude -p:*)\" --:*)"
+    ],
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr ready:*)"
     ],
     "additionalDirectories": [
       "C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification",
       "C:\\D\\program\\xilinx\\pynq-z2\\pc\\assembler"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect-default-branch.sh\""
+          }
+        ]
+      }
     ]
   }
 }
