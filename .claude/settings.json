@@ -1,4 +1,15 @@
 {
+  "extraKnownMarketplaces": {
+    "for-pynthesis-skills": {
+      "source": {
+        "source": "github",
+        "repo": "tt-and-tk/for-pynthesis-skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "for-pynthesis-skills@for-pynthesis-skills": true
+  },
   "permissions": {
     "allow": [
       "Read(C:\\D\\program\\xilinx\\pynq-z2\\pc\\specification\\**)",
@@ -29,7 +40,7 @@
       "Bash(gh api repos/*/issues/*/comments)",
       "Bash(gh issue view:*)",
       "Bash(gh issue create:*)",
-      "Bash(claude -p --allowedTools \"Read,Grep,Glob,Skill(issue-create),Bash(git status:*),Bash(git diff:*),Bash(gh issue view:*)\" --disallowedTools \"Edit,Write,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git pull),Bash(git branch -d:*),Bash(git branch --show-current),Bash(git branch),Bash(git log:*),Bash(git show:*),Bash(git remote -v),Bash(gh pr create:*),Bash(gh api repos/*/pulls/*/comments),Bash(gh api repos/*/issues/*/comments),Bash(gh issue create:*),Bash(claude -p:*)\" --:*)"
+      "Bash(claude -p:*)"
     ],
     "deny": [
       "Bash(gh pr merge:*)",
