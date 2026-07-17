@@ -6,7 +6,7 @@
 
 // 基本型種別
 typedef enum {
-    BASE_CHAR, BASE_SHORT, BASE_INT, BASE_VOID,
+    BASE_CHAR, BASE_SHORT, BASE_INT, BASE_VOID, BASE_STRUCT,
 } base_type_t;
 
 // 型情報
@@ -15,6 +15,7 @@ typedef struct {
     bool is_signed = true;        // signed/unsigned (unsignedは未対応のため常にtrue)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
+    std::string struct_name;      // 構造体のタグ名 (base==BASE_STRUCTのときのみ有効)
 } type_t;
 
 // ASTノード種別
@@ -25,6 +26,7 @@ typedef enum {
     ND_BLOCK,       // ブロック文 { ... }
     // 宣言
     ND_VAR_DECL,    // 変数宣言
+    ND_STRUCT_DECL, // 構造体定義 (svalにタグ名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
     // 制御構文
     ND_IF,          // if文
     ND_WHILE,       // while文
@@ -50,7 +52,8 @@ typedef enum {
     ND_CHAR_LIT,    // 文字リテラル
     ND_STRING_LIT,  // 文字列リテラル (svalに引用符なしの文字列内容を格納)
     ND_VAR,             // 変数参照
-    ND_ARRAY_ACCESS,    // 配列要素アクセス a[i] (children: [インデックス式])
+    ND_ARRAY_ACCESS,    // 配列要素アクセス a[i] (children: [インデックス式]，構造体メンバ配列なら[インデックス式, ND_MEMBER_ACCESS])
+    ND_MEMBER_ACCESS,   // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)]，svalにメンバ名を格納)
 } node_kind_t;
 
 // シンボル情報 (実体はanalyzer.hppで定義．node_tはポインタで参照するため前方宣言する)
@@ -81,6 +84,7 @@ public:
 private:
     const std::vector<token_t> &tokens_;  // トークン列
     int pos_;                             // 現在の読み取り位置
+    int anon_struct_count_;               // 無名構造体に割り当てる連番 (ユーザーコードが書けないタグ名を生成するため)
 
     // ヘルパー
     const token_t &peek_token() const;                     // 現在のトークンを覗き見る (消費しない)
@@ -95,6 +99,9 @@ private:
     static long long parse_int_literal(const std::string &text);   // 整数リテラル文字列を数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
+    // signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)を読み，型情報を返す
+    // 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
+    type_t parse_type(bool allow_void);
 
     // 構文解析メソッド (parse_で始まる)
     node_t *parse_program();    // プログラム全体
@@ -102,6 +109,11 @@ private:
     node_t *parse_block();      // ブロック { ... }
     node_t *parse_stmt();       // 文
     node_t *parse_var_decl();   // 変数宣言
+    // 構造体定義 struct [タグ名] { メンバ宣言... } [変数名] ;
+    // タグ省略時は無名構造体となり，その場での変数宣言を必須とする
+    // 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
+    std::vector<node_t *> parse_struct_decl();
+    node_t *parse_struct_member();  // 構造体メンバ宣言 (型 名前 [配列サイズ] ;)
     node_t *parse_return();     // return文
     node_t *parse_if();         // if文 (else if / else を含む)
     node_t *parse_while();      // while文
@@ -129,6 +141,6 @@ private:
     node_t *parse_ternary();            // 三項演算子 a ? b : c
     node_t *parse_binary(int min_prec); // 二項演算子を含む式 (優先順位min_prec以上を処理)
     node_t *parse_unary();              // 前置単項演算子を含む式
-    node_t *parse_postfix();            // 後置演算子・関数呼び出しを含む式
+    node_t *parse_postfix();            // 後置演算子・メンバアクセス・関数呼び出しを含む式
     node_t *parse_primary();    // 基本式 (リテラル・変数参照・括弧式)
 };

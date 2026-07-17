@@ -1,0 +1,8 @@
+// 構造体メンバ名の重複は禁止
+struct Dup {
+    int x;
+    int x;
+};
+
+void main(void) {
+}

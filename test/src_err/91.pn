@@ -1,0 +1,4 @@
+// 未定義の構造体タグの使用は禁止
+void main(void) {
+    struct Unknown v;
+}

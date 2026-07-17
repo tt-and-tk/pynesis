@@ -1,0 +1,10 @@
+// ネスト構造体メンバは非対応
+struct Inner {
+    int v;
+};
+struct Outer {
+    struct Inner in;
+};
+
+void main(void) {
+}

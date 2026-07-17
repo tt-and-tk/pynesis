@@ -1,0 +1,10 @@
+// 構造体タグの再定義は禁止
+struct Tag {
+    int v;
+};
+struct Tag {
+    int w;
+};
+
+void main(void) {
+}

@@ -1,0 +1,8 @@
+// 構造体の配列宣言は非対応
+struct Tag {
+    int v;
+};
+
+void main(void) {
+    struct Tag arr[3];
+}

@@ -6,6 +6,7 @@
 typedef enum {
     // 型キーワード
     TK_INT, TK_CHAR, TK_SHORT, TK_VOID, TK_SIGNED, TK_UNSIGNED,
+    TK_STRUCT,
     // 制御構文キーワード
     TK_IF, TK_ELSE, TK_FOR, TK_WHILE, TK_DO,
     TK_SWITCH, TK_CASE, TK_DEFAULT,
@@ -71,6 +72,7 @@ typedef enum {
     TK_RBRACKET,    // ]
     TK_SEMICOLON,   // ;
     TK_COMMA,       // ,
+    TK_DOT,         // .
     // ファイル末尾
     TK_EOF,
 } token_kind_t;

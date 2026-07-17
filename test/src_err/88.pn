@@ -1,0 +1,10 @@
+// 構造体を関数パラメータにすることは非対応
+struct Tag {
+    int v;
+};
+
+void f(struct Tag t) {
+}
+
+void main(void) {
+}

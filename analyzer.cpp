@@ -37,6 +37,9 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
+    // 0パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
+    this->collect_struct_decls();
+
     // 1パス目: グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
 
@@ -75,10 +78,73 @@ int Analyzer::scratch_base() const {
     return this->scratch_base_;
 }
 
+// 0パス目: プログラム直下の構造体定義を登録する
+// メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
+void Analyzer::collect_struct_decls() {
+    for (node_t *child : this->root_->children) {
+        if (child->kind != ND_STRUCT_DECL) continue;
+
+        if (this->struct_defs_.count(child->sval)) {
+            throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
+        }
+
+        struct_def_t def;
+        def.total_words = 0;
+        std::set<std::string> member_names;   // メンバ名の重複検出用
+
+        for (node_t *member : child->children) {
+            if (member_names.count(member->sval)) {
+                throw std::string("compiler error: duplicate member '") + member->sval
+                      + "' in struct '" + child->sval + "' at line " + std::to_string(member->line);
+            }
+            member_names.insert(member->sval);
+
+            if (member->type.is_array) {
+                // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
+                const long long size = this->eval_const_expr(member->children[0]);
+                if (size <= 0) {
+                    throw std::string("compiler error: array size must be positive at line ")
+                          + std::to_string(member->children[0]->line);
+                }
+                member->type.array_size = static_cast<int>(size);
+                // サイズ式を畳み込み済みリテラルに置き換える
+                node_t *folded = new node_t;
+                folded->kind = ND_INT_LIT;
+                folded->ival = size;
+                folded->line = member->children[0]->line;
+                member->children[0] = folded;
+            }
+
+            const int words = member->type.is_array ? Analyzer::calc_array_words(member->type) : 1;
+            def.members.push_back({member->sval, member->type, def.total_words});
+            def.total_words += words;
+        }
+
+        this->struct_defs_[child->sval] = def;
+    }
+}
+
+// 構造体型の変数を1つ登録する．構造体定義の総ワード数ぶんアドレスを確保し，シンボルを生成して返す
+// (グローバル変数はcollect_globals，ローカル変数はanalyze_local_declの双方から呼ばれる共通処理)
+symbol_t *Analyzer::register_struct_var(const node_t *decl, location_t location) {
+    const auto it = this->struct_defs_.find(decl->type.struct_name);
+    if (it == this->struct_defs_.end()) {
+        throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
+              + "' at line " + std::to_string(decl->line);
+    }
+    symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
+    this->next_addr_ += it->second.total_words * 4;
+    return sym;
+}
+
 // 1パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
+        // 構造体定義は0パス目(collect_struct_decls)で処理済み
+        // (構造体のタグ名は変数・関数とは別の名前空間のため，ここでの重複チェック対象にもしない)
+        if (child->kind == ND_STRUCT_DECL) continue;
+
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
         if (this->symbols_.count(child->sval) || this->func_names_.count(child->sval)) {
             throw std::string("compiler error: redefinition of '") + child->sval
@@ -87,7 +153,12 @@ void Analyzer::collect_globals() {
 
         // グローバル変数宣言: 初期化子を評価し，アドレスを割り当てて登録する
         if (child->kind == ND_VAR_DECL) {
-            if (child->type.is_array) {
+            if (child->type.base == BASE_STRUCT) {
+                // 構造体変数: 配列・初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+                symbol_t *sym = this->register_struct_var(child, LOC_GLOBAL);
+                this->symbols_[child->sval] = sym;
+                child->sym = sym;
+            } else if (child->type.is_array) {
                 if (!child->children.empty() && child->children[0]->kind == ND_STRING_LIT) {
                     // 文字列リテラルによる初期化: char msg[] = "hello";
                     if (child->type.base != BASE_CHAR) {
@@ -155,7 +226,7 @@ void Analyzer::collect_globals() {
                               + "' at line " + std::to_string(param->line);
                     }
                 }
-                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタを上書きしないように)
+                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタを上書きしないように禁止する)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
                     throw std::string("compiler error: cannot shadow hardware register '") + param->sval
@@ -174,7 +245,7 @@ void Analyzer::collect_globals() {
 
 // コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
 // 呼び出し元 (=定数式が要求される文脈): グローバル配列のサイズ指定・グローバルスカラー変数の初期化子・
-// ローカル配列のサイズ指定・switch文のcase値
+// ローカル配列のサイズ指定・構造体メンバ配列のサイズ指定・switch文のcase値
 // 変数参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
 // ただし sizeof(変数名) だけは例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
@@ -188,7 +259,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
     if (expr->kind == ND_SIZEOF) {
         if (expr->children.empty()) {
             // sizeof(型名)
-            return Analyzer::type_size_bytes(expr->type);
+            return this->type_size_bytes(expr->type);
         }
         // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
         const node_t *inner = expr->children[0];
@@ -207,7 +278,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
             throw std::string("compiler error: sizeof of an array parameter (size unknown) at line ")
                   + std::to_string(inner->line);
         }
-        return Analyzer::type_size_bytes(sym->type);
+        return this->type_size_bytes(sym->type);
     }
 
     // 前置単項演算
@@ -274,8 +345,12 @@ int Analyzer::calc_array_words(const type_t &type) {
 }
 
 // 型の論理バイト数を返す (sizeof用．C言語準拠で実メモリのワード境界は考慮しない)
-// 配列は「要素数 × 要素型のバイト数」を返す
-int Analyzer::type_size_bytes(const type_t &type) {
+// 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
+int Analyzer::type_size_bytes(const type_t &type) const {
+    if (type.base == BASE_STRUCT) {
+        // 構造体変数の型は必ず登録済みの構造体タグを指すため，ここで見つからないことはない
+        return this->struct_defs_.at(type.struct_name).total_words * 4;
+    }
     int elem_bytes;
     switch (type.base) {
         case BASE_CHAR:  elem_bytes = 1; break;
@@ -499,7 +574,12 @@ void Analyzer::analyze_local_decl(node_t *decl) {
               + "' at line " + std::to_string(decl->line);
     }
 
-    if (decl->type.is_array) {
+    if (decl->type.base == BASE_STRUCT) {
+        // 構造体変数: 配列・初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+        symbol_t *sym = this->register_struct_var(decl, LOC_LOCAL);
+        this->scopes_.back()[decl->sval] = sym;
+        decl->sym = sym;
+    } else if (decl->type.is_array) {
         if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
             // 文字列リテラルによる初期化: char msg[] = "hello";
             if (decl->type.base != BASE_CHAR) {
@@ -579,7 +659,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             int size;
             if (expr->children.empty()) {
                 // sizeof(型名): パーサがexpr->typeに型を格納済み
-                size = Analyzer::type_size_bytes(expr->type);
+                size = this->type_size_bytes(expr->type);
             } else {
                 // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
                 // (analyze_exprではなくlookup_symbolで直接型を取得する．readable=falseの
@@ -596,7 +676,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 }
                 inner->sym  = sym;
                 inner->type = sym->type;
-                size = Analyzer::type_size_bytes(sym->type);
+                size = this->type_size_bytes(sym->type);
             }
             expr->ival = size;
             expr->type = type_t{BASE_INT, true};   // sizeofの結果はint
@@ -619,7 +699,47 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 代入: 左辺は書き込み可能な変数または配列要素でなければならない
+        // 構造体メンバアクセス: 構造体変数を解決し，メンバのオフセットを加えた実体を1つのシンボルとして表す
+        // (「構造体変数の番地 + メンバのオフセット」という合成シンボルにすることで，読み込み・代入・
+        //  配列アクセス等の既存のコード生成を，通常の変数と同じ経路でそのまま利用できる)
+        case ND_MEMBER_ACCESS: {
+            node_t *base = expr->children[0];
+            const symbol_t *base_sym = this->lookup_symbol(base->sval);
+            if (base_sym == nullptr) {
+                throw std::string("compiler error: use of undeclared identifier '")
+                      + base->sval + "' at line " + std::to_string(base->line);
+            }
+            if (base_sym->type.base != BASE_STRUCT) {
+                throw std::string("compiler error: '") + base->sval
+                      + "' is not a struct at line " + std::to_string(base->line);
+            }
+            base->sym  = base_sym;
+            base->type = base_sym->type;
+
+            const struct_def_t &def = this->struct_defs_.at(base_sym->type.struct_name);
+            const struct_member_t *member = nullptr;
+            for (const struct_member_t &m : def.members) {
+                if (m.name == expr->sval) { member = &m; break; }
+            }
+            if (member == nullptr) {
+                throw std::string("compiler error: struct '") + base_sym->type.struct_name
+                      + "' has no member '" + expr->sval + "' at line " + std::to_string(expr->line);
+            }
+
+            symbol_t *sym = new symbol_t{
+                base_sym->name + "." + expr->sval,
+                member->type,
+                base_sym->location,
+                base_sym->address + member->offset_words * 4,
+                base_sym->readable,
+                base_sym->writable,
+            };
+            expr->sym  = sym;
+            expr->type = member->type;
+            return;
+        }
+
+        // 代入: 左辺は書き込み可能な変数・構造体メンバまたは配列要素でなければならない
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];
             // 配列要素への代入: 左辺を先に解析して名前解決する
@@ -627,6 +747,26 @@ void Analyzer::analyze_expr(node_t *expr) {
                 this->analyze_expr(lhs);                // 左辺(配列要素)の名前解決
                 this->analyze_expr(expr->children[1]);  // 右辺の式を検査する
                 // void関数の戻り値(値を持たない)を代入することはできない
+                if (expr->children[1]->type.base == BASE_VOID) {
+                    throw std::string("compiler error: cannot assign void value at line ")
+                          + std::to_string(expr->line);
+                }
+                expr->type = lhs->type;
+                return;
+            }
+            // 構造体メンバへの代入: 左辺を先に解析して名前解決する
+            if (lhs->kind == ND_MEMBER_ACCESS) {
+                this->analyze_expr(lhs);
+                if (!lhs->sym->writable) {
+                    throw std::string("compiler error: '") + lhs->sym->name
+                          + "' is not writable at line " + std::to_string(lhs->line);
+                }
+                // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
+                if (expr->sval != "=" && !lhs->sym->readable) {
+                    throw std::string("compiler error: '") + lhs->sym->name
+                          + "' is not readable at line " + std::to_string(lhs->line);
+                }
+                this->analyze_expr(expr->children[1]);
                 if (expr->children[1]->type.base == BASE_VOID) {
                     throw std::string("compiler error: cannot assign void value at line ")
                           + std::to_string(expr->line);
@@ -664,27 +804,32 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // インクリメント・デクリメント: 対象は読み書き両方可能な変数でなければならない
+        // インクリメント・デクリメント: 対象は読み書き両方可能な変数または構造体メンバでなければならない
         case ND_UNOP:
         case ND_POST_UNOP:
             if (expr->sval == "++" || expr->sval == "--") {
                 node_t *operand = expr->children[0];
-                if (operand->kind != ND_VAR) {
+                const symbol_t *sym;
+                if (operand->kind == ND_VAR) {
+                    sym = this->lookup_symbol(operand->sval);
+                    if (sym == nullptr) {
+                        throw std::string("compiler error: use of undeclared identifier '")
+                              + operand->sval + "' at line " + std::to_string(operand->line);
+                    }
+                    operand->sym  = sym;
+                    operand->type = sym->type;
+                } else if (operand->kind == ND_MEMBER_ACCESS) {
+                    this->analyze_expr(operand);
+                    sym = operand->sym;
+                } else {
                     throw std::string("compiler error: operand of '") + expr->sval
                           + "' must be a variable at line " + std::to_string(expr->line);
                 }
-                const symbol_t *sym = this->lookup_symbol(operand->sval);
-                if (sym == nullptr) {
-                    throw std::string("compiler error: use of undeclared identifier '")
-                          + operand->sval + "' at line " + std::to_string(operand->line);
-                }
                 if (!sym->readable || !sym->writable) {
-                    throw std::string("compiler error: '") + operand->sval
-                          + "' is not readable and writable at line " + std::to_string(operand->line);
+                    throw std::string("compiler error: '") + sym->name
+                          + "' is not readable and writable at line " + std::to_string(expr->line);
                 }
-                operand->sym  = sym;
-                operand->type = sym->type;
-                expr->type    = sym->type;
+                expr->type = sym->type;
                 return;
             }
             // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
@@ -721,10 +866,18 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: cannot use void value in expression at line ")
                           + std::to_string(expr->children[i]->line);
                 }
-                // 配列パラメータには配列変数または文字列リテラルを，スカラーパラメータにはスカラー式を渡す
+                // 構造体はフルコピーの仕組みが無いため，引数として渡すこと自体を禁止する
+                if (expr->children[i]->type.base == BASE_STRUCT) {
+                    throw std::string("compiler error: struct cannot be passed as a function argument at line ")
+                          + std::to_string(expr->children[i]->line);
+                }
+                // 配列パラメータには配列変数(構造体メンバ配列を含む)または文字列リテラルを，
+                // スカラーパラメータにはスカラー式を渡す
                 node_t *arg = expr->children[i];
                 if (params[i]->type.is_array) {
-                    if ((arg->kind != ND_VAR && arg->kind != ND_STRING_LIT) || !arg->sym->type.is_array) {
+                    const bool is_array_designator =
+                        arg->kind == ND_VAR || arg->kind == ND_STRING_LIT || arg->kind == ND_MEMBER_ACCESS;
+                    if (!is_array_designator || !arg->sym->type.is_array) {
                         throw std::string("compiler error: argument for array parameter '")
                               + params[i]->name + "' must be an array variable or string literal at line "
                               + std::to_string(arg->line);
@@ -736,9 +889,9 @@ void Analyzer::analyze_expr(node_t *expr) {
                     //           + params[i]->name + "' at line " + std::to_string(arg->line);
                     // }
                 } else {
-                    if (arg->kind == ND_VAR && arg->sym->type.is_array) {
+                    if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->sym->type.is_array) {
                         throw std::string("compiler error: cannot pass array '")
-                              + arg->sval + "' to scalar parameter '"
+                              + arg->sym->name + "' to scalar parameter '"
                               + params[i]->name + "' at line " + std::to_string(arg->line);
                     }
                     // TODO: func(1 + 2) など計算式を引数に与えた場合に型を正確に推論する仕組みが出来たらコメントアウトを外す
@@ -802,26 +955,36 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 配列要素アクセス: 配列変数の名前解決とインデックス式の検査を行う
+        // 配列要素アクセス: 配列(構造体メンバ配列を含む)の名前解決とインデックス式の検査を行う
+        // 通常の配列変数はsval(変数名)で解決し，構造体メンバ配列はchildren[1](ND_MEMBER_ACCESS)で解決する
         case ND_ARRAY_ACCESS: {
-            const symbol_t *sym = this->lookup_symbol(expr->sval);
-            if (sym == nullptr) {
-                throw std::string("compiler error: use of undeclared identifier '")
-                      + expr->sval + "' at line " + std::to_string(expr->line);
+            const symbol_t *sym;
+            if (expr->children.size() == 2) {
+                node_t *designator = expr->children[1];
+                this->analyze_expr(designator);
+                sym = designator->sym;
+            } else {
+                sym = this->lookup_symbol(expr->sval);
+                if (sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + expr->sval + "' at line " + std::to_string(expr->line);
+                }
             }
             if (!sym->type.is_array) {
-                throw std::string("compiler error: '") + expr->sval
+                const std::string name = expr->sval.empty() ? sym->name : expr->sval;
+                throw std::string("compiler error: '") + name
                       + "' is not an array at line " + std::to_string(expr->line);
             }
             expr->sym = sym;
             // 要素の型は配列のbase型(スカラー)
             expr->type = {sym->type.base, sym->type.is_signed};
             // インデックス式を検査する
-            this->analyze_expr(expr->children[0]);
+            node_t *index_expr = expr->children[0];
+            this->analyze_expr(index_expr);
             // void値(戻り値のない関数呼び出し)は配列インデックスに使えない
-            if (expr->children[0]->type.base == BASE_VOID) {
+            if (index_expr->type.base == BASE_VOID) {
                 throw std::string("compiler error: cannot use void value in expression at line ")
-                      + std::to_string(expr->children[0]->line);
+                      + std::to_string(index_expr->line);
             }
             return;
         }

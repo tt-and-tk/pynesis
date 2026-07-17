@@ -1,0 +1,9 @@
+// 構造体変数の初期化子は非対応
+struct Tag {
+    int v;
+};
+struct Tag a;
+struct Tag b = a;
+
+void main(void) {
+}
