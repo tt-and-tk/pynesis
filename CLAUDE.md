@@ -17,11 +17,6 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 入力(.pn) → [pynesis(本リポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
 ```
 
-Pynesis(独自言語)で書かれたソースコードを，自作CPUのアセンブリ言語に翻訳するコンパイラ．  
-C言語に見た目が似ているが独自ルールを持つ言語であり，厳密なC言語仕様には従わない．  
-実装言語はC++．  
-コンパイラがアセンブリ言語への翻訳を完了したら，そのままアセンブラ(`../assembler/`)を呼び出してSystemVerilog ROM(`.sv`)に変換する．
-
 `c2bin.cpp`(`c2bin.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
 内部では`c2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2bin.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_c_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
 `c2asm.exe`・`../assembler/asm2bin.exe`は単体の実行ファイルとしても引き続き動作する．  
@@ -36,20 +31,6 @@ CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
 ```
 g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cpp lexer.cpp parser.cpp analyzer.cpp generator.cpp ../assembler/asm2bin.cpp
 ```
-
-## 関連ディレクトリ・ファイル
-
-| パス | 内容 |
-|:-|:-|
-| `../specification/` | 自作CPUのアーキテクチャ仕様書 |
-| `../specification/isa.md` | 命令セット仕様 |
-| `../specification/assembler.md` | アセンブリ言語仕様 |
-| `../specification/register.md` | レジスタ仕様 |
-| `../specification/memory.md` | メモリ仕様 |
-| `../specification/limitations.md` | 通常のCPUとの差分・非対応事項(スタック・再帰等) |
-| `../assembler/` | 自作アセンブラ(呼び出し先) |
-| `../assembler/asm2bin_main.hpp` | `assemble_asm_to_sv`(アセンブリ→SystemVerilog ROMの本処理)の宣言．`c2bin.cpp`が呼び出し用にincludeする |
-| `.claude/coding_conventions.md` | コーディング規約 |
 
 ## ソースファイル構成
 
@@ -84,47 +65,6 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 ## 自作CPUアーキテクチャ概要
 
 コンパイラ設計に関わる主要な仕様を記載する．詳細は `../specification/` を参照．
-
-### メモリ・データ幅
-
-| 項目 | 仕様 |
-|:-|:-|
-| データバス | 32ビット |
-| アドレスバス | 28ビット |
-| メモリ容量 | 約270MB |
-
-### レジスタ
-
-| 番地 | 名前 | 説明 |
-|:-|:-|:-|
-| `6'h00`〜`6'h0f` | r0〜r15 | 汎用レジスタ(16本) |
-| `6'h10` | SP | スタックポインタ |
-| `6'h1c` | FLG | フラグ(書き込み禁止) |
-| `6'h1d` | RSI | 引数の先頭レジスタ番地 |
-| `6'h1e` | RAX | 演算結果 |
-| `6'h1f` | PC | プログラムカウンタ(書き込み禁止) |
-
-### フラグ
-
-| ビット | 名前 | 説明 |
-|:-|:-|:-|
-| 0 | CF | キャリーフラグ |
-| 1 | ZF | ゼロフラグ |
-| 2 | OF | オーバーフローフラグ |
-| 3 | SF | サインフラグ |
-
-### 命令セット概要
-
-| 系統 | 命令 |
-|:-|:-|
-| N系(何もしない) | NOP |
-| P系(演算) | AND, OR, XOR, NOT, NAND, ADD, SUB, MUL, DIV |
-| S系(シフト) | SLL, SRL, SLA, SRA |
-| A系(代入) | MOV |
-| F系(条件分岐) | EQ, NE, LT, GT, ELT, EGT |
-| J系(ジャンプ) | JMP, CALL, RET |
-| M系(メモリ) | RM, WM, BRM, BWM |
-| IO系(標準入出力) | SCAN, PRINT |
 
 ### コンパイラ設計上の制約
 
@@ -193,10 +133,3 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 2. `asm2bin`(アセンブラ)がアセンブリファイルをSystemVerilog ROMファイル(`.sv`)に変換する
 3. `c2bin`は上記1・2を順に呼び出し，Pynesisソースから`.sv`まで一貫して変換する
 4. テストでは`c2asm`の翻訳結果(アセンブリ)が期待値と一致するか確認する(`c2bin`はテスト対象外)
-
-## レビュー依頼
-以下のコマンドを実行してレビュー依頼する
-
-```
-claude -p --model sonnet --tools "Read,Grep,Glob" -- "コードレビューし，指摘事項を報告してください．仕様についてはCLAUDE.mdに指定されている「関連ディレクトリ・ファイル」を，ソースについてはCLAUDE.mdに指定されている「ソースファイル構成」を参考にしてください．" > review.md
-```
