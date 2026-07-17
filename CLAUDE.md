@@ -1,15 +1,26 @@
 # コンパイラプロジェクト
 
-## プロジェクト概要
+## このリポジトリについて
+
+GitHubリポジトリ名: `tt-and-tk/pynesis`．
+
+PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフトウェア群(アセンブラ・コンパイラ)からなる自作PCプロジェクトの一部．プロジェクト全体は以下の独立したGitHubリポジトリで構成される．
+
+| リポジトリ(GitHub) | ディレクトリ(`pc/`配下) | 役割 |
+|:-|:-|:-|
+| `specification` | `specification/` | CPUアーキテクチャ・ISA・アセンブリ言語・コンパイラ仕様のドキュメント(唯一の一次情報源) |
+| `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)へのアセンブラ |
+| `pynesis`(本リポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルをincludeして使用し，`.sv`まで一貫変換も可能 |
+| `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクト(SystemVerilog + PS側C++) |
+
+```
+入力(.pn) → [pynesis(本リポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
+```
 
 Pynesis(独自言語)で書かれたソースコードを，自作CPUのアセンブリ言語に翻訳するコンパイラ．  
 C言語に見た目が似ているが独自ルールを持つ言語であり，厳密なC言語仕様には従わない．  
 実装言語はC++．  
 コンパイラがアセンブリ言語への翻訳を完了したら，そのままアセンブラ(`../assembler/`)を呼び出してSystemVerilog ROM(`.sv`)に変換する．
-
-```
-入力(.pn) → [コンパイラ] → アセンブリ(.pt) → [アセンブラ] → SystemVerilog ROM(.sv)
-```
 
 `c2bin.cpp`(`c2bin.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
 内部では`c2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2bin.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_c_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
