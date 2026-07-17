@@ -267,6 +267,17 @@ node_t *Parser::parse_block() {
 node_t *Parser::parse_stmt() {
     // 型キーワードで始まれば変数宣言 (struct Tag v; を含む)
     if (Parser::is_type_start(this->peek_token().kind)) {
+        // struct タグ名 { ... : 構造体定義はグローバル直下でのみ許可するため，ここに現れたら専用エラーにする
+        // (このチェックがないと，parse_var_decl内のstruct分岐がタグ名の直後に'{'を期待せず，
+        //  「識別子が来るべき場所に'{'が来た」という紛らわしいエラーになってしまう)
+        if (this->token_kind_is(TK_STRUCT)) {
+            const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
+            const token_kind_t after_tag = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
+            if (after_tag == TK_LBRACE) {
+                throw std::string("compiler error: struct definition is only allowed at global scope at line ")
+                      + std::to_string(this->peek_token().line);
+            }
+        }
         return this->parse_var_decl();
     }
     // ブロック { ... }
