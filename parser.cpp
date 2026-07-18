@@ -119,7 +119,7 @@ type_t Parser::parse_type(bool allow_void) {
     type_t type;
     type.is_signed = is_signed;
 
-    // 構造体型: struct タグ名
+    // 構造体型: struct 構造体名
     if (this->token_kind_is(TK_STRUCT)) {
         this->get_token();
         type.base = BASE_STRUCT;
@@ -160,8 +160,8 @@ node_t *Parser::parse_program() {
         if (this->token_kind_is(TK_VOID)) {
             node->children.push_back(this->parse_func_def());
         }
-        // struct: 構造体定義(タグ定義のみ／タグ定義+即座の変数宣言／無名構造体+即座の変数宣言)，
-        // 構造体型のグローバル変数宣言(既存タグの再利用)，または構造体を戻り値型にした関数定義のいずれか
+        // struct: 構造体定義(名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言)，
+        // 構造体型のグローバル変数宣言(既存の構造体定義の再利用)，または構造体を戻り値型にした関数定義のいずれか
         else if (this->token_kind_is(TK_STRUCT)) {
             const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
             // 構造体名の直後(無名構造体ならstructキーワードの直後)のトークン種別
@@ -173,10 +173,10 @@ node_t *Parser::parse_program() {
                     node->children.push_back(decl);
                 }
             } else if (has_tag && this->peek_kind_ahead(3) == TK_LPAREN) {
-                // struct タグ名 関数名( : 構造体を戻り値型にした関数定義 (非対応．parse_func_defが専用のエラーにする)
+                // struct 構造体名 関数名( : 構造体を戻り値型にした関数定義 (非対応．parse_func_defが専用のエラーにする)
                 node->children.push_back(this->parse_func_def());
             } else {
-                // 既存タグを使ったグローバル変数宣言
+                // 既存の構造体定義を使ったグローバル変数宣言
                 node->children.push_back(this->parse_var_decl());
             }
         }
@@ -278,7 +278,7 @@ node_t *Parser::parse_stmt() {
                 throw std::string("compiler error: struct definition is only allowed at global scope at line ")
                       + std::to_string(this->peek_token().line);
             }
-            // ここでエラーにならなければ，struct タグ名 変数名; (既存タグを使った変数宣言)であり，
+            // ここでエラーにならなければ，struct 構造体名 変数名; (既存の構造体定義を使った変数宣言)であり，
             // 通常の変数宣言と同じくparse_var_declに処理を委ねてよい
         }
         return this->parse_var_decl();
@@ -576,7 +576,7 @@ node_t *Parser::parse_param() {
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [signed|unsigned] 型 変数名 [= 式] ;
-// 構造体型の場合は struct タグ名 変数名 ; のみ許可する(配列・初期化子は非対応)
+// 構造体型の場合は struct 構造体名 変数名 ; のみ許可する(配列・初期化子は非対応)
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
@@ -656,20 +656,20 @@ node_t *Parser::parse_struct_member() {
 }
 
 // 構造体定義を解析する
-// 構文: struct [タグ名] { メンバ宣言... } [変数名] ;
-// タグ名を省略した場合(無名構造体)は，その場での変数宣言を必須とする(再宣言できるタグを持たないため)
+// 構文: struct [構造体名] { メンバ宣言... } [変数名] ;
+// 構造体名を省略した場合(無名構造体)は，その場での変数宣言を必須とする(再宣言する手段がないため)
 // 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
 std::vector<node_t *> Parser::parse_struct_decl() {
     node_t *decl = this->new_node(ND_STRUCT_DECL);
     this->get_token(TK_STRUCT);
 
-    // タグ名 (省略可)
+    // 構造体名 (省略可)
     const bool has_tag = this->token_kind_is(TK_IDENT);
     if (has_tag) {
         decl->sval = this->get_token().value;
     } else {
-        // 無名構造体には，Pynesisソース中に識別子として書けない専用のタグ名を割り当てる
-        // (識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上のタグと衝突しない)
+        // 無名構造体には，Pynesisソース中に識別子として書けない専用の名前を割り当てる
+        // (識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上の構造体名と衝突しない)
         decl->sval = "$anon" + std::to_string(this->anon_struct_count_++);
     }
 

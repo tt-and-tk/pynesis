@@ -40,7 +40,7 @@ struct struct_member_t {
     int offset_words;    // 構造体先頭からのオフセット(ワード単位)
 };
 
-// 構造体定義1つ分の情報 (タグ名→この情報がstruct_defs_に登録される)
+// 構造体定義1つ分の情報 (構造体名→この情報がstruct_defs_に登録される)
 struct struct_def_t {
     std::vector<struct_member_t> members;  // 宣言順のメンバ一覧
     int total_words;                       // 構造体全体が占めるワード数
@@ -63,7 +63,7 @@ private:
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→パラメータのシンボル列
-    std::map<std::string, struct_def_t> struct_defs_;    // 構造体タグ名→メンバ構成の対応表
+    std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
     int next_addr_;                                      // 次に割り当てるメモリ番地 (グローバル→ローカルで連番)
     int scratch_base_;                                    // レジスタ退避領域の先頭番地 (全変数のアドレス割り当て後に確保)
     std::vector<std::map<std::string, const symbol_t *>> scopes_;  // ローカル変数のスコープスタック (内側ほど後ろ)

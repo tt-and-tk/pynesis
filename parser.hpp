@@ -15,7 +15,7 @@ typedef struct {
     bool is_signed = true;        // signed/unsigned (unsignedは未対応のため常にtrue)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
-    // 構造体のタグ名 (base==BASE_STRUCTのときのみ有効)
+    // 構造体名 (base==BASE_STRUCTのときのみ有効)
     // 構造体の配列宣言(struct Tag arr[N];のような，この構造体自体を複数並べる宣言)は非対応のため，
     // base==BASE_STRUCT かつ is_array==true の組み合わせは現れない
     std::string struct_name;
@@ -29,7 +29,7 @@ typedef enum {
     ND_BLOCK,       // ブロック文 { ... }
     // 宣言
     ND_VAR_DECL,    // 変数宣言
-    ND_STRUCT_DECL, // 構造体定義 (svalにタグ名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
+    ND_STRUCT_DECL, // 構造体定義 (svalに構造体名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
     // 制御構文
     ND_IF,          // if文
     ND_WHILE,       // while文
@@ -112,8 +112,8 @@ private:
     node_t *parse_block();      // ブロック { ... }
     node_t *parse_stmt();       // 文
     node_t *parse_var_decl();   // 変数宣言
-    // 構造体定義 struct [タグ名] { メンバ宣言... } [変数名] ;
-    // タグ省略時は無名構造体となり，その場での変数宣言を必須とする
+    // 構造体定義 struct [構造体名] { メンバ宣言... } [変数名] ;
+    // 構造体名省略時は無名構造体となり，その場での変数宣言を必須とする
     // 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
     std::vector<node_t *> parse_struct_decl();
     node_t *parse_struct_member();  // 構造体メンバ宣言 (型 名前 [配列サイズ] ;)

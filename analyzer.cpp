@@ -88,7 +88,7 @@ void Analyzer::collect_struct_decls() {
         // 構造体定義(ND_STRUCT_DECL)以外(グローバル変数・関数定義)はここでは扱わないので読み飛ばす
         if (child->kind != ND_STRUCT_DECL) continue;
 
-        // 同じタグ名の構造体を再定義することは禁止する
+        // 同じ名前の構造体を再定義することは禁止する
         if (this->struct_defs_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
         }
@@ -133,7 +133,7 @@ void Analyzer::collect_struct_decls() {
 // (シンボル表への格納自体はグローバル用のcollect_globals・ローカル用のanalyze_local_declが
 //  それぞれ自分のシンボル表(symbols_・scopes_)へ行うため，この関数ではまだ行わない)
 symbol_t *Analyzer::register_struct_var(const node_t *decl, location_t location) {
-    // 宣言されている構造体タグが定義済みか確認する (1パス目のcollect_struct_declsで全タグは登録済み)
+    // 宣言されている構造体が定義済みか確認する (1パス目のcollect_struct_declsで全て登録済み)
     const auto it = this->struct_defs_.find(decl->type.struct_name);
     if (it == this->struct_defs_.end()) {
         throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
@@ -152,7 +152,7 @@ symbol_t *Analyzer::register_struct_var(const node_t *decl, location_t location)
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
         // 構造体定義(ND_STRUCT_DECL)は1パス目(collect_struct_decls)で処理済みなので読み飛ばす
-        // (構造体のタグ名は変数・関数とは別の名前空間のため，このあとの重複チェックの対象にもしない)
+        // (構造体名は変数・関数とは別の名前空間のため，このあとの重複チェックの対象にもしない)
         if (child->kind == ND_STRUCT_DECL) continue;
 
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
@@ -358,7 +358,7 @@ int Analyzer::calc_array_words(const type_t &type) {
 // 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
 int Analyzer::type_size_bytes(const type_t &type) const {
     if (type.base == BASE_STRUCT) {
-        // BASE_STRUCT型のsymbol_tはregister_struct_varが構造体タグの存在を検証した後にしか
+        // BASE_STRUCT型のsymbol_tはregister_struct_varが構造体の存在を検証した後にしか
         // 生成しないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
         // typeのstruct_nameは常に登録済みであり，探索に失敗することはない
         return this->struct_defs_.at(type.struct_name).total_words * 4;
