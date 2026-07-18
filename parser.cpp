@@ -164,8 +164,10 @@ node_t *Parser::parse_program() {
         // 構造体型のグローバル変数宣言(既存タグの再利用)，または構造体を戻り値型にした関数定義のいずれか
         else if (this->token_kind_is(TK_STRUCT)) {
             const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
-            const token_kind_t after_tag = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
-            if (after_tag == TK_LBRACE) {
+            // タグ名がある場合はタグ名の次，無い場合はstructキーワード直後のトークン種別
+            // (これが'{'であれば構造体定義(本体を持つ)，そうでなければ既存タグを使った宣言とみなす)
+            const token_kind_t next_kind = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
+            if (next_kind == TK_LBRACE) {
                 // 構造体定義 (変数宣言の有無も含めてparse_struct_declが一括して構文解析する)
                 for (node_t *decl : this->parse_struct_decl()) {
                     node->children.push_back(decl);
@@ -265,18 +267,21 @@ node_t *Parser::parse_block() {
 
 // 文を解析してASTノードを返す
 node_t *Parser::parse_stmt() {
-    // 型キーワードで始まれば変数宣言 (struct Tag v; を含む)
+    // 型キーワードで始まれば変数宣言
     if (Parser::is_type_start(this->peek_token().kind)) {
-        // struct タグ名 { ... : 構造体定義はグローバル直下でのみ許可するため，ここに現れたら専用エラーにする
-        // (このチェックがないと，parse_var_decl内のstruct分岐がタグ名の直後に'{'を期待せず，
-        //  「識別子が来るべき場所に'{'が来た」という紛らわしいエラーになってしまう)
+        // structの場合のみ，先に構造体定義の禁止チェックを行う
         if (this->token_kind_is(TK_STRUCT)) {
             const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
-            const token_kind_t after_tag = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
-            if (after_tag == TK_LBRACE) {
+            const token_kind_t next_kind = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
+            // struct [タグ名] { ... : 構造体定義(タグ付き・無名のいずれも，即座の変数宣言の有無を問わず)
+            // グローバル直下でのみ許可する．struct_defs_(構造体のメンバ構成の登録先)がスコープを持たない
+            // 単一のグローバルなテーブルであり，関数内で定義される構造体型を扱う仕組みが無いため
+            if (next_kind == TK_LBRACE) {
                 throw std::string("compiler error: struct definition is only allowed at global scope at line ")
                       + std::to_string(this->peek_token().line);
             }
+            // ここでエラーにならなければ，struct タグ名 変数名; (既存タグを使った変数宣言)であり，
+            // 通常の変数宣言と同じくparse_var_declに処理を委ねてよい
         }
         return this->parse_var_decl();
     }
@@ -624,20 +629,24 @@ node_t *Parser::parse_var_decl() {
     return node;
 }
 
-// 構造体メンバ宣言を解析してND_VAR_DECLを返す
-// 構文: 型 名前 [ 配列サイズ ] ;   (初期化子・ネスト構造体メンバは非対応)
+// 構造体メンバを1つ解析してND_VAR_DECLを返す (構造体自体の配列ではなく，メンバ自身が配列になりうるだけ)
+// 構文: 型 名前 [ 要素数 ] ;   (初期化子・ネスト構造体メンバは非対応)
+// parse_struct_declのループから，メンバの数だけ繰り返し呼ばれる
 node_t *Parser::parse_struct_member() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
+    // メンバの型を読む (構造体の配列とは別の話として，メンバがint/char/short型の配列になることは対応する．
+    // ただしメンバ自身がstruct型(ネスト構造体)になることは非対応のため，ここで検査してエラーにする)
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: nested struct members are not supported at line ")
               + std::to_string(node->line);
     }
 
+    // メンバ名を読む
     node->sval = this->get_token(TK_IDENT).value;
 
-    // 配列メンバ: 名前の後に [ サイズ ] があれば固定長配列 (サイズ省略・初期化子は非対応)
+    // 配列型のメンバ: 名前の後に [ 要素数 ] があれば固定長配列 (要素数省略・初期化子は非対応)
     if (this->token_kind_is(TK_LBRACKET)) {
         this->get_token(TK_LBRACKET);
         node->type.is_array = true;
@@ -662,15 +671,18 @@ std::vector<node_t *> Parser::parse_struct_decl() {
     if (has_tag) {
         decl->sval = this->get_token().value;
     } else {
-        // 無名構造体には，ユーザーコードが書けない専用のタグ名を割り当てる
-        // (識別子は英字/_で始まるトークンのみのため，$で始まる名前はユーザー定義のタグと衝突しない)
+        // 無名構造体には，Pynesisソース中に識別子として書けない専用のタグ名を割り当てる
+        // (識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上のタグと衝突しない)
         decl->sval = "$anon" + std::to_string(this->anon_struct_count_++);
     }
 
+    // 開き波括弧
     this->get_token(TK_LBRACE);
+    // } が来るまでメンバ宣言を繰り返し読む
     while (!this->token_kind_is(TK_RBRACE)) {
         decl->children.push_back(this->parse_struct_member());
     }
+    // 閉じ波括弧
     this->get_token(TK_RBRACE);
 
     std::vector<node_t *> result = {decl};
@@ -794,19 +806,23 @@ node_t *Parser::parse_postfix() {
 
     // 構造体メンバアクセス: 変数名.メンバ名 (ネスト構造体は非対応のため，連鎖するのは1段のみ)
     if (this->token_kind_is(TK_DOT)) {
+        // .の前は構造体変数の名前でなければならない (例: (a+b).xや配列要素a[0].xは非対応)
         if (node->kind != ND_VAR) {
             throw std::string("compiler error: expected a struct variable before '.' at line ")
                   + std::to_string(this->peek_token().line);
         }
-        this->get_token(TK_DOT);
+        this->get_token(TK_DOT);                     // . を消費
         node_t *member = this->new_node(ND_MEMBER_ACCESS);
         member->line = node->line;
-        member->children.push_back(node);           // 構造体変数
+        member->children.push_back(node);            // このメンバが属する構造体変数(ND_VAR)を子に持つ
         member->sval = this->get_token(TK_IDENT).value;  // メンバ名
+        // 以降(配列添字・後置++/--)の判定がメンバアクセス自身を対象にできるよう，
+        // nodeを構造体変数からメンバアクセスノードに置き換える(元の変数はmemberの子として残るため失われない)
         node = member;
     }
 
-    // 配列要素アクセス: 変数名[インデックス式]，または構造体メンバ配列.名[インデックス式]
+    // 配列要素アクセス: 変数名[インデックス式]，またはメンバが配列型である場合のメンバ名[インデックス式]
+    // (「構造体自体の配列」ではなく，「構造体の中の配列型メンバ」への添字アクセスであることに注意)
     if (this->token_kind_is(TK_LBRACKET)) {
         // []の前は変数名かメンバアクセスでなければならない (例: (a+b)[0]は非対応)
         if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS) {
@@ -821,7 +837,8 @@ node_t *Parser::parse_postfix() {
             access->sval = node->sval;
             access->children.push_back(this->parse_expr());
         } else {
-            // 構造体メンバ配列: インデックス式(children[0])に加え，メンバアクセス自体(children[1])で解決する
+            // 配列型メンバ(例: entry.name[i]): インデックス式(children[0])に加え，
+            // どのメンバの配列かを示すメンバアクセス自体(children[1])を持たせて意味解析に解決させる
             access->children.push_back(this->parse_expr());
             access->children.push_back(node);
         }

@@ -15,7 +15,10 @@ typedef struct {
     bool is_signed = true;        // signed/unsigned (unsignedは未対応のため常にtrue)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
-    std::string struct_name;      // 構造体のタグ名 (base==BASE_STRUCTのときのみ有効)
+    // 構造体のタグ名 (base==BASE_STRUCTのときのみ有効)
+    // 構造体の配列宣言(struct Tag arr[N];のような，この構造体自体を複数並べる宣言)は非対応のため，
+    // base==BASE_STRUCT かつ is_array==true の組み合わせは現れない
+    std::string struct_name;
 } type_t;
 
 // ASTノード種別
@@ -84,7 +87,9 @@ public:
 private:
     const std::vector<token_t> &tokens_;  // トークン列
     int pos_;                             // 現在の読み取り位置
-    int anon_struct_count_;               // 無名構造体に割り当てる連番 (ユーザーコードが書けないタグ名を生成するため)
+    // 無名構造体に割り当てる連番
+    // (コンパイル対象のPynesisソース中には識別子として書けないタグ名("$anon0"等)を生成するために使う)
+    int anon_struct_count_;
 
     // ヘルパー
     const token_t &peek_token() const;                     // 現在のトークンを覗き見る (消費しない)

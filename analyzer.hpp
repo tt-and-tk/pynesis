@@ -34,6 +34,7 @@ struct symbol_t {
 };
 
 // 構造体メンバ1つ分の情報 (構造体先頭からのオフセットまで確定させた状態で保持する)
+// struct_def_tがこの型のvectorをメンバに持つため，先に定義しておく
 struct struct_member_t {
     std::string name;    // メンバ名
     type_t type;         // メンバの型 (スカラーまたは固定長配列．ネスト構造体は非対応)
@@ -74,17 +75,19 @@ private:
     std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合 (ネスト段数検査用)
 
     // 解析メソッド
-    void collect_struct_decls();                            // 0パス目: 構造体定義の登録 (変数のアドレス確保より前に必要)
-    void collect_globals();                                 // 1パス目: グローバル変数の登録と関数名の収集
+    void collect_struct_decls();                            // 1パス目: 構造体定義の登録 (変数のアドレス確保より前に必要)
+    void collect_globals();                                 // 2パス目: グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
     long long eval_const_expr(const node_t *expr);
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
-    // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_の参照が必要なため非static
+    // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
     int type_size_bytes(const type_t &type) const;
-    // 構造体型の変数を1つ登録する (アドレスを確保し，シンボルを生成して返す)．グローバル・ローカルの両方から共通で呼ぶ
+    // 構造体型の変数1つ分のアドレスを確保し，シンボル(symbol_t)を生成して返す
+    // (シンボル表への格納自体は呼び出し元(collect_globals/analyze_local_decl)がグローバル/ローカルの
+    //  区別に応じて行うため，この関数はシンボルの生成・アドレス確保だけに専念する)
     symbol_t *register_struct_var(const node_t *decl, location_t location);
-    void analyze_functions();                               // 2パス目: 各関数本体を検査する
+    void analyze_functions();                               // 3パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する

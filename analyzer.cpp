@@ -37,10 +37,10 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
-    // 0パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
+    // 1パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
     this->collect_struct_decls();
 
-    // 1パス目: グローバル変数の登録と関数名の収集を行う
+    // 2パス目: グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
 
     // プログラムの開始点となるmain関数が必要
@@ -48,7 +48,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 2パス目: 各関数本体を検査する
+    // 3パス目: 各関数本体を検査する
     // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
@@ -78,12 +78,17 @@ int Analyzer::scratch_base() const {
     return this->scratch_base_;
 }
 
-// 0パス目: プログラム直下の構造体定義を登録する
+// 1パス目: プログラム直下の構造体定義(ND_STRUCT_DECL)を登録する
 // メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
+// 無名構造体に続けて即座に変数宣言されていた場合，その変数自体は別のND_VAR_DECLノードとして
+// root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
+// 変数宣言側は2パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
 void Analyzer::collect_struct_decls() {
     for (node_t *child : this->root_->children) {
+        // 構造体定義(ND_STRUCT_DECL)以外(グローバル変数・関数定義)はここでは扱わないので読み飛ばす
         if (child->kind != ND_STRUCT_DECL) continue;
 
+        // 同じタグ名の構造体を再定義することは禁止する
         if (this->struct_defs_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
         }
@@ -124,25 +129,30 @@ void Analyzer::collect_struct_decls() {
     }
 }
 
-// 構造体型の変数を1つ登録する．構造体定義の総ワード数ぶんアドレスを確保し，シンボルを生成して返す
-// (グローバル変数はcollect_globals，ローカル変数はanalyze_local_declの双方から呼ばれる共通処理)
+// 構造体型の変数1つ分のアドレスを確保し，シンボルを生成して返す
+// (シンボル表への格納自体はグローバル用のcollect_globals・ローカル用のanalyze_local_declが
+//  それぞれ自分のシンボル表(symbols_・scopes_)へ行うため，この関数ではまだ行わない)
 symbol_t *Analyzer::register_struct_var(const node_t *decl, location_t location) {
+    // 宣言されている構造体タグが定義済みか確認する (1パス目のcollect_struct_declsで全タグは登録済み)
     const auto it = this->struct_defs_.find(decl->type.struct_name);
     if (it == this->struct_defs_.end()) {
         throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
               + "' at line " + std::to_string(decl->line);
     }
+    // 構造体変数のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
+    // 構造体全体のワード数ぶん，次に割り当てるアドレスを進める
     this->next_addr_ += it->second.total_words * 4;
+    // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
     return sym;
 }
 
-// 1パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
+// 2パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
-        // 構造体定義は0パス目(collect_struct_decls)で処理済み
-        // (構造体のタグ名は変数・関数とは別の名前空間のため，ここでの重複チェック対象にもしない)
+        // 構造体定義(ND_STRUCT_DECL)は1パス目(collect_struct_decls)で処理済みなので読み飛ばす
+        // (構造体のタグ名は変数・関数とは別の名前空間のため，このあとの重複チェックの対象にもしない)
         if (child->kind == ND_STRUCT_DECL) continue;
 
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
@@ -209,8 +219,8 @@ void Analyzer::collect_globals() {
             }
         }
         // 関数定義: 関数名・戻り値型・パラメータのシンボルを登録する
-        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は2パス目より前に全関数のパラメータが必要なため，
-        // パラメータの番地割り当てもここ(1パス目)で行う．2パス目(analyze_functions)はここで作った
+        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
+        // パラメータの番地割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
             this->func_names_[child->sval] = child->type;
@@ -226,7 +236,7 @@ void Analyzer::collect_globals() {
                               + "' at line " + std::to_string(param->line);
                     }
                 }
-                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタを上書きしないように禁止する)
+                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
                     throw std::string("compiler error: cannot shadow hardware register '") + param->sval
@@ -348,7 +358,9 @@ int Analyzer::calc_array_words(const type_t &type) {
 // 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
 int Analyzer::type_size_bytes(const type_t &type) const {
     if (type.base == BASE_STRUCT) {
-        // 構造体変数の型は必ず登録済みの構造体タグを指すため，ここで見つからないことはない
+        // BASE_STRUCT型のsymbol_tはregister_struct_varが構造体タグの存在を検証した後にしか
+        // 生成しないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
+        // typeのstruct_nameは常に登録済みであり，探索に失敗することはない
         return this->struct_defs_.at(type.struct_name).total_words * 4;
     }
     int elem_bytes;
@@ -362,7 +374,7 @@ int Analyzer::type_size_bytes(const type_t &type) const {
     return type.is_array ? elem_bytes * type.array_size : elem_bytes;
 }
 
-// 2パス目: 各関数本体を検査する
+// 3パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (パラメータがなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
@@ -376,7 +388,7 @@ void Analyzer::analyze_functions() {
         // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // パラメータをスコープに登録する (シンボル自体は1パス目のcollect_globalsで作成済み)
+        // パラメータをスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
@@ -699,16 +711,18 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 構造体メンバアクセス: 構造体変数を解決し，メンバのオフセットを加えた実体を1つのシンボルとして表す
-        // (「構造体変数の番地 + メンバのオフセット」という合成シンボルにすることで，読み込み・代入・
-        //  配列アクセス等の既存のコード生成を，通常の変数と同じ経路でそのまま利用できる)
+        // 構造体メンバアクセス: メンバの実体を「構造体変数の番地 + メンバのオフセット」という
+        // 1つのシンボル(symbol_t)として表す．シンボルの番地・型さえ分かれば読み込み・代入・
+        // 配列アクセスのコード生成ができるため，対象が単純な変数かメンバかをコード生成器側で
+        // 区別する必要がなくなる
         case ND_MEMBER_ACCESS: {
-            node_t *base = expr->children[0];
-            const symbol_t *base_sym = this->lookup_symbol(base->sval);
+            node_t *base = expr->children[0];    // メンバの前についている構造体変数(ND_VAR)
+            const symbol_t *base_sym = this->lookup_symbol(base->sval);   // 構造体変数自体を名前解決する
             if (base_sym == nullptr) {
                 throw std::string("compiler error: use of undeclared identifier '")
                       + base->sval + "' at line " + std::to_string(base->line);
             }
+            // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
             if (base_sym->type.base != BASE_STRUCT) {
                 throw std::string("compiler error: '") + base->sval
                       + "' is not a struct at line " + std::to_string(base->line);
@@ -716,21 +730,25 @@ void Analyzer::analyze_expr(node_t *expr) {
             base->sym  = base_sym;
             base->type = base_sym->type;
 
+            // 構造体定義からメンバ名が一致するものを探す
             const struct_def_t &def = this->struct_defs_.at(base_sym->type.struct_name);
             const struct_member_t *member = nullptr;
             for (const struct_member_t &m : def.members) {
                 if (m.name == expr->sval) { member = &m; break; }
             }
+            // 定義に存在しないメンバ名を指定した場合はエラー
             if (member == nullptr) {
                 throw std::string("compiler error: struct '") + base_sym->type.struct_name
                       + "' has no member '" + expr->sval + "' at line " + std::to_string(expr->line);
             }
 
+            // 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
+            // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
             symbol_t *sym = new symbol_t{
-                base_sym->name + "." + expr->sval,
-                member->type,
+                base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
+                member->type,                                  // メンバの型 (スカラーまたは固定長配列)
                 base_sym->location,
-                base_sym->address + member->offset_words * 4,
+                base_sym->address + member->offset_words * 4,  // 番地 = 構造体変数の番地 + メンバのオフセット
                 base_sym->readable,
                 base_sym->writable,
             };
