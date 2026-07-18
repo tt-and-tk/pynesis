@@ -87,9 +87,7 @@ public:
 private:
     const std::vector<token_t> &tokens_;  // トークン列
     int pos_;                             // 現在の読み取り位置
-    // 無名構造体に割り当てる連番
-    // (コンパイル対象のPynesisソース中には識別子として書けないタグ名("$anon0"等)を生成するために使う)
-    int anon_struct_count_;
+    int anon_struct_count_;                // 無名構造体に割り当てる連番
 
     // ヘルパー
     const token_t &peek_token() const;                     // 現在のトークンを覗き見る (消費しない)

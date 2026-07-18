@@ -34,7 +34,6 @@ struct symbol_t {
 };
 
 // 構造体メンバ1つ分の情報 (構造体先頭からのオフセットまで確定させた状態で保持する)
-// struct_def_tがこの型のvectorをメンバに持つため，先に定義しておく
 struct struct_member_t {
     std::string name;    // メンバ名
     type_t type;         // メンバの型 (スカラーまたは固定長配列．ネスト構造体は非対応)

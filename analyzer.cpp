@@ -829,6 +829,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 node_t *operand = expr->children[0];
                 const symbol_t *sym;
                 if (operand->kind == ND_VAR) {
+                    // 普通の変数: 名前解決する
                     sym = this->lookup_symbol(operand->sval);
                     if (sym == nullptr) {
                         throw std::string("compiler error: use of undeclared identifier '")
@@ -837,9 +838,11 @@ void Analyzer::analyze_expr(node_t *expr) {
                     operand->sym  = sym;
                     operand->type = sym->type;
                 } else if (operand->kind == ND_MEMBER_ACCESS) {
+                    // 構造体メンバ: メンバアクセスの検査(analyze_exprのND_MEMBER_ACCESSケース)に解決させる
                     this->analyze_expr(operand);
                     sym = operand->sym;
                 } else {
+                    // それ以外(配列要素・リテラル・式の結果等)には++/--を適用できない
                     throw std::string("compiler error: operand of '") + expr->sval
                           + "' must be a variable at line " + std::to_string(expr->line);
                 }
@@ -978,10 +981,12 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_ARRAY_ACCESS: {
             const symbol_t *sym;
             if (expr->children.size() == 2) {
+                // 構造体メンバ配列: children[1]のメンバアクセスを検査させ，そのシンボルをそのまま使う
                 node_t *designator = expr->children[1];
                 this->analyze_expr(designator);
                 sym = designator->sym;
             } else {
+                // 通常の配列変数: svalに入っている変数名で名前解決する
                 sym = this->lookup_symbol(expr->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
