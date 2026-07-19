@@ -73,6 +73,11 @@ const std::map<std::string, std::vector<const symbol_t *>> &Analyzer::func_param
     return this->func_params_;
 }
 
+// 構造体定義表を返す
+const std::map<std::string, struct_def_t> &Analyzer::struct_defs() const {
+    return this->struct_defs_;
+}
+
 // レジスタ退避領域の先頭番地を返す
 int Analyzer::scratch_base() const {
     return this->scratch_base_;
@@ -129,20 +134,39 @@ void Analyzer::collect_struct_decls() {
     }
 }
 
-// 構造体型の変数1つ分のアドレスを確保し，シンボルを生成して返す
+// 構造体型の変数1つ分(配列宣言ならその配列全体分)のアドレスを確保し，シンボルを生成して返す
 // (シンボル表への格納自体はグローバル用のcollect_globals・ローカル用のanalyze_local_declが
 //  それぞれ自分のシンボル表(symbols_・scopes_)へ行うため，この関数ではまだ行わない)
-symbol_t *Analyzer::register_struct_var(const node_t *decl, location_t location) {
+symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
     // 宣言されている構造体が定義済みか確認する (1パス目のcollect_struct_declsで全て登録済み)
     const auto it = this->struct_defs_.find(decl->type.struct_name);
     if (it == this->struct_defs_.end()) {
         throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
               + "' at line " + std::to_string(decl->line);
     }
-    // 構造体変数のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
+
+    // 構造体配列: 要素数を定数式として確定する (通常の配列宣言のサイズ指定と同じ扱い)
+    int element_count = 1;
+    if (decl->type.is_array) {
+        const long long size = this->eval_const_expr(decl->children[0]);
+        if (size <= 0) {
+            throw std::string("compiler error: array size must be positive at line ")
+                  + std::to_string(decl->children[0]->line);
+        }
+        decl->type.array_size = static_cast<int>(size);
+        // サイズ式を畳み込み済みリテラルに置き換える
+        node_t *folded = new node_t;
+        folded->kind = ND_INT_LIT;
+        folded->ival = size;
+        folded->line = decl->children[0]->line;
+        decl->children[0] = folded;
+        element_count = decl->type.array_size;
+    }
+
+    // 構造体変数(配列なら配列全体)のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
-    // 構造体全体のワード数ぶん，次に割り当てるアドレスを進める
-    this->next_addr_ += it->second.total_words * 4;
+    // 構造体1個分のワード数×要素数ぶん，次に割り当てるアドレスを進める
+    this->next_addr_ += it->second.total_words * 4 * element_count;
     // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
     return sym;
 }
@@ -164,7 +188,7 @@ void Analyzer::collect_globals() {
         // グローバル変数宣言: 初期化子を評価し，アドレスを割り当てて登録する
         if (child->kind == ND_VAR_DECL) {
             if (child->type.base == BASE_STRUCT) {
-                // 構造体変数: 配列・初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+                // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
                 symbol_t *sym = this->register_struct_var(child, LOC_GLOBAL);
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
@@ -360,8 +384,10 @@ int Analyzer::type_size_bytes(const type_t &type) const {
     if (type.base == BASE_STRUCT) {
         // BASE_STRUCT型のsymbol_tはregister_struct_varが構造体の存在を検証した後にしか
         // 生成しないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
-        // typeのstruct_nameは常に登録済みであり，探索に失敗することはない
-        return this->struct_defs_.at(type.struct_name).total_words * 4;
+        // typeのstruct_nameは常に登録済みであり，探索に失敗することはない．
+        // 構造体配列は「構造体1個分のバイト数×要素数」を返す
+        const int struct_bytes = this->struct_defs_.at(type.struct_name).total_words * 4;
+        return type.is_array ? struct_bytes * type.array_size : struct_bytes;
     }
     int elem_bytes;
     switch (type.base) {
@@ -587,7 +613,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     }
 
     if (decl->type.base == BASE_STRUCT) {
-        // 構造体変数: 配列・初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+        // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
         symbol_t *sym = this->register_struct_var(decl, LOC_LOCAL);
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
@@ -711,24 +737,53 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 構造体メンバアクセス: メンバの実体を「構造体変数の番地 + メンバのオフセット」という
-        // 1つのシンボル(symbol_t)として表す．シンボルの番地・型さえ分かれば読み込み・代入・
-        // 配列アクセスのコード生成ができるため，対象が単純な変数かメンバかをコード生成器側で
-        // 区別する必要がなくなる
+        // 構造体メンバアクセス: 基底が単一の構造体変数(ND_VAR)なら，メンバの実体を
+        // 「構造体変数の番地 + メンバのオフセット」という1つのシンボル(symbol_t)として合成する．
+        // シンボルの番地・型さえ分かれば読み込み・代入・配列アクセスのコード生成ができるため，
+        // 対象が単純な変数かメンバかをコード生成器側で区別する必要がなくなる．
+        // 基底が構造体配列の要素(ND_ARRAY_ACCESS，arr[i])の場合は，添字iが実行時の値のため
+        // 番地をコンパイル時定数にできず，symbol_t合成の経路が使えない．代わりに配列全体の
+        // シンボル(expr->sym)とメンバのオフセット(expr->ival，ワード単位)だけを注釈し，
+        // 実行時アドレスの計算自体はコード生成側(gen_struct_array_member_addr)に委ねる
         case ND_MEMBER_ACCESS: {
-            node_t *base = expr->children[0];    // メンバの前についている構造体変数(ND_VAR)
-            const symbol_t *base_sym = this->lookup_symbol(base->sval);   // 構造体変数自体を名前解決する
-            if (base_sym == nullptr) {
-                throw std::string("compiler error: use of undeclared identifier '")
-                      + base->sval + "' at line " + std::to_string(base->line);
+            node_t *base = expr->children[0];
+            const symbol_t *base_sym;
+
+            if (base->kind == ND_ARRAY_ACCESS) {
+                // 構造体配列の要素へのメンバアクセス: arr[i].member
+                base_sym = this->lookup_symbol(base->sval);
+                if (base_sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + base->sval + "' at line " + std::to_string(base->line);
+                }
+                if (!base_sym->type.is_array || base_sym->type.base != BASE_STRUCT) {
+                    throw std::string("compiler error: '") + base->sval
+                          + "' is not an array of struct at line " + std::to_string(base->line);
+                }
+                base->sym  = base_sym;
+                base->type = base_sym->type;
+                // インデックス式(実行時に評価される)を検査する
+                node_t *index_expr = base->children[0];
+                this->analyze_expr(index_expr);
+                if (index_expr->type.base == BASE_VOID) {
+                    throw std::string("compiler error: cannot use void value in expression at line ")
+                          + std::to_string(index_expr->line);
+                }
+            } else {
+                // 単一の構造体変数へのメンバアクセス: entry.member
+                base_sym = this->lookup_symbol(base->sval);
+                if (base_sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + base->sval + "' at line " + std::to_string(base->line);
+                }
+                // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
+                if (base_sym->type.base != BASE_STRUCT) {
+                    throw std::string("compiler error: '") + base->sval
+                          + "' is not a struct at line " + std::to_string(base->line);
+                }
+                base->sym  = base_sym;
+                base->type = base_sym->type;
             }
-            // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
-            if (base_sym->type.base != BASE_STRUCT) {
-                throw std::string("compiler error: '") + base->sval
-                      + "' is not a struct at line " + std::to_string(base->line);
-            }
-            base->sym  = base_sym;
-            base->type = base_sym->type;
 
             // 構造体定義からメンバ名が一致するものを探す
             const struct_def_t &def = this->struct_defs_.at(base_sym->type.struct_name);
@@ -742,18 +797,25 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + "' has no member '" + expr->sval + "' at line " + std::to_string(expr->line);
             }
 
-            // 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
-            // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
-            symbol_t *sym = new symbol_t{
-                base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
-                member->type,                                  // メンバの型 (スカラーまたは固定長配列)
-                base_sym->location,
-                base_sym->address + member->offset_words * 4,  // 番地 = 構造体変数の番地 + メンバのオフセット
-                base_sym->readable,
-                base_sym->writable,
-            };
-            expr->sym  = sym;
-            expr->type = member->type;
+            if (base->kind == ND_ARRAY_ACCESS) {
+                // 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
+                expr->sym  = base_sym;
+                expr->ival = member->offset_words;
+                expr->type = member->type;
+            } else {
+                // 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
+                // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
+                symbol_t *sym = new symbol_t{
+                    base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
+                    member->type,                                  // メンバの型 (スカラーまたは固定長配列)
+                    base_sym->location,
+                    base_sym->address + member->offset_words * 4,  // 番地 = 構造体変数の番地 + メンバのオフセット
+                    base_sym->readable,
+                    base_sym->writable,
+                };
+                expr->sym  = sym;
+                expr->type = member->type;
+            }
             return;
         }
 
@@ -838,6 +900,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                     operand->sym  = sym;
                     operand->type = sym->type;
                 } else if (operand->kind == ND_MEMBER_ACCESS) {
+                    // 構造体配列要素のメンバ(arr[i].member)への++/--は非対応
+                    // (実行時に計算したアドレスへの++/--は追加のレジスタ計算が必要になるため．
+                    //  後置は既にparse_postfixで弾いているが，前置(++arr[i].member)はここでしか検出できない)
+                    if (operand->children[0]->kind == ND_ARRAY_ACCESS) {
+                        throw std::string("compiler error: '++'/'--' on array element is not supported at line ")
+                              + std::to_string(expr->line);
+                    }
                     // 構造体メンバ: メンバアクセスの検査(analyze_exprのND_MEMBER_ACCESSケース)に解決させる
                     this->analyze_expr(operand);
                     sym = operand->sym;
@@ -898,21 +967,36 @@ void Analyzer::analyze_expr(node_t *expr) {
                 if (params[i]->type.is_array) {
                     const bool is_array_designator =
                         arg->kind == ND_VAR || arg->kind == ND_STRING_LIT || arg->kind == ND_MEMBER_ACCESS;
-                    if (!is_array_designator || !arg->sym->type.is_array) {
+                    // is_arrayの判定はarg->typeを見る(構造体配列要素のメンバの場合，arg->symは
+                    // メンバ自身ではなく配列全体を指すため，arg->sym->type.is_arrayでは判定できない)
+                    if (!is_array_designator || !arg->type.is_array) {
                         throw std::string("compiler error: argument for array parameter '")
                               + params[i]->name + "' must be an array variable or string literal at line "
                               + std::to_string(arg->line);
                     }
+                    // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，
+                    // 関数呼び出し規約(呼び出し元がコンパイル時アドレスを直接書き込む方式)と
+                    // 相容れないため，引数として渡すことを禁止する
+                    if (arg->kind == ND_MEMBER_ACCESS && arg->children[0]->kind == ND_ARRAY_ACCESS) {
+                        throw std::string("compiler error: array member of a struct array element cannot be "
+                                           "passed as a function argument at line ") + std::to_string(arg->line);
+                    }
                     // TODO: スカラ変数の対応後にコメントアウトを外す
                     // // 要素型の不一致チェック (char配列をint配列パラメータに渡す等を防ぐ)
-                    // if (arg->sym->type.base != params[i]->type.base) {
+                    // if (arg->type.base != params[i]->type.base) {
                     //     throw std::string("compiler error: array element type mismatch for parameter '")
                     //           + params[i]->name + "' at line " + std::to_string(arg->line);
                     // }
                 } else {
-                    if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->sym->type.is_array) {
+                    if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->type.is_array) {
+                        // 構造体配列要素のメンバ配列(arr[i].name)はarg->symが配列全体("arr")を
+                        // 指すため，エラーメッセージ表示用に "配列名[].メンバ名" の形に組み立てる
+                        const std::string arg_name =
+                            (arg->kind == ND_MEMBER_ACCESS && arg->children[0]->kind == ND_ARRAY_ACCESS)
+                                ? arg->sym->name + "[]." + arg->sval
+                                : arg->sym->name;
                         throw std::string("compiler error: cannot pass array '")
-                              + arg->sym->name + "' to scalar parameter '"
+                              + arg_name + "' to scalar parameter '"
                               + params[i]->name + "' at line " + std::to_string(arg->line);
                     }
                     // TODO: func(1 + 2) など計算式を引数に与えた場合に型を正確に推論する仕組みが出来たらコメントアウトを外す
@@ -938,6 +1022,12 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (target->type.array_size == 0) {
                 throw std::string("compiler error: print does not support array parameters (size unknown) at line ")
                       + std::to_string(target->line);
+            }
+            // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，
+            // gen_print_stringが前提とする「コンパイル時に確定したアドレス」と相容れないため禁止する
+            if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
+                throw std::string("compiler error: print does not support an array member of "
+                                   "a struct array element at line ") + std::to_string(target->line);
             }
             // printは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
             expr->type = type_t{BASE_VOID, true};
@@ -980,11 +1070,16 @@ void Analyzer::analyze_expr(node_t *expr) {
         // 通常の配列変数はsval(変数名)で解決し，構造体メンバ配列はchildren[1](ND_MEMBER_ACCESS)で解決する
         case ND_ARRAY_ACCESS: {
             const symbol_t *sym;
+            type_t elem_type;   // 配列要素自身の型(is_arrayかどうかの判定にも使う)
             if (expr->children.size() == 2) {
-                // 構造体メンバ配列: children[1]のメンバアクセスを検査させ，そのシンボルをそのまま使う
+                // 構造体メンバ配列: children[1]のメンバアクセスを検査させる．
+                // designator->symは通常のメンバなら「メンバ自身」，構造体配列要素のメンバなら
+                // 「配列全体」を指す(コード生成でのアドレス計算用)ため，配列判定・要素型には
+                // designator->type(常にメンバ自身の型)を使う
                 node_t *designator = expr->children[1];
                 this->analyze_expr(designator);
                 sym = designator->sym;
+                elem_type = designator->type;
             } else {
                 // 通常の配列変数: svalに入っている変数名で名前解決する
                 sym = this->lookup_symbol(expr->sval);
@@ -992,15 +1087,23 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + expr->sval + "' at line " + std::to_string(expr->line);
                 }
+                elem_type = sym->type;
+                // 構造体配列は，要素(構造体1個分)を直接使うことができない(メンバアクセス経由でのみ使える)．
+                // ND_MEMBER_ACCESSの基底として使われる場合はそちらが先にこのcaseを経由せず処理するため，
+                // ここに到達するのは単独で使われた場合(x = arr[i];等)であり，常にエラーにしてよい
+                if (elem_type.is_array && elem_type.base == BASE_STRUCT) {
+                    throw std::string("compiler error: struct array element must be accessed via a "
+                                       "member (e.g. arr[i].member) at line ") + std::to_string(expr->line);
+                }
             }
-            if (!sym->type.is_array) {
+            if (!elem_type.is_array) {
                 const std::string name = expr->sval.empty() ? sym->name : expr->sval;
                 throw std::string("compiler error: '") + name
                       + "' is not an array at line " + std::to_string(expr->line);
             }
             expr->sym = sym;
             // 要素の型は配列のbase型(スカラー)
-            expr->type = {sym->type.base, sym->type.is_signed};
+            expr->type = {elem_type.base, elem_type.is_signed};
             // インデックス式を検査する
             node_t *index_expr = expr->children[0];
             this->analyze_expr(index_expr);

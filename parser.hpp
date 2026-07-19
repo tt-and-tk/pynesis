@@ -16,8 +16,9 @@ typedef struct {
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
     // 構造体名 (base==BASE_STRUCTのときのみ有効)
-    // 構造体の配列宣言(struct Tag arr[N];のような，この構造体自体を複数並べる宣言)は非対応のため，
-    // base==BASE_STRUCT かつ is_array==true の組み合わせは現れない
+    // base==BASE_STRUCT かつ is_array==true は，構造体自体を複数並べた配列(struct Tag arr[N];)を表す．
+    // ただしネスト構造体(構造体メンバがさらに構造体を持つこと)は非対応のため，
+    // 構造体メンバ自身の型としてこの組み合わせが現れることはない
     std::string struct_name;
 } type_t;
 
@@ -55,8 +56,11 @@ typedef enum {
     ND_CHAR_LIT,    // 文字リテラル
     ND_STRING_LIT,  // 文字列リテラル (svalに引用符なしの文字列内容を格納)
     ND_VAR,             // 変数参照
-    ND_ARRAY_ACCESS,    // 配列要素アクセス a[i] (children: [インデックス式]，構造体メンバ配列なら[インデックス式, ND_MEMBER_ACCESS])
-    ND_MEMBER_ACCESS,   // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)]，svalにメンバ名を格納)
+    // 配列要素アクセス a[i] (children: [インデックス式]，構造体メンバ配列なら[インデックス式, ND_MEMBER_ACCESS])．
+    // 構造体配列(a自体がstruct配列)の場合，要素a[i]は単独では値を持たず，必ずND_MEMBER_ACCESSの基底として使われる
+    ND_ARRAY_ACCESS,
+    // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)または構造体配列要素(ND_ARRAY_ACCESS)]，svalにメンバ名)
+    ND_MEMBER_ACCESS,
 } node_kind_t;
 
 // シンボル情報 (実体はanalyzer.hppで定義．node_tはポインタで参照するため前方宣言する)

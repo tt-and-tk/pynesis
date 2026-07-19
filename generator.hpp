@@ -15,6 +15,7 @@ class Generator {
 public:
     Generator(node_t *root, const std::map<std::string, const symbol_t *> &symbols,
               const std::map<std::string, std::vector<const symbol_t *>> &func_params,
+              const std::map<std::string, struct_def_t> &struct_defs,
               int scratch_base, std::ofstream &asm_file);
     void operator()();   // コード生成を実行して .asm に書き出す
 
@@ -22,6 +23,7 @@ private:
     node_t *root_;                                            // 注釈付きAST
     const std::map<std::string, const symbol_t *> &symbols_;  // シンボルテーブル (変数名→番地)
     const std::map<std::string, std::vector<const symbol_t *>> &func_params_;  // 関数名→パラメータのシンボル列
+    const std::map<std::string, struct_def_t> &struct_defs_;  // 構造体名→メンバ構成 (構造体配列のストライド計算に使う)
     // レジスタ退避領域の先頭番地．r{reg}を呼び出しをまたいで保持したいとき，scratch_base_ + reg*4番地へ退避する
     const int scratch_base_;
     std::ofstream &asm_file_;                                 // 出力先アセンブリファイル
@@ -53,6 +55,19 @@ private:
     void gen_array_load(node_t *expr, int reg);    // 配列要素をr{reg}へ読み込む
     void gen_array_store(node_t *expr, int val_reg, int work_reg);  // r{val_reg}を配列要素へ書き込む
     void gen_array_base_addr(int reg, const symbol_t *sym);  // 配列の先頭アドレスをr{reg}に載せる (直接配列は即値，配列パラメータは間接読み出し)
+    // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する．
+    // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数) + インデックス(実行時)×構造体1要素分のバイト数．
+    // protect_regを指定すると，インデックス式の評価中もそのレジスタの値を保護する(既に確定した値を持つとき使う)
+    void gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg = -1);
+    // 構造体メンバ配列アクセス(children.size()==2のND_ARRAY_ACCESS)の配列先頭アドレスをr{addr_reg}に載せる．
+    // 通常の単一構造体変数のメンバ配列はコンパイル時アドレス確定(gen_array_base_addr)，
+    // 構造体配列要素のメンバ配列は実行時アドレス計算(gen_struct_array_member_addr)に振り分ける
+    void gen_member_array_base(node_t *expr, int addr_reg, int protect_reg = -1);
+    // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
+    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う
+    void gen_load_indirect(int reg, const type_t &type);
+    // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
+    void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);
     void gen_string_init(int base_addr, const std::string &str);  // 文字列をchar配列に書き込む初期化コードを生成する
     void gen_print_string(const symbol_t *sym, int reg);  // char配列をヌル終端まで1文字ずつ出力するループを生成する
     void gen_scan_line(const symbol_t *sym, int reg);     // 標準入力を改行まで読み込みchar配列へヌル終端付きで格納するループを生成する
