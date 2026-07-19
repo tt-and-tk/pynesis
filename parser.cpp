@@ -810,9 +810,13 @@ node_t *Parser::parse_postfix() {
     while (true) {
         // 構造体メンバアクセス: 変数名.メンバ名，または構造体配列要素.メンバ名 (ネスト構造体は非対応)
         if (this->token_kind_is(TK_DOT)) {
-            // .の前は構造体変数の名前か構造体配列の要素(arr[i])でなければならない
-            // (例: (a+b).xは非対応．entry.sub.xのような多段の連鎖も非対応)
-            if (node->kind != ND_VAR && node->kind != ND_ARRAY_ACCESS) {
+            // .の前は構造体変数の名前か，構造体配列の要素(arr[i]，children[0]のみを持つ単純な
+            // 配列アクセス)でなければならない．children.size()==2の配列アクセス(entry.name[j]の
+            // ようなメンバ配列アクセス結果)は常にスカラーであり，構造体配列要素ではないため対象外とする
+            // (例: (a+b).xは非対応．entry.sub.xやentry.name[j].xのような多段の連鎖も非対応)
+            const bool is_struct_array_elem =
+                node->kind == ND_ARRAY_ACCESS && node->children.size() == 1;
+            if (node->kind != ND_VAR && !is_struct_array_elem) {
                 throw std::string("compiler error: expected a struct variable before '.' at line ")
                       + std::to_string(this->peek_token().line);
             }
