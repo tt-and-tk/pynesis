@@ -927,13 +927,26 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     this->gen_expr(expr->children[1], reg);
                     this->gen_struct_array_member_addr(lhs, reg + 1, reg);
                 } else {
-                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読み，
-                    // 右辺をr{reg+2}へ評価(アドレスを保護)してから演算する
+                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む．
+                    // 右辺の評価が関数呼び出しを含む場合，呼び出し先はr0から使い直すため
+                    // r{reg}(現在値)・r{reg+1}(アドレス)の両方が破壊されうる．
+                    // gen_expr_protectingは1本のレジスタしか保護できないため，
+                    // 2本とも退避してから評価し，あとで復元する
                     this->gen_struct_array_member_addr(lhs, reg + 1);
                     this->asm_file_ << "    mov fh r" << (reg + 1) << " r" << reg << "\n";  // r{reg} = アドレス
                     this->gen_load_indirect(reg, lhs->type);                                // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
-                    this->gen_expr_protecting(expr->children[1], reg + 2, reg + 1);         // 右辺 → r{reg+2}
+                    if (contains_call(expr->children[1])) {
+                        const int addr0 = this->scratch_base_ + reg * 4;
+                        const int addr1 = this->scratch_base_ + (reg + 1) * 4;
+                        this->asm_file_ << "    wm fh r0 r" << reg << " " << addr0 << "\n";        // 退避
+                        this->asm_file_ << "    wm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 退避
+                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
+                        this->asm_file_ << "    rm fh r0 r" << reg << " " << addr0 << "\n";        // 復元
+                        this->asm_file_ << "    rm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 復元
+                    } else {
+                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
+                    }
                     this->gen_binop_instr(op, reg, reg, reg + 2);
                 }
                 this->gen_store_indirect(reg + 1, reg, lhs->type);
