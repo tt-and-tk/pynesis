@@ -165,7 +165,10 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
 
     // 構造体変数(配列なら配列全体)のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
-    // 構造体1個分のワード数×要素数ぶん，次に割り当てるアドレスを進める
+    // 構造体1個分のワード数×要素数ぶん，次に割り当てるアドレスを進める．
+    // スカラーメンバは型の実バイト数(char=1バイト等)に関わらず1ワード(4バイト)を占有するため
+    // (collect_struct_declsのtotal_words計算，トップレベルのスカラー変数と同じ割り当て方針)，
+    // 配列の要素間隔も常に4バイトの倍数になる
     this->next_addr_ += it->second.total_words * 4 * element_count;
     // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
     return sym;
@@ -737,41 +740,50 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 構造体メンバアクセス: 基底が単一の構造体変数(ND_VAR)なら，メンバの実体を
-        // 「構造体変数の番地 + メンバのオフセット」という1つのシンボル(symbol_t)として合成する．
-        // シンボルの番地・型さえ分かれば読み込み・代入・配列アクセスのコード生成ができるため，
-        // 対象が単純な変数かメンバかをコード生成器側で区別する必要がなくなる．
-        // 基底が構造体配列の要素(ND_ARRAY_ACCESS，arr[i])の場合は，添字iが実行時の値のため
-        // 番地をコンパイル時定数にできず，symbol_t合成の経路が使えない．代わりに配列全体の
-        // シンボル(expr->sym)とメンバのオフセット(expr->ival，ワード単位)だけを注釈し，
-        // 実行時アドレスの計算自体はコード生成側(gen_struct_array_member_addr)に委ねる
+        // 構造体メンバアクセス(a.b)の意味解析．
+        // ここで最終的に確定させる情報は，メンバの型(expr->type)と読み書き先(expr->sym)の2つ．
+        // コード生成(gen_expr等)はこの2つだけを見ればよく，元の式が下記(1)(2)のどちらだったかを
+        // 意識しなくて済むようにする．基底(a)の種類によって経路が2つに分かれる．
+        //   (1) 基底が単一の構造体変数(entry.member): メンバの番地は
+        //       「変数の番地 + メンバのオフセット」というコンパイル時定数になる．
+        //       そこでこの番地を持つ新しいシンボル(symbol_t)をメンバの実体として合成し，
+        //       expr->symに設定する．コード生成側は，通常の変数への読み込み・書き込みと
+        //       全く同じ処理(gen_load/gen_store)がそのまま使える．
+        //   (2) 基底が構造体配列の要素(arr[i].member): 添字iは実行時にしか値が決まらないため，
+        //       メンバの番地をコンパイル時定数にできず，(1)のようなsymbol_t合成ができない．
+        //       そこで配列全体のシンボル(expr->sym，先頭番地と構造体名を持つ)と，
+        //       メンバのオフセット(expr->ival，ワード単位)だけを注釈するにとどめ，
+        //       「先頭番地 + オフセット + 添字×構造体1個分のバイト数」という実際の番地計算は
+        //       コード生成側(gen_struct_array_member_addr)に行わせる
         case ND_MEMBER_ACCESS: {
-            node_t *base = expr->children[0];
-            const symbol_t *base_sym;
+            node_t *base = expr->children[0];   // メンバの前についている構造体変数または構造体配列要素
+            const symbol_t *base_sym;           // 基底(構造体変数または構造体配列全体)のシンボル
 
             if (base->kind == ND_ARRAY_ACCESS) {
-                // 構造体配列の要素へのメンバアクセス: arr[i].member
-                base_sym = this->lookup_symbol(base->sval);
+                // (2) 構造体配列の要素へのメンバアクセス: arr[i].member
+                base_sym = this->lookup_symbol(base->sval);   // 配列全体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + base->sval + "' at line " + std::to_string(base->line);
                 }
+                // 構造体の配列でない変数へのarr[i].member形式のアクセスは禁止する
                 if (!base_sym->type.is_array || base_sym->type.base != BASE_STRUCT) {
                     throw std::string("compiler error: '") + base->sval
                           + "' is not an array of struct at line " + std::to_string(base->line);
                 }
-                base->sym  = base_sym;
-                base->type = base_sym->type;
-                // インデックス式(実行時に評価される)を検査する
+                base->sym  = base_sym;         // 配列全体のシンボルを結びつける
+                base->type = base_sym->type;   // 型を注釈する
+                // 添字(実行時に評価される)を検査する
                 node_t *index_expr = base->children[0];
                 this->analyze_expr(index_expr);
+                // void値(戻り値のない関数呼び出し)は添字に使えない
                 if (index_expr->type.base == BASE_VOID) {
                     throw std::string("compiler error: cannot use void value in expression at line ")
                           + std::to_string(index_expr->line);
                 }
             } else {
-                // 単一の構造体変数へのメンバアクセス: entry.member
-                base_sym = this->lookup_symbol(base->sval);
+                // (1) 単一の構造体変数へのメンバアクセス: entry.member
+                base_sym = this->lookup_symbol(base->sval);   // 構造体変数自体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + base->sval + "' at line " + std::to_string(base->line);
@@ -781,8 +793,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: '") + base->sval
                           + "' is not a struct at line " + std::to_string(base->line);
                 }
-                base->sym  = base_sym;
-                base->type = base_sym->type;
+                base->sym  = base_sym;         // 名前解決の結果を結びつける
+                base->type = base_sym->type;   // 型を注釈する
             }
 
             // 構造体定義からメンバ名が一致するものを探す
@@ -798,12 +810,12 @@ void Analyzer::analyze_expr(node_t *expr) {
             }
 
             if (base->kind == ND_ARRAY_ACCESS) {
-                // 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
+                // (2) 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
                 expr->sym  = base_sym;
                 expr->ival = member->offset_words;
                 expr->type = member->type;
             } else {
-                // 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
+                // (1) 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
                 // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
                 symbol_t *sym = new symbol_t{
                     base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")

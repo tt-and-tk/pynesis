@@ -53,7 +53,9 @@ public:
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
     // パラメータシンボル表 (関数名→パラメータのシンボル列．コード生成で引数の書き込み先アドレスに使う)
     const std::map<std::string, std::vector<const symbol_t *>> &func_params() const;
-    // 構造体定義表 (構造体名→メンバ構成．コード生成が構造体配列のストライドを計算するのに使う)
+    // 構造体定義表(struct_defs_)を返す単純なゲッター．
+    // コード生成が，構造体配列の要素1個分が占めるバイト数(配列上で要素を飛び越す間隔)を
+    // 計算するのに使う(構造体配列は，このバイト数×添字ぶんだけ先頭番地からずらして各要素の番地を求める)
     const std::map<std::string, struct_def_t> &struct_defs() const;
     // 呼び出しをまたいで生かしたいレジスタ値の退避領域の先頭番地
     // (呼び出された関数はr0から使い直すため，レジスタは呼び出しをまたいで保持されない．
@@ -87,7 +89,8 @@ private:
     // 構造体型の変数1つ分(配列宣言ならその配列全体分)のアドレスを確保し，シンボル(symbol_t)を生成して返す
     // (シンボル表への格納自体は呼び出し元(collect_globals/analyze_local_decl)がグローバル/ローカルの
     //  区別に応じて行うため，この関数はシンボルの生成・アドレス確保だけに専念する．
-    //  配列サイズの定数式を畳み込むためdeclを書き換える必要があり，non-constで受け取る)
+    //  配列サイズを定数式から計算し，宣言ノードの子を計算済みの数値に置き換える(畳み込む)ため，
+    //  declの中身を書き換える必要があり，読み取り専用にはできない)
     symbol_t *register_struct_var(node_t *decl, location_t location);
     void analyze_functions();                               // 3パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)

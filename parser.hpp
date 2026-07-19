@@ -16,9 +16,10 @@ typedef struct {
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
     // 構造体名 (base==BASE_STRUCTのときのみ有効)
-    // base==BASE_STRUCT かつ is_array==true は，構造体自体を複数並べた配列(struct Tag arr[N];)を表す．
-    // ただしネスト構造体(構造体メンバがさらに構造体を持つこと)は非対応のため，
-    // 構造体メンバ自身の型としてこの組み合わせが現れることはない
+    // base==BASE_STRUCT かつ is_array==true は，変数宣言で構造体自体を複数並べた配列
+    // (struct Tag arr[N];)を表す．一方，構造体のメンバはスカラーまたは固定長配列のみで
+    // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
+    // メンバの型としてbase==BASE_STRUCTが現れることはそもそもない
     std::string struct_name;
 } type_t;
 

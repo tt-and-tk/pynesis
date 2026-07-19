@@ -576,7 +576,9 @@ node_t *Parser::parse_param() {
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [signed|unsigned] 型 変数名 [= 式] ;
-// 構造体型の場合は struct 構造体名 変数名 [ サイズ ] ; の形式のみ許可する(初期化子は非対応)
+// 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
+//   struct 構造体名 変数名;         (単一変数)
+//   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
@@ -586,12 +588,13 @@ node_t *Parser::parse_var_decl() {
     // 変数名を読む
     node->sval = this->get_token(TK_IDENT).value;
 
-    // 構造体変数: 配列は対応(サイズ明示のみ，メンバ初期化の仕組みが無いため要素数省略・初期化子は非対応)
+    // 構造体変数: 配列にも対応する(要素数省略・初期化子はメンバ初期化の仕組みが無いため非対応)
     if (node->type.base == BASE_STRUCT) {
+        // 変数名の後に[があれば配列宣言 (無ければ単一変数)
         if (this->token_kind_is(TK_LBRACKET)) {
             this->get_token(TK_LBRACKET);
             node->type.is_array = true;
-            node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
+            node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む．下のスカラー配列の扱いと同じ)
             this->get_token(TK_RBRACKET);
         } else if (this->token_kind_is(TK_ASSIGN)) {
             throw std::string("compiler error: struct variable initializer is not supported at line ")
@@ -634,7 +637,9 @@ node_t *Parser::parse_var_decl() {
 node_t *Parser::parse_struct_member() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
-    // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)
+    // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)．
+    // この時点でBASE_STRUCTかどうかだけ判定するため，「構造体配列をメンバに持つこと」
+    // (struct Inner arr[3];のような，配列の要素数を読むより前の判定)も同じエラーで弾かれる
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: nested struct members are not supported at line ")
@@ -684,14 +689,15 @@ std::vector<node_t *> Parser::parse_struct_decl() {
 
     // 構造体定義に続けて変数名があれば，その場で変数宣言も生成する (配列宣言も可)
     if (this->token_kind_is(TK_IDENT)) {
-        node_t *var = this->new_node(ND_VAR_DECL);
-        var->type = {BASE_STRUCT, true};
-        var->type.struct_name = decl->sval;
-        var->sval = this->get_token().value;
+        node_t *var = this->new_node(ND_VAR_DECL);   // 即時宣言する変数
+        var->type = {BASE_STRUCT, true};             // 型は今定義した構造体
+        var->type.struct_name = decl->sval;          // 構造体名を結びつける
+        var->sval = this->get_token().value;         // 変数名を読む
+        // 変数名の後に[があれば配列宣言 (無ければ単一変数)
         if (this->token_kind_is(TK_LBRACKET)) {
             this->get_token(TK_LBRACKET);
             var->type.is_array = true;
-            var->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
+            var->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む．下のスカラー配列の扱いと同じ)
             this->get_token(TK_RBRACKET);
         }
         result.push_back(var);
