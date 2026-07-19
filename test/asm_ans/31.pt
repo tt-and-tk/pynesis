@@ -1,0 +1,19 @@
+.global main
+
+main:
+    mov fh r0 r0 1
+    wm fh r0 r0 8
+    mov fh r0 r0 97
+    rm fh r0 r1 8
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm 1h r1 r0
+    rm fh r0 r0 8
+    mov fh r0 r1 0
+    add r0 r1 r0
+    rm 1h r0 r0
+    mov fh r0 r1 24
+    sll r0 r1 r0
+    sra r0 r1 r0
+    wm fh r0 r0 4
+    ret

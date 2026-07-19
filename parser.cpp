@@ -19,7 +19,7 @@ const std::map<token_kind_t, int> g_binop_prec = {
 
 // コンストラクタ: トークン列を受け取り，読み取り位置を初期化する
 Parser::Parser(const std::vector<token_t> &tokens)
-    : tokens_(tokens), pos_(0) {}
+    : tokens_(tokens), pos_(0), anon_struct_count_(0) {}
 
 // 構文解析を実行してASTのルートを返す
 node_t *Parser::operator()() {
@@ -75,7 +75,7 @@ node_t *Parser::new_node(node_kind_t kind) {
 // 型の先頭になりうるトークン種別かどうか返す
 bool Parser::is_type_start(token_kind_t kind) {
     return kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT
-        || kind == TK_SIGNED || kind == TK_UNSIGNED;
+        || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT;
 }
 
 // 代入演算子のトークン種別かどうか返す
@@ -102,6 +102,47 @@ std::string Parser::token_kind_name(token_kind_t kind) {
     }
 }
 
+// signed/unsigned修飾子と型キーワードを読み，型情報を返す
+// 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
+// allow_voidがtrueのときのみvoid型を許可する(関数の戻り値型のみ該当し，それ以外は常にfalseで呼ぶ)
+type_t Parser::parse_type(bool allow_void) {
+    // signed/unsigned修飾子 (デフォルトはsigned)
+    // unsignedは予約語として受理するが当面未対応 (将来対応予定．is_signed等の符号情報の機構は残してある)
+    bool is_signed = true;
+    if (this->token_kind_is(TK_SIGNED)) {
+        this->get_token();
+    } else if (this->token_kind_is(TK_UNSIGNED)) {
+        throw std::string("compiler error: 'unsigned' is not supported yet at line ")
+              + std::to_string(this->peek_token().line);
+    }
+
+    type_t type;
+    type.is_signed = is_signed;
+
+    // 構造体型: struct 構造体名
+    if (this->token_kind_is(TK_STRUCT)) {
+        this->get_token();
+        type.base = BASE_STRUCT;
+        type.struct_name = this->get_token(TK_IDENT).value;
+        return type;
+    }
+
+    // void型 (関数の戻り値型でのみ許可する)
+    if (allow_void && this->token_kind_is(TK_VOID)) {
+        type.base = BASE_VOID;
+        this->get_token();
+        return type;
+    }
+
+    // スカラー型キーワード
+    if (this->token_kind_is(TK_INT))   { type.base = BASE_INT;   this->get_token(); return type; }
+    if (this->token_kind_is(TK_CHAR))  { type.base = BASE_CHAR;  this->get_token(); return type; }
+    if (this->token_kind_is(TK_SHORT)) { type.base = BASE_SHORT; this->get_token(); return type; }
+
+    throw std::string("compiler error: expected type at line ")
+          + std::to_string(this->peek_token().line);
+}
+
 // プログラム全体を解析してND_PROGRAMを返す
 // 単なるトークン列を木構造に起こして返す
 node_t *Parser::parse_program() {
@@ -118,6 +159,26 @@ node_t *Parser::parse_program() {
         // void は変数型にならないため，必ず関数定義
         if (this->token_kind_is(TK_VOID)) {
             node->children.push_back(this->parse_func_def());
+        }
+        // struct: 構造体定義(名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言)，
+        // 構造体型のグローバル変数宣言(既存の構造体定義の再利用)，または構造体を戻り値型にした関数定義のいずれか
+        else if (this->token_kind_is(TK_STRUCT)) {
+            const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
+            // 構造体名の直後(無名構造体ならstructキーワードの直後)のトークン種別
+            // '{'なら構造体定義，そうでなければ既存の構造体を使った変数宣言とみなす
+            const token_kind_t next_kind = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
+            if (next_kind == TK_LBRACE) {
+                // 構造体定義 (変数宣言の有無も含めてparse_struct_declが一括して構文解析する)
+                for (node_t *decl : this->parse_struct_decl()) {
+                    node->children.push_back(decl);
+                }
+            } else if (has_tag && this->peek_kind_ahead(3) == TK_LPAREN) {
+                // struct 構造体名 関数名( : 構造体を戻り値型にした関数定義 (非対応．parse_func_defが専用のエラーにする)
+                node->children.push_back(this->parse_func_def());
+            } else {
+                // 既存の構造体定義を使ったグローバル変数宣言
+                node->children.push_back(this->parse_var_decl());
+            }
         }
         // 型キーワード(int/char/short等)で始まるなら関数定義またはグローバル変数宣言
         else if (Parser::is_type_start(this->peek_token().kind)) {
@@ -152,26 +213,12 @@ node_t *Parser::parse_program() {
 node_t *Parser::parse_func_def() {
     node_t *node = this->new_node(ND_FUNC_DEF);   // 関数ノード
 
-    // signed/unsigned修飾子 (unsignedは未対応のためここで専用エラーにする)
-    if (this->token_kind_is(TK_SIGNED)) {
-        this->get_token();
-    } else if (this->token_kind_is(TK_UNSIGNED)) {
-        throw std::string("compiler error: 'unsigned' is not supported yet at line ")
-              + std::to_string(this->peek_token().line);
+    // 戻り値型を読む (void/int/char/shortのみ許可，構造体は非対応)
+    node->type = this->parse_type(true);
+    if (node->type.base == BASE_STRUCT) {
+        throw std::string("compiler error: struct cannot be used as a function return type at line ")
+              + std::to_string(node->line);
     }
-
-    // 戻り値型を読む
-    base_type_t ret_base;
-    const token_kind_t ret_kind = this->peek_token().kind;
-    if      (ret_kind == TK_VOID)  { ret_base = BASE_VOID;  this->get_token(); }
-    else if (ret_kind == TK_INT)   { ret_base = BASE_INT;   this->get_token(); }
-    else if (ret_kind == TK_CHAR)  { ret_base = BASE_CHAR;  this->get_token(); }
-    else if (ret_kind == TK_SHORT) { ret_base = BASE_SHORT; this->get_token(); }
-    else {
-        throw std::string("compiler error: expected return type at line ")
-              + std::to_string(this->peek_token().line);
-    }
-    node->type = {ret_base, true};
 
     // 関数名
     node->sval = this->get_token(TK_IDENT).value; // 関数名
@@ -222,6 +269,18 @@ node_t *Parser::parse_block() {
 node_t *Parser::parse_stmt() {
     // 型キーワードで始まれば変数宣言
     if (Parser::is_type_start(this->peek_token().kind)) {
+        // structの場合のみ，先に構造体定義の禁止チェックを行う
+        if (this->token_kind_is(TK_STRUCT)) {
+            const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;
+            const token_kind_t next_kind = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
+            // struct [構造体名] { ... : 構造体定義はグローバル直下でのみ許可する
+            if (next_kind == TK_LBRACE) {
+                throw std::string("compiler error: struct definition is only allowed at global scope at line ")
+                      + std::to_string(this->peek_token().line);
+            }
+            // ここでエラーにならなければ，struct 構造体名 変数名; (既存の構造体定義を使った変数宣言)であり，
+            // 通常の変数宣言と同じくparse_var_declに処理を委ねてよい
+        }
         return this->parse_var_decl();
     }
     // ブロック { ... }
@@ -495,25 +554,12 @@ node_t *Parser::parse_sizeof() {
 node_t *Parser::parse_param() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
-    // signed/unsigned修飾子 (unsignedは未対応のためここで専用エラーにする)
-    if (this->token_kind_is(TK_SIGNED)) {
-        this->get_token();
-    } else if (this->token_kind_is(TK_UNSIGNED)) {
-        throw std::string("compiler error: 'unsigned' is not supported yet at line ")
-              + std::to_string(this->peek_token().line);
+    // パラメータの型 (構造体は非対応)
+    node->type = this->parse_type(false);
+    if (node->type.base == BASE_STRUCT) {
+        throw std::string("compiler error: struct cannot be used as a function parameter type at line ")
+              + std::to_string(node->line);
     }
-
-    // パラメータの型
-    base_type_t base;
-    const token_kind_t kind = this->peek_token().kind;
-    if      (kind == TK_INT)   { base = BASE_INT;   this->get_token(); }
-    else if (kind == TK_CHAR)  { base = BASE_CHAR;  this->get_token(); }
-    else if (kind == TK_SHORT) { base = BASE_SHORT; this->get_token(); }
-    else {
-        throw std::string("compiler error: expected parameter type at line ")
-              + std::to_string(this->peek_token().line);
-    }
-    node->type = {base, true};
 
     // パラメータ名
     node->sval = this->get_token(TK_IDENT).value;
@@ -530,37 +576,29 @@ node_t *Parser::parse_param() {
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [signed|unsigned] 型 変数名 [= 式] ;
+// 構造体型の場合は struct 構造体名 変数名 ; のみ許可する(配列・初期化子は非対応)
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
-    // signed/unsigned 修飾子を読む (デフォルトは signed)
-    // unsignedは予約語として受理するが当面未対応 (将来対応予定．is_signed等の符号情報の機構は残してある)
-    bool is_signed = true;
-    if (this->token_kind_is(TK_SIGNED)) {
-        this->get_token();
-    } else if (this->token_kind_is(TK_UNSIGNED)) {
-        // this->get_token();
-        // is_signed = false;
-        throw std::string("compiler error: 'unsigned' is not supported yet at line ")
-              + std::to_string(this->peek_token().line);
-    }
-
-    // 型キーワードを読む
-    base_type_t base;
-    const token_kind_t base_kind = this->peek_token().kind;
-    if      (base_kind == TK_INT)   { base = BASE_INT;   this->get_token(); }
-    else if (base_kind == TK_CHAR)  { base = BASE_CHAR;  this->get_token(); }
-    else if (base_kind == TK_SHORT) { base = BASE_SHORT; this->get_token(); }
-    else {
-        throw std::string("compiler error: expected type at line ")
-              + std::to_string(this->peek_token().line);
-    }
-
-    // 型情報と符号情報を保存
-    node->type = {base, is_signed};
+    // 型を読む
+    node->type = this->parse_type(false);
 
     // 変数名を読む
     node->sval = this->get_token(TK_IDENT).value;
+
+    // 構造体変数: 配列・初期化子は非対応 (配列は今後別issueで対応，メンバ初期化の仕組みは未実装)
+    if (node->type.base == BASE_STRUCT) {
+        if (this->token_kind_is(TK_LBRACKET)) {
+            throw std::string("compiler error: array of struct is not supported at line ")
+                  + std::to_string(this->peek_token().line);
+        }
+        if (this->token_kind_is(TK_ASSIGN)) {
+            throw std::string("compiler error: struct variable initializer is not supported at line ")
+                  + std::to_string(this->peek_token().line);
+        }
+        this->get_token(TK_SEMICOLON);
+        return node;
+    }
 
     // 配列宣言: 変数名の後に [ サイズ ] または [] があれば配列
     if (this->token_kind_is(TK_LBRACKET)) {
@@ -587,6 +625,76 @@ node_t *Parser::parse_var_decl() {
     this->get_token(TK_SEMICOLON);
 
     return node;
+}
+
+// 構造体メンバを1つ解析してND_VAR_DECLを返す (構造体自体の配列ではなく，メンバ自身が配列になりうるだけ)
+// 構文: 型 名前 [ 要素数 ] ;   (初期化子・ネスト構造体メンバは非対応)
+// parse_struct_declのループから，メンバの数だけ繰り返し呼ばれる
+node_t *Parser::parse_struct_member() {
+    node_t *node = this->new_node(ND_VAR_DECL);
+
+    // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)
+    node->type = this->parse_type(false);
+    if (node->type.base == BASE_STRUCT) {
+        throw std::string("compiler error: nested struct members are not supported at line ")
+              + std::to_string(node->line);
+    }
+
+    // メンバ名を読む
+    node->sval = this->get_token(TK_IDENT).value;
+
+    // 配列型のメンバ: 名前の後に [ 要素数 ] があれば固定長配列 (要素数省略・初期化子は非対応)
+    if (this->token_kind_is(TK_LBRACKET)) {
+        this->get_token(TK_LBRACKET);
+        node->type.is_array = true;
+        node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
+        this->get_token(TK_RBRACKET);
+    }
+
+    this->get_token(TK_SEMICOLON);
+    return node;
+}
+
+// 構造体定義を解析する
+// 構文: struct [構造体名] { メンバ宣言... } [変数名] ;
+// 構造体名を省略した場合(無名構造体)は，その場での変数宣言を必須とする(再宣言する手段がないため)
+// 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
+std::vector<node_t *> Parser::parse_struct_decl() {
+    node_t *decl = this->new_node(ND_STRUCT_DECL);
+    this->get_token(TK_STRUCT);
+
+    // 構造体名 (省略可)
+    const bool has_tag = this->token_kind_is(TK_IDENT);
+    if (has_tag) {
+        decl->sval = this->get_token().value;
+    } else {
+        // 無名構造体には，Pynesisソース中に識別子として書けない専用の名前を割り当てる
+        // (識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上の構造体名と衝突しない)
+        decl->sval = "$anon" + std::to_string(this->anon_struct_count_++);
+    }
+
+    this->get_token(TK_LBRACE);   // 開き波括弧
+    while (!this->token_kind_is(TK_RBRACE)) {   // } が来るまでメンバ宣言を繰り返し読む
+        decl->children.push_back(this->parse_struct_member());
+    }
+    this->get_token(TK_RBRACE);   // 閉じ波括弧
+
+    std::vector<node_t *> result = {decl};
+
+    // 構造体定義に続けて変数名があれば，その場で変数宣言も生成する
+    if (this->token_kind_is(TK_IDENT)) {
+        node_t *var = this->new_node(ND_VAR_DECL);
+        var->type = {BASE_STRUCT, true};
+        var->type.struct_name = decl->sval;
+        var->sval = this->get_token().value;
+        result.push_back(var);
+    } else if (!has_tag) {
+        throw std::string("compiler error: anonymous struct must declare a variable at line ")
+              + std::to_string(this->peek_token().line);
+    }
+
+    this->get_token(TK_SEMICOLON);
+    return result;
 }
 
 // 式を解析してASTノードを返す
@@ -686,22 +794,47 @@ node_t *Parser::parse_unary() {
     return this->parse_postfix();
 }
 
-// 後置演算子・関数呼び出しを解析してASTノードを返す
+// 後置演算子・構造体メンバアクセス・関数呼び出しを解析してASTノードを返す
 node_t *Parser::parse_postfix() {
     node_t *node = this->parse_primary();
 
-    // 配列要素アクセス: 変数名[インデックス式]
-    if (this->token_kind_is(TK_LBRACKET)) {
-        // []の前は変数名でなければならない (例: (a+b)[0]は非対応)
+    // 構造体メンバアクセス: 変数名.メンバ名 (ネスト構造体は非対応のため，連鎖するのは1段のみ)
+    if (this->token_kind_is(TK_DOT)) {
+        // .の前は構造体変数の名前でなければならない (例: (a+b).xや配列要素a[0].xは非対応)
         if (node->kind != ND_VAR) {
-            throw std::string("compiler error: expected variable name before '[' at line ")
+            throw std::string("compiler error: expected a struct variable before '.' at line ")
+                  + std::to_string(this->peek_token().line);
+        }
+        this->get_token(TK_DOT);                     // . を消費
+        node_t *member = this->new_node(ND_MEMBER_ACCESS);
+        member->line = node->line;
+        member->children.push_back(node);            // このメンバが属する構造体変数(ND_VAR)を子に持つ
+        member->sval = this->get_token(TK_IDENT).value;  // メンバ名
+        // 以降(配列添字・後置++/--)の判定がメンバアクセス自身を対象にできるよう，
+        // nodeを構造体変数からメンバアクセスノードに置き換える(元の変数はmemberの子として残るため失われない)
+        node = member;
+    }
+
+    // 配列要素アクセス: 変数名[インデックス式]，またはメンバが配列型である場合のメンバ名[インデックス式]
+    if (this->token_kind_is(TK_LBRACKET)) {
+        // []の前は変数名かメンバアクセスでなければならない (例: (a+b)[0]は非対応)
+        if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS) {
+            throw std::string("compiler error: expected a variable name before '[' at line ")
                   + std::to_string(this->peek_token().line);
         }
         this->get_token(TK_LBRACKET);           // [
         node_t *access = this->new_node(ND_ARRAY_ACCESS);
         access->line = node->line;
-        access->sval = node->sval;              // 配列名
-        access->children.push_back(this->parse_expr());   // インデックス式
+        if (node->kind == ND_VAR) {
+            // 通常の配列変数: 名前で解決するのでインデックス式のみをchildren[0]に持つ
+            access->sval = node->sval;
+            access->children.push_back(this->parse_expr());
+        } else {
+            // 配列型メンバ(例: entry.name[i]): インデックス式(children[0])に加え，
+            // どのメンバの配列かを示すメンバアクセス自体(children[1])を持たせて意味解析に解決させる
+            access->children.push_back(this->parse_expr());
+            access->children.push_back(node);
+        }
         this->get_token(TK_RBRACKET);           // ]
         // 配列要素への後置++/--は非対応 (仕様上の制限)
         if (this->token_kind_is(TK_PLUSPLUS) || this->token_kind_is(TK_MINUSMINUS)) {

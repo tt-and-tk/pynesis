@@ -1,0 +1,12 @@
+// 構造体の基本形 (タグ定義のみ + 別文でのグローバル変数宣言，スカラーメンバの読み書き)
+struct Point {
+    int x;
+    int y;
+};
+struct Point p;
+
+void main(void) {
+    p.x = 3;
+    p.y = 4;
+    int sum = p.x + p.y;
+}

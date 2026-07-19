@@ -1,0 +1,9 @@
+// 存在しないメンバへのアクセスは禁止
+struct Tag {
+    int v;
+};
+struct Tag t;
+
+void main(void) {
+    t.unknown = 1;
+}

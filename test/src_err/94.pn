@@ -1,0 +1,6 @@
+// 構造体定義は関数内(グローバル直下以外)では禁止
+void main(void) {
+    struct Foo {
+        int x;
+    } v;
+}

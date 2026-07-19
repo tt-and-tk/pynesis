@@ -1,0 +1,12 @@
+// 構造体を関数の引数として渡すことは非対応
+struct Tag {
+    int v;
+};
+struct Tag t;
+
+void f(int x) {
+}
+
+void main(void) {
+    f(t);
+}

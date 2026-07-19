@@ -1,0 +1,10 @@
+// 構造体を関数の戻り値型にすることは非対応
+struct Tag {
+    int v;
+};
+
+struct Tag f(void) {
+}
+
+void main(void) {
+}

@@ -1,0 +1,11 @@
+// 構造体定義+即座の変数宣言，構造体メンバ配列の変数インデックスによる読み書き
+struct Entry {
+    char name[4];
+    int count;
+} e;
+
+void main(void) {
+    int i = 1;
+    e.name[i] = 'a';
+    e.count = e.name[i];
+}

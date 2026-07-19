@@ -786,6 +786,12 @@ void Generator::gen_expr(node_t *expr, int reg) {
             this->gen_load(reg, expr->sym);
             break;
 
+        // 構造体メンバ参照: 意味解析が「構造体変数の番地+メンバのオフセット」を1つのシンボルに
+        // 合成済みのため，通常の変数参照と同じ経路で読み込める
+        case ND_MEMBER_ACCESS:
+            this->gen_load(reg, expr->sym);
+            break;
+
         // 二項演算
         case ND_BINOP:
             // 比較は0/1の値を生成，論理&&/||は短絡評価，それ以外は単一命令(+など)で畳む

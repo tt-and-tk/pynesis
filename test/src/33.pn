@@ -1,0 +1,19 @@
+// 既存タグを使ったローカル構造体変数の宣言，sizeofによる構造体サイズ取得
+struct Pair {
+    short a;
+    short b;
+};
+
+int sum_pair(void) {
+    struct Pair local;
+    local.a = 10;
+    local.b = 20;
+    return local.a + local.b;
+}
+
+void main(void) {
+    int total = sum_pair();
+    int size = sizeof(struct_size_target);
+}
+
+struct Pair struct_size_target;

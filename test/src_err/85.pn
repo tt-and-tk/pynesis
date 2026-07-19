@@ -1,0 +1,9 @@
+// 構造体の配列宣言は非対応 (単一変数のみ対応，配列は将来issue化して対応予定)
+// unsignedと同様，将来対応予定の機能でも現状は非対応であることをテストで固定する方針
+struct Tag {
+    int v;
+};
+
+void main(void) {
+    struct Tag arr[3];
+}

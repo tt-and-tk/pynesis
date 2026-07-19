@@ -1,0 +1,9 @@
+// 無名構造体+即座の変数宣言 (タグを持たないため再利用は不可)
+struct {
+    int value;
+} counter;
+
+void main(void) {
+    counter.value = 1;
+    counter.value++;
+}
