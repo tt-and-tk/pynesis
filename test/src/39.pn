@@ -1,0 +1,10 @@
+// strcopyの第1引数(dst)に単一構造体変数のメンバを指定できることを確認する
+struct Entry {
+    char name[8];
+};
+
+void main(void) {
+    struct Entry e;
+    char src[] = "file";
+    strcopy(e.name, src);
+}

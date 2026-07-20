@@ -1,0 +1,6 @@
+// 意味解析エラー: streqはchar配列にのみ対応 (int変数を渡すと異常系)
+void main(void) {
+    int x;
+    char buf[4];
+    streq(buf, x);
+}

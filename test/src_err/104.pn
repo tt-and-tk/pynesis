@@ -1,0 +1,9 @@
+// 意味解析エラー: streqは配列パラメータ(サイズ不明)には対応しない (異常系)
+void compare(char arr[]) {
+    char buf[4];
+    streq(arr, buf);
+}
+void main(void) {
+    char buf[4];
+    compare(buf);
+}

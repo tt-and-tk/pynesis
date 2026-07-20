@@ -1,0 +1,6 @@
+// 意味解析エラー: strcopyのdstはchar配列にのみ対応 (int配列を渡すと異常系)
+void main(void) {
+    int dst[4];
+    char src[] = "ab";
+    strcopy(dst, src);
+}

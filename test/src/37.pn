@@ -1,0 +1,8 @@
+// streqによる文字列比較 (グローバル配列同士)
+char a[] = "ab";
+char b[] = "ab";
+int result;
+
+void main(void) {
+    result = streq(a, b);
+}

@@ -15,6 +15,7 @@ typedef enum {
     TK_SIZEOF,
     // 組み込み関数キーワード (ユーザー定義の変数・関数名との衝突を防ぐため予約語にする)
     TK_PRINT, TK_SCAN,
+    TK_STREQ, TK_STRCOPY,
     // リテラル
     TK_INT_LIT,     // 整数リテラル
     TK_CHAR_LIT,    // 文字リテラル

@@ -526,6 +526,32 @@ node_t *Parser::parse_scan() {
     return node;
 }
 
+// 組み込み関数streqを解析してND_STREQを返す
+// 構文: streq ( char配列 , char配列 )  ※ 両方の内容が一致するか比較する
+node_t *Parser::parse_streq() {
+    node_t *node = this->new_node(ND_STREQ);
+    this->get_token(TK_STREQ);                       // streq
+    this->get_token(TK_LPAREN);                      // (
+    node->children.push_back(this->parse_expr());    // 比較対象1
+    this->get_token(TK_COMMA);                       // ,
+    node->children.push_back(this->parse_expr());    // 比較対象2
+    this->get_token(TK_RPAREN);                      // )
+    return node;
+}
+
+// 組み込み関数strcopyを解析してND_STRCOPYを返す
+// 構文: strcopy ( char配列 , char配列 )  ※ 第2引数の内容を第1引数へヌル終端付きでコピーする
+node_t *Parser::parse_strcopy() {
+    node_t *node = this->new_node(ND_STRCOPY);
+    this->get_token(TK_STRCOPY);                     // strcopy
+    this->get_token(TK_LPAREN);                      // (
+    node->children.push_back(this->parse_expr());    // コピー先
+    this->get_token(TK_COMMA);                       // ,
+    node->children.push_back(this->parse_expr());    // コピー元
+    this->get_token(TK_RPAREN);                      // )
+    return node;
+}
+
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
 // 型名の場合はnode->typeに型を格納し(children空)，変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
@@ -916,9 +942,11 @@ node_t *Parser::parse_primary() {
         return this->parse_sizeof();
     }
 
-    // 組み込み関数print/scan (予約語のため専用トークンで判定する)
-    if (this->token_kind_is(TK_PRINT)) return this->parse_print();
-    if (this->token_kind_is(TK_SCAN))  return this->parse_scan();
+    // 組み込み関数print/scan/streq/strcopy (予約語のため専用トークンで判定する)
+    if (this->token_kind_is(TK_PRINT))   return this->parse_print();
+    if (this->token_kind_is(TK_SCAN))    return this->parse_scan();
+    if (this->token_kind_is(TK_STREQ))   return this->parse_streq();
+    if (this->token_kind_is(TK_STRCOPY)) return this->parse_strcopy();
 
     // 整数リテラル
     if (this->token_kind_is(TK_INT_LIT)) {

@@ -99,6 +99,9 @@ private:
     void analyze_switch(node_t *stmt);                      // switch文を検査する
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
+    // print/streq/strcopyに共通する引数検査(char型の直接配列であること，構造体配列要素の
+    // メンバ配列でないこと)を行う．builtin_nameはエラーメッセージに埋め込む組み込み関数名
+    void check_char_array_operand(node_t *target, const std::string &builtin_name);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
     // 呼び出しグラフを検査する (再帰の検出，最大ネスト段数MAX_CALL_DEPTHの超過検出)
     void check_call_depth();

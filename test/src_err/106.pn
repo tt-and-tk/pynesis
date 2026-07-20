@@ -1,0 +1,11 @@
+// 構造体配列要素のメンバ配列をstrcopyのdstに渡すことは非対応 (実行時アドレス計算になるため)
+struct Entry {
+    char name[4];
+};
+
+struct Entry entries[2];
+char src[] = "ab";
+
+void main(void) {
+    strcopy(entries[0].name, src);
+}
