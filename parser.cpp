@@ -594,7 +594,7 @@ node_t *Parser::parse_var_decl() {
         if (this->token_kind_is(TK_LBRACKET)) {
             this->get_token(TK_LBRACKET);
             node->type.is_array = true;
-            node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む．下のスカラー配列の扱いと同じ)
+            node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
             this->get_token(TK_RBRACKET);
         } else if (this->token_kind_is(TK_ASSIGN)) {
             throw std::string("compiler error: struct variable initializer is not supported at line ")
@@ -638,8 +638,8 @@ node_t *Parser::parse_struct_member() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
     // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)．
-    // この時点でBASE_STRUCTかどうかだけ判定するため，「構造体配列をメンバに持つこと」
-    // (struct Inner arr[3];のような，配列の要素数を読むより前の判定)も同じエラーで弾かれる
+    // この時点でBASE_STRUCTかどうかだけ判定するため，構造体をメンバとして持つメンバ宣言
+    // (struct Outer { struct Inner arr[3]; }のarr．配列の要素数を読むより前の判定)も同じエラーで弾かれる
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: nested struct members are not supported at line ")
@@ -697,7 +697,7 @@ std::vector<node_t *> Parser::parse_struct_decl() {
         if (this->token_kind_is(TK_LBRACKET)) {
             this->get_token(TK_LBRACKET);
             var->type.is_array = true;
-            var->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む．下のスカラー配列の扱いと同じ)
+            var->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
             this->get_token(TK_RBRACKET);
         }
         result.push_back(var);
@@ -827,11 +827,11 @@ node_t *Parser::parse_postfix() {
                       + std::to_string(this->peek_token().line);
             }
             this->get_token(TK_DOT);                     // . を消費
-            node_t *member = this->new_node(ND_MEMBER_ACCESS);
-            member->line = node->line;
+            node_t *member = this->new_node(ND_MEMBER_ACCESS);  // メンバアクセスノード
+            member->line = node->line;                          // 行番号は基底の行を引き継ぐ
             member->children.push_back(node);            // このメンバが属する構造体変数またはarr[i]を子に持つ
             member->sval = this->get_token(TK_IDENT).value;  // メンバ名
-            node = member;
+            node = member;   // 以降の連鎖判定の対象をこのメンバアクセス自身に置き換える
             continue;
         }
 
@@ -843,8 +843,8 @@ node_t *Parser::parse_postfix() {
                       + std::to_string(this->peek_token().line);
             }
             this->get_token(TK_LBRACKET);           // [
-            node_t *access = this->new_node(ND_ARRAY_ACCESS);
-            access->line = node->line;
+            node_t *access = this->new_node(ND_ARRAY_ACCESS);  // 配列アクセスノード
+            access->line = node->line;                         // 行番号は基底の行を引き継ぐ
             if (node->kind == ND_VAR) {
                 // 通常の配列変数: 名前で解決するのでインデックス式のみをchildren[0]に持つ
                 access->sval = node->sval;
@@ -856,7 +856,7 @@ node_t *Parser::parse_postfix() {
                 access->children.push_back(node);
             }
             this->get_token(TK_RBRACKET);           // ]
-            node = access;
+            node = access;   // 以降の連鎖判定の対象をこの配列アクセス自身に置き換える
             continue;
         }
 

@@ -993,7 +993,7 @@ void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
 // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する
 // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にexpr->ivalへ保存済み)
 //          + インデックス(実行時，member_access->children[0]->children[0]) × 構造体1要素分のバイト数
-// レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(ストライド・ベース，作業用)
+// レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(要素間隔・ベース，作業用)
 void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg) {
     if (reg + 1 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at line ")
@@ -1010,7 +1010,7 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int
     } else {
         this->gen_expr(array_access->children[0], reg);
     }
-    // r{reg+1} = ストライド(構造体1要素分のバイト数．2の冪とは限らないためmulで乗算する)
+    // r{reg+1} = 要素間隔(構造体1要素分のバイト数．2の冪とは限らないためmulで乗算する)
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << stride_bytes << "\n";
     this->asm_file_ << "    mul r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
     // r{reg+1} = 配列先頭+メンバオフセット(コンパイル時定数)

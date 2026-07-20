@@ -23,7 +23,7 @@ private:
     node_t *root_;                                            // 注釈付きAST
     const std::map<std::string, const symbol_t *> &symbols_;  // シンボルテーブル (変数名→番地)
     const std::map<std::string, std::vector<const symbol_t *>> &func_params_;  // 関数名→パラメータのシンボル列
-    const std::map<std::string, struct_def_t> &struct_defs_;  // 構造体名→メンバ構成 (構造体配列のストライド計算に使う)
+    const std::map<std::string, struct_def_t> &struct_defs_;  // 構造体名→メンバ構成 (構造体配列の要素間隔計算に使う)
     // レジスタ退避領域の先頭番地．r{reg}を呼び出しをまたいで保持したいとき，scratch_base_ + reg*4番地へ退避する
     const int scratch_base_;
     std::ofstream &asm_file_;                                 // 出力先アセンブリファイル
