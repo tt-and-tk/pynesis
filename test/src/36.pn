@@ -1,0 +1,17 @@
+// 構造体配列要素のメンバへの複合代入(+=)．関数呼び出しを含む右辺も検証する
+struct Item {
+    int value;
+};
+
+struct Item items[2];
+
+int seven(void) {
+    return 7;
+}
+
+void main(void) {
+    int i = 0;
+    items[i].value = 10;
+    items[i].value += 5;
+    items[i].value += seven();
+}

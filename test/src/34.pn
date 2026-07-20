@@ -1,0 +1,13 @@
+// グローバル構造体配列(スカラーメンバのみ)の変数インデックスによる読み書きとsizeof
+struct Item {
+    int value;
+};
+
+struct Item items[3];
+
+void main(void) {
+    int i = 1;
+    items[i].value = 42;
+    int x = items[i].value;
+    int size = sizeof(items);
+}

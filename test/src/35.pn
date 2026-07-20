@@ -1,0 +1,14 @@
+// ローカル構造体配列(配列メンバ含む)の変数インデックスによる読み書き
+// arr[i].member[j](配列メンバ)とarr[i].member(スカラーメンバ)の両方を検証する
+struct Row {
+    char name[2];
+    int count;
+};
+
+void main(void) {
+    struct Row rows[2];
+    int i = 1;
+    int j = 0;
+    rows[i].name[j] = 'x';
+    rows[i].count = rows[i].name[j];
+}

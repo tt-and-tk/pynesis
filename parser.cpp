@@ -576,7 +576,9 @@ node_t *Parser::parse_param() {
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [signed|unsigned] 型 変数名 [= 式] ;
-// 構造体型の場合は struct 構造体名 変数名 ; のみ許可する(配列・初期化子は非対応)
+// 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
+//   struct 構造体名 変数名;         (単一変数)
+//   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
@@ -586,13 +588,15 @@ node_t *Parser::parse_var_decl() {
     // 変数名を読む
     node->sval = this->get_token(TK_IDENT).value;
 
-    // 構造体変数: 配列・初期化子は非対応 (配列は今後別issueで対応，メンバ初期化の仕組みは未実装)
+    // 構造体変数: 配列にも対応する(要素数省略・初期化子はメンバ初期化の仕組みが無いため非対応)
     if (node->type.base == BASE_STRUCT) {
+        // 変数名の後に[があれば配列宣言 (無ければ単一変数)
         if (this->token_kind_is(TK_LBRACKET)) {
-            throw std::string("compiler error: array of struct is not supported at line ")
-                  + std::to_string(this->peek_token().line);
-        }
-        if (this->token_kind_is(TK_ASSIGN)) {
+            this->get_token(TK_LBRACKET);
+            node->type.is_array = true;
+            node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
+            this->get_token(TK_RBRACKET);
+        } else if (this->token_kind_is(TK_ASSIGN)) {
             throw std::string("compiler error: struct variable initializer is not supported at line ")
                   + std::to_string(this->peek_token().line);
         }
@@ -633,7 +637,9 @@ node_t *Parser::parse_var_decl() {
 node_t *Parser::parse_struct_member() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
-    // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)
+    // メンバの型を読む (スカラーまたは固定長配列のみ許容，ネスト構造体は非対応)．
+    // この時点でBASE_STRUCTかどうかだけ判定するため，構造体をメンバとして持つメンバ宣言
+    // (struct Outer { struct Inner arr[3]; }のarr．配列の要素数を読むより前の判定)も同じエラーで弾かれる
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: nested struct members are not supported at line ")
@@ -681,12 +687,19 @@ std::vector<node_t *> Parser::parse_struct_decl() {
 
     std::vector<node_t *> result = {decl};
 
-    // 構造体定義に続けて変数名があれば，その場で変数宣言も生成する
+    // 構造体定義に続けて変数名があれば，その場で変数宣言も生成する (配列宣言も可)
     if (this->token_kind_is(TK_IDENT)) {
-        node_t *var = this->new_node(ND_VAR_DECL);
-        var->type = {BASE_STRUCT, true};
-        var->type.struct_name = decl->sval;
-        var->sval = this->get_token().value;
+        node_t *var = this->new_node(ND_VAR_DECL);   // 即時宣言する変数
+        var->type = {BASE_STRUCT, true};             // 型は今定義した構造体
+        var->type.struct_name = decl->sval;          // 構造体名を結びつける
+        var->sval = this->get_token().value;         // 変数名を読む
+        // 変数名の後に[があれば配列宣言 (無ければ単一変数)
+        if (this->token_kind_is(TK_LBRACKET)) {
+            this->get_token(TK_LBRACKET);
+            var->type.is_array = true;
+            var->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
+            this->get_token(TK_RBRACKET);
+        }
         result.push_back(var);
     } else if (!has_tag) {
         throw std::string("compiler error: anonymous struct must declare a variable at line ")
@@ -795,57 +808,72 @@ node_t *Parser::parse_unary() {
 }
 
 // 後置演算子・構造体メンバアクセス・関数呼び出しを解析してASTノードを返す
+// 構造体メンバアクセス(.member)と配列添字([i])は，arr[i].member[j]のように
+// 交互に連鎖しうるため，どちらも現れなくなるまでループで読み進める
 node_t *Parser::parse_postfix() {
     node_t *node = this->parse_primary();
 
-    // 構造体メンバアクセス: 変数名.メンバ名 (ネスト構造体は非対応のため，連鎖するのは1段のみ)
-    if (this->token_kind_is(TK_DOT)) {
-        // .の前は構造体変数の名前でなければならない (例: (a+b).xや配列要素a[0].xは非対応)
-        if (node->kind != ND_VAR) {
-            throw std::string("compiler error: expected a struct variable before '.' at line ")
-                  + std::to_string(this->peek_token().line);
+    while (true) {
+        // 構造体メンバアクセス: 変数名.メンバ名，または構造体配列要素.メンバ名 (ネスト構造体は非対応)
+        if (this->token_kind_is(TK_DOT)) {
+            // .の前は構造体変数の名前か，構造体配列の要素(arr[i]，children[0]のみを持つ単純な
+            // 配列アクセス)でなければならない．children.size()==2の配列アクセス(entry.name[j]の
+            // ようなメンバ配列アクセス結果)は常にスカラーであり，構造体配列要素ではないため対象外とする
+            // (例: (a+b).xは非対応．entry.sub.xやentry.name[j].xのような多段の連鎖も非対応)
+            const bool is_struct_array_elem =
+                node->kind == ND_ARRAY_ACCESS && node->children.size() == 1;
+            if (node->kind != ND_VAR && !is_struct_array_elem) {
+                throw std::string("compiler error: expected a struct variable before '.' at line ")
+                      + std::to_string(this->peek_token().line);
+            }
+            this->get_token(TK_DOT);                     // . を消費
+            node_t *member = this->new_node(ND_MEMBER_ACCESS);  // メンバアクセスノード
+            member->line = node->line;                          // 行番号は基底の行を引き継ぐ
+            member->children.push_back(node);            // このメンバが属する構造体変数またはarr[i]を子に持つ
+            member->sval = this->get_token(TK_IDENT).value;  // メンバ名
+            node = member;   // 以降の連鎖判定の対象をこのメンバアクセス自身に置き換える
+            continue;
         }
-        this->get_token(TK_DOT);                     // . を消費
-        node_t *member = this->new_node(ND_MEMBER_ACCESS);
-        member->line = node->line;
-        member->children.push_back(node);            // このメンバが属する構造体変数(ND_VAR)を子に持つ
-        member->sval = this->get_token(TK_IDENT).value;  // メンバ名
-        // 以降(配列添字・後置++/--)の判定がメンバアクセス自身を対象にできるよう，
-        // nodeを構造体変数からメンバアクセスノードに置き換える(元の変数はmemberの子として残るため失われない)
-        node = member;
-    }
 
-    // 配列要素アクセス: 変数名[インデックス式]，またはメンバが配列型である場合のメンバ名[インデックス式]
-    if (this->token_kind_is(TK_LBRACKET)) {
-        // []の前は変数名かメンバアクセスでなければならない (例: (a+b)[0]は非対応)
-        if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS) {
-            throw std::string("compiler error: expected a variable name before '[' at line ")
-                  + std::to_string(this->peek_token().line);
+        // 配列要素アクセス: 変数名[インデックス式]，またはメンバが配列型である場合のメンバ名[インデックス式]
+        if (this->token_kind_is(TK_LBRACKET)) {
+            // []の前は変数名かメンバアクセスでなければならない (例: (a+b)[0]は非対応)
+            if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS) {
+                throw std::string("compiler error: expected a variable name before '[' at line ")
+                      + std::to_string(this->peek_token().line);
+            }
+            this->get_token(TK_LBRACKET);           // [
+            node_t *access = this->new_node(ND_ARRAY_ACCESS);  // 配列アクセスノード
+            access->line = node->line;                         // 行番号は基底の行を引き継ぐ
+            if (node->kind == ND_VAR) {
+                // 通常の配列変数: 名前で解決するのでインデックス式のみをchildren[0]に持つ
+                access->sval = node->sval;
+                access->children.push_back(this->parse_expr());
+            } else {
+                // 配列型メンバ(例: entry.name[i]，arr[i].name[j]): インデックス式(children[0])に加え，
+                // どのメンバの配列かを示すメンバアクセス自体(children[1])を持たせて意味解析に解決させる
+                access->children.push_back(this->parse_expr());
+                access->children.push_back(node);
+            }
+            this->get_token(TK_RBRACKET);           // ]
+            node = access;   // 以降の連鎖判定の対象をこの配列アクセス自身に置き換える
+            continue;
         }
-        this->get_token(TK_LBRACKET);           // [
-        node_t *access = this->new_node(ND_ARRAY_ACCESS);
-        access->line = node->line;
-        if (node->kind == ND_VAR) {
-            // 通常の配列変数: 名前で解決するのでインデックス式のみをchildren[0]に持つ
-            access->sval = node->sval;
-            access->children.push_back(this->parse_expr());
-        } else {
-            // 配列型メンバ(例: entry.name[i]): インデックス式(children[0])に加え，
-            // どのメンバの配列かを示すメンバアクセス自体(children[1])を持たせて意味解析に解決させる
-            access->children.push_back(this->parse_expr());
-            access->children.push_back(node);
-        }
-        this->get_token(TK_RBRACKET);           // ]
-        // 配列要素への後置++/--は非対応 (仕様上の制限)
-        if (this->token_kind_is(TK_PLUSPLUS) || this->token_kind_is(TK_MINUSMINUS)) {
-            throw std::string("compiler error: '++'/'--' on array element is not supported at line ")
-                  + std::to_string(this->peek_token().line);
-        }
-        return access;
+
+        break;
     }
 
     // 後置インクリメント・デクリメント
     if (this->token_kind_is(TK_PLUSPLUS) || this->token_kind_is(TK_MINUSMINUS)) {
+        // 配列要素(arr[i])および構造体配列要素のメンバ(arr[i].member)への++/--は非対応
+        // (実行時に計算したアドレスへの++/--は追加のレジスタ計算が必要になるため)
+        const bool is_array_elem = node->kind == ND_ARRAY_ACCESS;
+        const bool is_struct_array_member =
+            node->kind == ND_MEMBER_ACCESS && node->children[0]->kind == ND_ARRAY_ACCESS;
+        if (is_array_elem || is_struct_array_member) {
+            throw std::string("compiler error: '++'/'--' on array element is not supported at line ")
+                  + std::to_string(this->peek_token().line);
+        }
         const token_t op = this->get_token();
         node_t *post = this->new_node(ND_POST_UNOP);
         post->line = op.line;

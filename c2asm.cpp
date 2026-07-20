@@ -71,7 +71,8 @@ int compile_c_to_asm(int argc, char **argv) {
         symbols = analyzer();
 
         // アセンブリコードを生成する (Code Generator)
-        Generator generator(ast, symbols, analyzer.func_params(), analyzer.scratch_base(), asm_file);
+        Generator generator(ast, symbols, analyzer.func_params(), analyzer.struct_defs(),
+                             analyzer.scratch_base(), asm_file);
         generator();
 
         asm_file.flush();

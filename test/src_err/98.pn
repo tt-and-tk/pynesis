@@ -1,0 +1,13 @@
+// 構造体配列要素のメンバ配列を関数引数として渡すことは非対応 (実行時アドレス計算になるため)
+struct Entry {
+    char name[4];
+};
+
+struct Entry entries[2];
+
+void show(char buf[]) {
+}
+
+void main(void) {
+    show(entries[0].name);
+}

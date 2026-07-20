@@ -1,0 +1,11 @@
+// 構造体配列の要素そのものを，メンバアクセスを介さず直接参照することは非対応
+struct Tag {
+    int v;
+};
+
+struct Tag arr[3];
+
+void main(void) {
+    int x = arr[0].v;
+    x = arr[1];
+}

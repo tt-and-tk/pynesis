@@ -1,0 +1,10 @@
+// 構造体配列要素のメンバへの前置++/--も非対応 (後置とは別経路で検出されるため個別に確認する)
+struct Tag {
+    int v;
+};
+
+struct Tag arr[3];
+
+void main(void) {
+    ++arr[0].v;
+}

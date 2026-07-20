@@ -1,0 +1,10 @@
+// 構造体配列要素のメンバ配列をprintに渡すことは非対応 (実行時アドレス計算になるため)
+struct Entry {
+    char name[4];
+};
+
+struct Entry entries[2];
+
+void main(void) {
+    print(entries[0].name);
+}

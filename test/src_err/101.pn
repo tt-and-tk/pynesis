@@ -1,0 +1,10 @@
+// メンバ配列アクセスの結果(常にスカラー)に対する多段の.連鎖は非対応
+struct Entry {
+    char name[4];
+};
+
+struct Entry e;
+
+void main(void) {
+    int x = e.name[0].y;
+}
