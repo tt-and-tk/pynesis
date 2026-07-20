@@ -1,0 +1,6 @@
+// strcopyに同じ変数をdst・srcの両方として渡しても正しく動作する(1文字ずつ読んでから書くため自己コピーでも壊れない)
+char buf[] = "hi";
+
+void main(void) {
+    strcopy(buf, buf);
+}

@@ -1,0 +1,7 @@
+// streqに同じ変数を両方の引数として渡しても正しく動作する(自分自身との比較は常に一致)
+char a[] = "ab";
+int result;
+
+void main(void) {
+    result = streq(a, a);
+}
