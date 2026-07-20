@@ -1,6 +1,6 @@
 *.exe
 memo.txt
-review.md
+review*.md
 test/asm/
 .claude/settings.local.json
 .worktrees/
