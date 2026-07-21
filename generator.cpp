@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "generator.hpp"
 
 // 二項演算子の文字列を対応するアセンブリ命令に変換する
@@ -345,47 +347,42 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
 // char配列2つの内容を先頭から1文字ずつ比較し，一致すれば1，不一致なら0をr{reg}へ格納する
 // どちらかの宣言サイズに達してもヌル終端が見つからない場合は，安全のため不一致として打ち切る
 // レジスタ使用: r{reg}=結果, r{reg+1}=インデックス, r{reg+2}=ベースアドレスA(不変), r{reg+3}=ベースアドレスB(不変),
-//              r{reg+4}=配列サイズA(打ち切り境界，不変), r{reg+5}=配列サイズB(打ち切り境界，不変),
-//              r{reg+6}=アドレスA(作業用), r{reg+7}=アドレスB(作業用), r{reg+8}=文字A(作業用), r{reg+9}=文字B(作業用),
-//              r{reg+10}=1(インデックス加算用，不変), r{reg+11}=0(ヌル終端比較用，不変)
+//              r{reg+4}=打ち切り境界(不変)，r{reg+5}=アドレス(作業用，A/B共用)，r{reg+6}=文字A(作業用)，
+//              r{reg+7}=文字B(作業用)，r{reg+8}=1(インデックス加算用，不変)，r{reg+9}=0(ヌル終端比較用，不変)
 void Generator::gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg) {
-    if (reg + 11 >= MAX_REG) {
+    if (reg + 9 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers)");
     }
     const std::string loop = this->new_label();
     const std::string mismatch = this->new_label();
     const std::string match = this->new_label();
     const std::string end = this->new_label();
+    // 打ち切り境界は両配列の宣言サイズの小さい方(コンパイル時に確定するため1本のレジスタで表せる)
+    const int size_limit = std::min(sym_a->type.array_size, sym_b->type.array_size);
 
     // 必要な変数をレジスタに格納する
-    this->gen_array_base_addr(reg + 2, sym_a);                                       // r{reg+2}  = ベースアドレスA
-    this->gen_array_base_addr(reg + 3, sym_b);                                       // r{reg+3}  = ベースアドレスB
-    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";                    // r{reg+1}  = インデックス(0)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 4) << " " << sym_a->type.array_size << "\n";  // r{reg+4} = 配列サイズA(打ち切り境界)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 5) << " " << sym_b->type.array_size << "\n";  // r{reg+5} = 配列サイズB(打ち切り境界)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 10) << " 1\n";                   // r{reg+10} = 1(インデックス加算用)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 11) << " 0\n";                   // r{reg+11} = 0(ヌル終端比較用)
+    this->gen_array_base_addr(reg + 2, sym_a);                          // r{reg+2} = ベースアドレスA
+    this->gen_array_base_addr(reg + 3, sym_b);                          // r{reg+3} = ベースアドレスB
+    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";        // r{reg+1} = インデックス(0)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 4) << " " << size_limit << "\n";  // r{reg+4} = 打ち切り境界
+    this->asm_file_ << "    mov fh r0 r" << (reg + 8) << " 1\n";        // r{reg+8} = 1(インデックス加算用)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 9) << " 0\n";        // r{reg+9} = 0(ヌル終端比較用)
 
     this->asm_file_ << loop << ":\n";
-    // どちらかの宣言サイズに達してもヌル終端が見つからない場合は不一致として打ち切る
-    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 4) << " " << mismatch << "\n";
-    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 5) << " " << mismatch << "\n";
-    // r{reg+8} = memA[baseA+index], r{reg+9} = memB[baseB+index] (1バイト)
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 6) << "\n";
-    this->asm_file_ << "    rm 1h r" << (reg + 6) << " r" << (reg + 8) << "\n";
-    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 7) << "\n";
-    this->asm_file_ << "    rm 1h r" << (reg + 7) << " r" << (reg + 9) << "\n";
-    // 文字が不一致なら終了
-    this->asm_file_ << "    ne r" << (reg + 8) << " r" << (reg + 9) << " " << mismatch << "\n";
-    // 両方同時にヌル終端(0)に達していれば一致
-    this->asm_file_ << "    eq r" << (reg + 8) << " r" << (reg + 11) << " " << match << "\n";
-    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 10) << " r" << (reg + 1) << "\n";
+    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 4) << " " << mismatch << "\n";  // 打ち切り境界に達したら不一致で終了
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";  // アドレス = baseA+index
+    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 6) << "\n";  // r{reg+6} = memA[アドレス] (1バイト)
+    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";  // アドレス = baseB+index
+    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 7) << "\n";  // r{reg+7} = memB[アドレス] (1バイト)
+    this->asm_file_ << "    ne r" << (reg + 6) << " r" << (reg + 7) << " " << mismatch << "\n";  // 文字が不一致なら終了
+    this->asm_file_ << "    eq r" << (reg + 6) << " r" << (reg + 9) << " " << match << "\n";     // 両方ヌル終端なら一致で終了
+    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 8) << " r" << (reg + 1) << "\n";  // index += 1
     this->asm_file_ << "    jmp " << loop << "\n";
     this->asm_file_ << match << ":\n";
-    this->asm_file_ << "    mov fh r0 r" << reg << " 1\n";
+    this->asm_file_ << "    mov fh r0 r" << reg << " 1\n";              // 一致
     this->asm_file_ << "    jmp " << end << "\n";
     this->asm_file_ << mismatch << ":\n";
-    this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";
+    this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";              // 不一致
     this->asm_file_ << end << ":\n";
 }
 
@@ -404,35 +401,29 @@ void Generator::gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg) {
     const std::string end = this->new_label();
 
     // 必要な変数をレジスタに格納する
-    this->gen_array_base_addr(reg + 2, dst);                                          // r{reg+2} = ベースアドレス(コピー先)
-    this->gen_array_base_addr(reg + 3, src);                                          // r{reg+3} = ベースアドレス(コピー元)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";                    // r{reg+1} = インデックス(0)
-    this->asm_file_ << "    mov fh r0 r" << (reg + 5) << " 0\n";                    // r{reg+5} = 0(ヌル終端書き込み用)
+    this->gen_array_base_addr(reg + 2, dst);                            // r{reg+2} = ベースアドレス(コピー先)
+    this->gen_array_base_addr(reg + 3, src);                            // r{reg+3} = ベースアドレス(コピー元)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";        // r{reg+1} = インデックス(0)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 5) << " 0\n";        // r{reg+5} = 0(ヌル終端書き込み用)
     this->asm_file_ << "    mov fh r0 r" << (reg + 6) << " " << (dst->type.array_size - 1) << "\n";  // r{reg+6} = コピー先の配列サイズ-1
-    this->asm_file_ << "    mov fh r0 r" << (reg + 7) << " 1\n";                    // r{reg+7} = 1(インデックス加算用)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 7) << " 1\n";        // r{reg+7} = 1(インデックス加算用)
 
     this->asm_file_ << loop << ":\n";
-    // コピー先の宣言サイズ-1文字に達したら，これ以上コピーせず打ち切る
-    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 6) << " " << truncate << "\n";
-    // r{reg} = memSrc[baseSrc+index] (1バイト)
-    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
-    this->asm_file_ << "    rm 1h r" << (reg + 4) << " r" << reg << "\n";
-    // コピー元がヌル終端に達したら，dstへも書き込んで終了
-    this->asm_file_ << "    eq r" << reg << " r" << (reg + 5) << " " << finish << "\n";
-    // dst[index] = コピー元の文字
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << reg << "\n";
-    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 7) << " r" << (reg + 1) << "\n";
+    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 6) << " " << truncate << "\n";  // コピー先の宣言サイズ-1文字に達したら打ち切る
+    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseSrc+index
+    this->asm_file_ << "    rm 1h r" << (reg + 4) << " r" << reg << "\n";  // r{reg} = memSrc[アドレス] (1バイト)
+    this->asm_file_ << "    eq r" << reg << " r" << (reg + 5) << " " << finish << "\n";  // コピー元がヌル終端ならdstへも書いて終了
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+index
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << reg << "\n";  // dst[index] = memSrcから読んだ文字
+    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 7) << " r" << (reg + 1) << "\n";  // index += 1
     this->asm_file_ << "    jmp " << loop << "\n";
     this->asm_file_ << truncate << ":\n";
-    // 打ち切り: dstの末尾(配列サイズ-1番目)にヌル終端を書く
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 6) << " r" << (reg + 4) << "\n";
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 6) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+(配列サイズ-1)
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";  // dstの末尾にヌル終端を書く
     this->asm_file_ << "    jmp " << end << "\n";
     this->asm_file_ << finish << ":\n";
-    // 通常終了: コピー元のヌル終端をdstの現在位置に書く
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+index
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";  // dstの現在位置にヌル終端を書く
     this->asm_file_ << end << ":\n";
 }
 

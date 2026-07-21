@@ -667,19 +667,22 @@ void Analyzer::analyze_local_decl(node_t *decl) {
 }
 
 // print/streq/strcopyに共通する引数検査を行う
-// char型の直接配列(固定サイズ宣言，array_size!=0)であることを要求し，配列パラメータ(サイズ不明)を禁止する．
-// 構造体配列要素のメンバ配列(arr[i].name)も，実行時アドレス計算になり各組み込み関数の
-// コード生成が前提とする「コンパイル時に確定したアドレス」と相容れないため禁止する
+// scanは書き込み可能性・最小サイズ等の固有要件があり，構文上も対象を識別子1個に限定している
+// (構造体メンバ配列が現れない)ため，この共通検査ではなく専用の検査を別途行う
 void Analyzer::check_char_array_operand(node_t *target, const std::string &builtin_name) {
     this->analyze_expr(target);
+    // char型の配列でない場合はエラー
     if (!target->type.is_array || target->type.base != BASE_CHAR) {
         throw std::string("compiler error: ") + builtin_name + " requires a char array at line "
               + std::to_string(target->line);
     }
+    // 配列パラメータ(サイズ不明)の場合はエラー
     if (target->type.array_size == 0) {
         throw std::string("compiler error: ") + builtin_name
               + " does not support array parameters (size unknown) at line " + std::to_string(target->line);
     }
+    // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，コード生成が前提とする
+    // 「コンパイル時に確定したアドレス」と相容れないためエラー
     if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
         throw std::string("compiler error: ") + builtin_name + " does not support an array member of "
               "a struct array element at line " + std::to_string(target->line);
@@ -1065,6 +1068,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         }
 
         // 組み込み関数scan: char配列(直接配列，2要素以上)のみ対応．改行までの1行をヌル終端付きで格納する
+        // 書き込み可能性・最小サイズの検査が必要なためcheck_char_array_operandは使わず専用の検査を行う
         case ND_SCAN: {
             node_t *target = expr->children[0];   // 格納先配列 (parserがND_VARで構築)
             const symbol_t *sym = this->lookup_symbol(target->sval);
