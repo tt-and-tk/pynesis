@@ -369,20 +369,29 @@ void Generator::gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg)
     this->asm_file_ << "    mov fh r0 r" << (reg + 9) << " 0\n";        // r{reg+9} = 0(ヌル終端比較用)
 
     this->asm_file_ << loop << ":\n";
-    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 4) << " " << mismatch << "\n";  // 打ち切り境界に達したら不一致で終了
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";  // アドレス = baseA+index
-    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 6) << "\n";  // r{reg+6} = memA[アドレス] (1バイト)
-    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";  // アドレス = baseB+index
-    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 7) << "\n";  // r{reg+7} = memB[アドレス] (1バイト)
-    this->asm_file_ << "    ne r" << (reg + 6) << " r" << (reg + 7) << " " << mismatch << "\n";  // 文字が不一致なら終了
-    this->asm_file_ << "    eq r" << (reg + 6) << " r" << (reg + 9) << " " << match << "\n";     // 両方ヌル終端なら一致で終了
-    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 8) << " r" << (reg + 1) << "\n";  // index += 1
+    // インデックスが打ち切り境界を超えた場合，ヌル終端が見つからないまま両配列の宣言サイズに達したとみなし，
+    // mismatch(不一致確定)へジャンプする
+    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 4) << " " << mismatch << "\n";
+    // 配列Aの現在インデックスの文字を読み込む
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";
+    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 6) << "\n";
+    // 配列Bの現在インデックスの文字を読み込む
+    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 5) << "\n";
+    this->asm_file_ << "    rm 1h r" << (reg + 5) << " r" << (reg + 7) << "\n";
+    // 読み込んだ文字が異なる場合，不一致が確定したのでmismatchへジャンプする
+    this->asm_file_ << "    ne r" << (reg + 6) << " r" << (reg + 7) << " " << mismatch << "\n";
+    // 両方ともヌル終端(文字コード0)であった場合，先頭からここまで全て一致したとみなし，match(一致確定)へジャンプする
+    this->asm_file_ << "    eq r" << (reg + 6) << " r" << (reg + 9) << " " << match << "\n";
+    // 次の文字を比較するため，インデックスを1つ進めてloopの先頭へ戻る
+    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 8) << " r" << (reg + 1) << "\n";
     this->asm_file_ << "    jmp " << loop << "\n";
     this->asm_file_ << match << ":\n";
-    this->asm_file_ << "    mov fh r0 r" << reg << " 1\n";              // 一致
+    // 比較結果を「一致」としてr{reg}へ格納し，end(終了処理)へジャンプする
+    this->asm_file_ << "    mov fh r0 r" << reg << " 1\n";
     this->asm_file_ << "    jmp " << end << "\n";
     this->asm_file_ << mismatch << ":\n";
-    this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";              // 不一致
+    // 比較結果を「不一致」としてr{reg}へ格納する
+    this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";
     this->asm_file_ << end << ":\n";
 }
 
@@ -409,21 +418,29 @@ void Generator::gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg) {
     this->asm_file_ << "    mov fh r0 r" << (reg + 7) << " 1\n";        // r{reg+7} = 1(インデックス加算用)
 
     this->asm_file_ << loop << ":\n";
-    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 6) << " " << truncate << "\n";  // コピー先の宣言サイズ-1文字に達したら打ち切る
-    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseSrc+index
-    this->asm_file_ << "    rm 1h r" << (reg + 4) << " r" << reg << "\n";  // r{reg} = memSrc[アドレス] (1バイト)
-    this->asm_file_ << "    eq r" << reg << " r" << (reg + 5) << " " << finish << "\n";  // コピー元がヌル終端ならdstへも書いて終了
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+index
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << reg << "\n";  // dst[index] = memSrcから読んだ文字
-    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 7) << " r" << (reg + 1) << "\n";  // index += 1
+    // インデックスがコピー先の宣言サイズ-1文字を超えた場合，これ以上格納する余地がないので
+    // truncate(打ち切り処理)へジャンプする
+    this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 6) << " " << truncate << "\n";
+    // コピー元の現在インデックスの文字を読み込む
+    this->asm_file_ << "    add r" << (reg + 3) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
+    this->asm_file_ << "    rm 1h r" << (reg + 4) << " r" << reg << "\n";
+    // 読み込んだ文字がヌル終端(文字コード0)であった場合，コピーすべき文字は終わったのでfinish(終端処理)へジャンプする
+    this->asm_file_ << "    eq r" << reg << " r" << (reg + 5) << " " << finish << "\n";
+    // 読み込んだ文字をコピー先の現在インデックスへ書き込む
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << reg << "\n";
+    // 次の文字をコピーするため，インデックスを1つ進めてloopの先頭へ戻る
+    this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 7) << " r" << (reg + 1) << "\n";
     this->asm_file_ << "    jmp " << loop << "\n";
     this->asm_file_ << truncate << ":\n";
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 6) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+(配列サイズ-1)
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";  // dstの末尾にヌル終端を書く
+    // コピー先の末尾(宣言サイズ-1文字目)にヌル終端を書き込み，end(終了処理)へジャンプする
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 6) << " r" << (reg + 4) << "\n";
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";
     this->asm_file_ << "    jmp " << end << "\n";
     this->asm_file_ << finish << ":\n";
-    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";  // アドレス = baseDst+index
-    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";  // dstの現在位置にヌル終端を書く
+    // コピー先の現在インデックスにヌル終端を書き込む
+    this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 4) << "\n";
+    this->asm_file_ << "    wm 1h r" << (reg + 4) << " r" << (reg + 5) << "\n";
     this->asm_file_ << end << ":\n";
 }
 

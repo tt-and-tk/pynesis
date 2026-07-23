@@ -666,9 +666,9 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     }
 }
 
-// print/streq/strcopyに共通する引数検査を行う
-// scanは書き込み可能性・最小サイズ等の固有要件があり，構文上も対象を識別子1個に限定している
-// (構造体メンバ配列が現れない)ため，この共通検査ではなく専用の検査を別途行う
+// scan以外の組み込み関数の引数をチェックする(print/streq/strcopy)
+// scanは構文上，対象を識別子1個(TK_IDENT)に限定しているため構造体メンバ配列(arr[i].name)が
+// 現れず，書き込み可能性・最小サイズ等の固有要件も持つため，この共通検査ではなく専用の検査を別途行う
 void Analyzer::check_char_array_operand(node_t *target, const std::string &builtin_name) {
     this->analyze_expr(target);
     // char型の配列でない場合はエラー
@@ -676,7 +676,8 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
         throw std::string("compiler error: ") + builtin_name + " requires a char array at line "
               + std::to_string(target->line);
     }
-    // 配列パラメータ(サイズ不明)の場合はエラー
+    // 関数の配列引数は呼び出し元によってサイズが変わり得るため，サイズ不明(array_size==0)として
+    // 扱われる．そのような配列引数の場合はエラー
     if (target->type.array_size == 0) {
         throw std::string("compiler error: ") + builtin_name
               + " does not support array parameters (size unknown) at line " + std::to_string(target->line);
