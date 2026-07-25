@@ -515,8 +515,9 @@ node_t *Parser::parse_print() {
 
 // 組み込み関数scanを解析してND_SCANを返す
 // 構文: scan ( char配列 )  ※ 改行までの1行をヌル終端付きで配列へ格納する
-// 書き込み先はコンパイル時に確定した配列変数そのものである必要があるため，printやstreq/strcopyの
-// ように任意の式(parse_expr)ではなく，識別子1個(TK_IDENT)に構文上限定している
+// 対象は識別子1個(TK_IDENT)の配列変数のみで，構造体のメンバ配列(単一の構造体変数のものも含む)へは
+// 未対応．メンバ配列はコンパイル時に確定したアドレスに配置されるため技術的には書き込み先にできるが，
+// printやstreq/strcopyのように任意の式(parse_expr)を受け付ける構文にはまだ拡張していない(将来対応予定)
 node_t *Parser::parse_scan() {
     node_t *node = this->new_node(ND_SCAN);
     this->get_token(TK_SCAN);                         // scan
