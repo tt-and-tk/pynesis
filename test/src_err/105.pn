@@ -1,0 +1,12 @@
+// 構造体配列要素のメンバ配列をstreqに渡すことは非対応 (実行時アドレス計算になるため)
+struct Entry {
+    char name[4];
+};
+
+struct Entry entries[2];
+char buf[4];
+
+void main(void) {
+    if (streq(entries[0].name, buf)) {
+    }
+}

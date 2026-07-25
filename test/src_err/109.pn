@@ -1,0 +1,6 @@
+// 構文解析エラー: strcopyは予約語のため関数名に使えない (異常系)
+void strcopy(void) {
+}
+void main(void) {
+    strcopy();
+}

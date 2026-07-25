@@ -666,6 +666,29 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     }
 }
 
+// scan以外の組み込み関数の引数をチェックする(print/streq/strcopy)
+// scanは構文上，対象を識別子1個(TK_IDENT)に限定しているため構造体メンバ配列(arr[i].name)が
+// 現れず，書き込み可能性・最小サイズ等の固有要件も持つため，この共通検査ではなく専用の検査を別途行う
+void Analyzer::check_char_array_operand(node_t *target, const std::string &builtin_name) {
+    this->analyze_expr(target);
+    // char型の配列でない場合はエラー
+    if (!target->type.is_array || target->type.base != BASE_CHAR) {
+        throw std::string("compiler error: ") + builtin_name + " requires a char array at line "
+              + std::to_string(target->line);
+    }
+    // 関数の配列引数(サイズ不明，array_size==0)の場合はエラー
+    if (target->type.array_size == 0) {
+        throw std::string("compiler error: ") + builtin_name
+              + " does not support array parameters (size unknown) at line " + std::to_string(target->line);
+    }
+    // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，コード生成が前提とする
+    // 「コンパイル時に確定したアドレス」と相容れないためエラー
+    if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
+        throw std::string("compiler error: ") + builtin_name + " does not support an array member of "
+              "a struct array element at line " + std::to_string(target->line);
+    }
+}
+
 // 式を検査し，名前解決と型注釈を行う
 // ノード種別ごとに固有の検査を行い，子を持つノードは子へ再帰する．
 //   リテラル: 末端なので何もしない
@@ -1012,27 +1035,40 @@ void Analyzer::analyze_expr(node_t *expr) {
         // 組み込み関数print: char配列(直接配列)のみ対応．ヌル終端まで出力する
         case ND_PRINT: {
             node_t *target = expr->children[0];
-            this->analyze_expr(target);
-            if (!target->type.is_array || target->type.base != BASE_CHAR) {
-                throw std::string("compiler error: print requires a char array at line ")
-                      + std::to_string(target->line);
-            }
-            if (target->type.array_size == 0) {
-                throw std::string("compiler error: print does not support array parameters (size unknown) at line ")
-                      + std::to_string(target->line);
-            }
-            // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，
-            // gen_print_stringが前提とする「コンパイル時に確定したアドレス」と相容れないため禁止する
-            if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
-                throw std::string("compiler error: print does not support an array member of "
-                                   "a struct array element at line ") + std::to_string(target->line);
-            }
+            this->check_char_array_operand(target, "print");
             // printは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
             expr->type = type_t{BASE_VOID, true};
             return;
         }
 
+        // 組み込み関数streq: 2つのchar配列(直接配列)の内容が一致するか比較する
+        case ND_STREQ: {
+            node_t *lhs = expr->children[0];
+            node_t *rhs = expr->children[1];
+            this->check_char_array_operand(lhs, "streq");
+            this->check_char_array_operand(rhs, "streq");
+            // streqは0/1のint値を返す(if文の条件式等にそのまま使える)
+            expr->type = type_t{BASE_INT, true};
+            return;
+        }
+
+        // 組み込み関数strcopy: 第2引数(src)の内容を第1引数(dst)へヌル終端付きでコピーする
+        case ND_STRCOPY: {
+            node_t *dst = expr->children[0];
+            node_t *src = expr->children[1];
+            this->check_char_array_operand(dst, "strcopy");
+            this->check_char_array_operand(src, "strcopy");
+            if (!dst->sym->writable) {
+                throw std::string("compiler error: '") + dst->sym->name
+                      + "' is not writable at line " + std::to_string(dst->line);
+            }
+            // strcopyは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
+            expr->type = type_t{BASE_VOID, true};
+            return;
+        }
+
         // 組み込み関数scan: char配列(直接配列，2要素以上)のみ対応．改行までの1行をヌル終端付きで格納する
+        // 書き込み可能性・最小サイズの検査が必要なためcheck_char_array_operandは使わず専用の検査を行う
         case ND_SCAN: {
             node_t *target = expr->children[0];   // 格納先配列 (parserがND_VARで構築)
             const symbol_t *sym = this->lookup_symbol(target->sval);

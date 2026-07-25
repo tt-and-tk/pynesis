@@ -71,6 +71,8 @@ private:
     void gen_string_init(int base_addr, const std::string &str);  // 文字列をchar配列に書き込む初期化コードを生成する
     void gen_print_string(const symbol_t *sym, int reg);  // char配列をヌル終端まで1文字ずつ出力するループを生成する
     void gen_scan_line(const symbol_t *sym, int reg);     // 標準入力を改行まで読み込みchar配列へヌル終端付きで格納するループを生成する
+    void gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg);  // 2つのchar配列の内容を比較しr{reg}へ0/1を格納する
+    void gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg);   // char配列srcの内容をヌル終端付きでdstへコピーする
     void gen_compare(node_t *expr, int reg);   // 比較演算を0/1の値としてr{reg}に生成
     void gen_logical(node_t *expr, int reg);   // 論理 && / || を短絡評価しr{reg}に0/1を生成
     void gen_ternary(node_t *expr, int reg);   // 三項演算子 ?: の結果をr{reg}に生成

@@ -515,6 +515,9 @@ node_t *Parser::parse_print() {
 
 // 組み込み関数scanを解析してND_SCANを返す
 // 構文: scan ( char配列 )  ※ 改行までの1行をヌル終端付きで配列へ格納する
+// 対象は識別子1個(TK_IDENT)の配列変数のみで，構造体のメンバ配列(単一の構造体変数のものも含む)へは
+// 未対応．メンバ配列はコンパイル時に確定したアドレスに配置されるため技術的には書き込み先にできるが，
+// printやstreq/strcopyのように任意の式(parse_expr)を受け付ける構文にはまだ拡張していない(将来対応予定)
 node_t *Parser::parse_scan() {
     node_t *node = this->new_node(ND_SCAN);
     this->get_token(TK_SCAN);                         // scan
@@ -523,6 +526,32 @@ node_t *Parser::parse_scan() {
     var->sval = this->get_token(TK_IDENT).value;
     node->children.push_back(var);
     this->get_token(TK_RPAREN);                       // )
+    return node;
+}
+
+// 組み込み関数streqを解析してND_STREQを返す
+// 構文: streq ( char配列 , char配列 )  ※ 両方の内容が一致するか比較する
+node_t *Parser::parse_streq() {
+    node_t *node = this->new_node(ND_STREQ);
+    this->get_token(TK_STREQ);                       // streq
+    this->get_token(TK_LPAREN);                      // (
+    node->children.push_back(this->parse_expr());    // 比較対象1
+    this->get_token(TK_COMMA);                       // ,
+    node->children.push_back(this->parse_expr());    // 比較対象2
+    this->get_token(TK_RPAREN);                      // )
+    return node;
+}
+
+// 組み込み関数strcopyを解析してND_STRCOPYを返す
+// 構文: strcopy ( char配列 , char配列 )  ※ 第2引数の内容を第1引数へヌル終端付きでコピーする
+node_t *Parser::parse_strcopy() {
+    node_t *node = this->new_node(ND_STRCOPY);
+    this->get_token(TK_STRCOPY);                     // strcopy
+    this->get_token(TK_LPAREN);                      // (
+    node->children.push_back(this->parse_expr());    // コピー先
+    this->get_token(TK_COMMA);                       // ,
+    node->children.push_back(this->parse_expr());    // コピー元
+    this->get_token(TK_RPAREN);                      // )
     return node;
 }
 
@@ -916,9 +945,11 @@ node_t *Parser::parse_primary() {
         return this->parse_sizeof();
     }
 
-    // 組み込み関数print/scan (予約語のため専用トークンで判定する)
-    if (this->token_kind_is(TK_PRINT)) return this->parse_print();
-    if (this->token_kind_is(TK_SCAN))  return this->parse_scan();
+    // 組み込み関数print/scan/streq/strcopy (予約語のため専用トークンで判定する)
+    if (this->token_kind_is(TK_PRINT))   return this->parse_print();
+    if (this->token_kind_is(TK_SCAN))    return this->parse_scan();
+    if (this->token_kind_is(TK_STREQ))   return this->parse_streq();
+    if (this->token_kind_is(TK_STRCOPY)) return this->parse_strcopy();
 
     // 整数リテラル
     if (this->token_kind_is(TK_INT_LIT)) {

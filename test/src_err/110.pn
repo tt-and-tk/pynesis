@@ -1,0 +1,6 @@
+// 構文解析エラー: streqは予約語のため関数名に使えない (異常系)
+void streq(void) {
+}
+void main(void) {
+    streq();
+}

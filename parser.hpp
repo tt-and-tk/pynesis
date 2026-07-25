@@ -47,6 +47,8 @@ typedef enum {
     ND_CALL,        // 関数呼び出し
     ND_PRINT,       // 組み込み関数print (標準出力)
     ND_SCAN,        // 組み込み関数scan (標準入力)
+    ND_STREQ,       // 組み込み関数streq (char配列2つの内容比較)
+    ND_STRCOPY,     // 組み込み関数strcopy (char配列のコピー)
     ND_ASSIGN,      // 代入式
     ND_BINOP,       // 二項演算
     ND_UNOP,        // 前置単項演算
@@ -135,6 +137,8 @@ private:
     node_t *parse_param();      // 関数パラメータ (型 名前)
     node_t *parse_print();      // 組み込み関数print(char配列)
     node_t *parse_scan();       // 組み込み関数scan(char配列)
+    node_t *parse_streq();      // 組み込み関数streq(char配列, char配列)
+    node_t *parse_strcopy();    // 組み込み関数strcopy(char配列, char配列)
     node_t *parse_sizeof();     // sizeof(型名 または 変数名)
     node_t *parse_expr_stmt();  // 式文 (式 ;)
     // 式解析メソッド群

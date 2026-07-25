@@ -1,0 +1,7 @@
+// strcopyによる文字列コピー (グローバル配列からグローバル配列へ)
+char src[] = "hi";
+char dst[5];
+
+void main(void) {
+    strcopy(dst, src);
+}
