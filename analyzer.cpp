@@ -676,8 +676,7 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
         throw std::string("compiler error: ") + builtin_name + " requires a char array at line "
               + std::to_string(target->line);
     }
-    // 関数の配列引数は呼び出し元によってサイズが変わり得るため，サイズ不明(array_size==0)として
-    // 扱われる．そのような配列引数の場合はエラー
+    // 関数の配列引数(サイズ不明，array_size==0)の場合はエラー
     if (target->type.array_size == 0) {
         throw std::string("compiler error: ") + builtin_name
               + " does not support array parameters (size unknown) at line " + std::to_string(target->line);
