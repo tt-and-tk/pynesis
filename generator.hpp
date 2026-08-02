@@ -17,7 +17,7 @@ public:
               const std::map<std::string, std::vector<const symbol_t *>> &func_params,
               const std::map<std::string, struct_def_t> &struct_defs,
               int scratch_base, std::ofstream &asm_file);
-    void operator()();   // コード生成を実行して .asm に書き出す
+    void operator()();   // コード生成を実行して .pt に書き出す
 
 private:
     node_t *root_;                                            // 注釈付きAST
