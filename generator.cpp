@@ -67,7 +67,7 @@ Generator::Generator(node_t *root, const std::map<std::string, const symbol_t *>
     : root_(root), symbols_(symbols), func_params_(func_params), struct_defs_(struct_defs),
       scratch_base_(scratch_base), asm_file_(asm_file) {}
 
-// コード生成を実行して .asm に書き出す
+// コード生成を実行して .pt に書き出す
 void Generator::operator()() {
     this->gen_program();
 }
