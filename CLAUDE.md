@@ -53,8 +53,7 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 
 ## 詳細ドキュメント
 
-- 対応するC言語機能・コンパイラ設計上の制約・将来対応予定 → `../specification/compiler.md`・`../specification/limitations.md`(このリポジトリ内には転記しない．唯一の一次情報源．considerセッションで決定済み，内部設計(構文解析手法・コード生成戦略等)は開発セッションで決定する)
-- コンパイラ内部のソースファイル分割方針 → `docs/architecture.md`
+対応するC言語機能・コンパイラ設計上の制約・将来対応予定は`../specification/index.md`を参照(唯一の一次情報源．このリポジトリ内には転記しない．considerセッションで決定済み，内部設計(構文解析手法・コード生成戦略等)は開発セッションで決定する)。コンパイラ内部のソースファイル分割方針はソースファイル自体を参照。
 
 ## テスト方法
 
