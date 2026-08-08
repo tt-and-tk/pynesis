@@ -33,25 +33,6 @@ CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
 g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cpp lexer.cpp parser.cpp analyzer.cpp generator.cpp ../assembler/asm2bin.cpp
 ```
 
-## ソースファイル構成
-
-コンパイラのパイプライン段階ごとに1ファイルペアを割り当てる．
-
-| ファイル | 担当 | 宣言する型 |
-|:-|:-|:-|
-| `lexer.hpp` / `lexer.cpp` | 字句解析 | `token_kind_t`，`token_t` |
-| `parser.hpp` / `parser.cpp` | 構文解析(`Parser`クラス) | `base_type_t`，`type_t`，`node_kind_t`，`node_t` |
-| `analyzer.hpp` / `analyzer.cpp` | 意味解析 | `symbol_t` |
-| `generator.hpp` / `generator.cpp` | コード生成 | (なし) |
-| `c2asm.hpp` / `c2asm.cpp` | main・引数処理・パイプライン接続 | `args_t` (ファイル内のみ) |
-| `c2bin.cpp` | Pynesisソース→アセンブリ→`.sv`まで一貫して変換する入口(`compile_c_to_asm`と`assemble_asm_to_sv`を順に呼ぶだけ) | (なし) |
-
-設計原則:
-
-- 段階間のインターフェース型は**生成する側のヘッダ**に置く(トークンはLexerが作るので`lexer.hpp`，ASTはParserが作るので`parser.hpp`)
-- includeの依存はパイプラインの流れと一致する(`lexer.hpp ← parser.hpp ← analyzer.hpp ← generator.hpp`)
-- 段階内でしか使わない型・テーブルはhppに置かずcpp内に置く
-
 ## コーディング規約
 
 `.claude/coding_conventions.md` に従うこと．  
@@ -63,32 +44,6 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 
 **例外:** `CLAUDE.md`や`.claude/skills/`配下のスキル定義ファイルの修正は，ソースコードの変更ではないためissue起票は不要．ただしブランチ作成は必要(デフォルトブランチを直接編集しない)．作業中の既存ブランチがあれば，新たにブランチを切らずそれに乗せてよい．
 
-## 自作CPUアーキテクチャ概要
-
-コンパイラ設計に関わる主要な仕様を記載する．詳細は `../specification/` を参照．
-
-### コンパイラ設計上の制約
-
-- プログラム最大命令数: **4096命令**(ハードウェア制約ではなく，現行のROM読み出し回路(組合せ論理)がLUT資源のみで安全に収まる範囲として設定したソフトウェア側の暫定上限．ROM自体の容量はコンパイル対象プログラムのサイズに応じてアセンブラが自動算出するため固定値ではない．超過は`c2asm.cpp`がアセンブリ生成後に静的検査してコンパイルエラーにする．詳細は`../specification/limitations.md`を参照)
-- 関数呼び出しネスト上限: **10段**(ハードウェア制約．超過・再帰呼び出しは`analyzer.cpp`の呼び出しグラフ検査(`check_call_depth`)で静的検査してコンパイルエラーにする)
-- CALL/RETの戻り先管理はハードウェアが行う
-- 条件分岐(F系)はPCへの**相対**オフセット加算(true時)，false時はPCをインクリメント
-- JMPはレジスタ値または即値の**絶対**アドレスへジャンプ
-- DIV命令は商と余りの両方を計算する
-- グローバル変数は**絶対アドレス**配置(将来OSに対応する際に相対アドレスへ移行予定)
-- ローカル変数も**絶対アドレス**の静的割り当て(SPが読み書き禁止でスタック構築不可)．このため**再帰呼び出しは非対応**
-
-## 将来対応予定
-
-現状はスモールスタートの簡易実装．以下は将来の移行・対応計画(詳細は `../specification/compiler.md`)．
-
-| 項目 | 現状 | 将来 | 前提 |
-|:-|:-|:-|:-|
-| グローバル変数の配置 | 絶対アドレス | 相対アドレス | OS(プログラムのロード実行)対応 |
-| ローカル変数の配置 | 絶対アドレスの静的割り当て | 相対アドレス | 同上 |
-| 再帰呼び出し | 非対応 | 対応 | SP(`6'h10`)を使用可能にするハードウェア変更 |
-| `long` / 配列 / 関数引数・戻り値 | 非対応 | 対応 | (compiler.mdの未対応機能表を参照) |
-
 ## セッション一覧
 
 | セッション名 | 役割 |
@@ -96,17 +51,14 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 | consider | 仕様検討．対応するC言語機能の範囲，コンパイラの設計方針を決定する |
 | develop | 開発．コンパイラの実装・テストを行う |
 
-## 対応するC言語機能
+## 詳細ドキュメント
 
-`../specification/compiler.md` を参照．considerセッションで決定済み．
-
-## コンパイラの設計
-
-`../specification/compiler.md` の概要を参照．内部設計(構文解析手法・コード生成戦略等)は開発セッションで決定する．
+- 対応するC言語機能・コンパイラ設計上の制約・将来対応予定 → `../specification/compiler.md`・`../specification/limitations.md`(このリポジトリ内には転記しない．唯一の一次情報源．considerセッションで決定済み，内部設計(構文解析手法・コード生成戦略等)は開発セッションで決定する)
+- コンパイラ内部のソースファイル分割方針 → `docs/architecture.md`
 
 ## テスト方法
 
-アセンブラのテスト方針を踏襲する．
+アセンブラ(`../assembler/CLAUDE.md`)のテスト方針を踏襲する．
 
 1. テスト用のPynesisソースファイルを用意する
 2. 期待値のアセンブリファイルを手動で用意する
