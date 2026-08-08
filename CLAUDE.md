@@ -38,6 +38,12 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 `.claude/coding_conventions.md` に従うこと．  
 アセンブラ(`../assembler/`)のコードを実装の参考にすること．
 
+## 権限設定(permissions)の方針
+
+このリポジトリの`.claude/settings.json`は，`permissions.defaultMode`を`"auto"`にしている．個別のコマンドを`permissions.allow`に網羅的に列挙する運用はしない(実行するコマンドの種類が多く，網羅すること自体が困難なため)．ソースコード修正やコミット・push等の各種コマンド実行は，このauto modeの判断に委ねて自動で進行させる想定である．
+
+`permissions.deny`には，auto modeの判断に関わらず絶対に実行してほしくない操作(PRのマージ・Ready化，issueのクローズ，`git push --force`・`git reset --hard`等の破壊的操作)のみを列挙する．`permissions.ask`には，`rm -rf`(疑似隔離のclone削除等，正当な用途があるため一律禁止にはしないが，実行前に必ず確認したい操作)を列挙する．
+
 ## Issue対応の徹底
 
 ファイルを修正する場合は，必ず対応するGitHub issueを起票し，そのissue用のブランチ(`fix/issue-<番号>-<内容を表す短い語句>`)を作成してから行う．デフォルトブランチを直接編集しない．
