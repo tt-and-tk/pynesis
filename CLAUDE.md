@@ -42,7 +42,9 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2bin.exe c2bin.cpp c2asm.cp
 
 このリポジトリの`.claude/settings.json`は，`permissions.defaultMode`を`"auto"`にしている．個別のコマンドを`permissions.allow`に網羅的に列挙する運用はしない(実行するコマンドの種類が多く，網羅すること自体が困難なため)．ソースコード修正やコミット・push等の各種コマンド実行は，このauto modeの判断に委ねて自動で進行させる想定である．
 
-`permissions.deny`には，auto modeの判断に関わらず絶対に実行してほしくない操作(PRのマージ・Ready化，issueのクローズ，`git push --force`・`git reset --hard`等の破壊的操作)のみを列挙する．`permissions.ask`には，`rm -rf`(疑似隔離のclone削除等，正当な用途があるため一律禁止にはしないが，実行前に必ず確認したい操作)を列挙する．
+`permissions.deny`には，auto modeの判断に関わらず絶対に実行してほしくない操作(PRのマージ・Ready化，issueのクローズ，`git push --force`・`git reset --hard`・`git clean -f`・`git branch -D`・`git push --delete`等の破壊的操作)のみを列挙する．`permissions.ask`には，`rm -rf`(疑似隔離のclone削除等，正当な用途があるため一律禁止にはしないが，実行前に必ず確認したい操作)を列挙する．
+
+上記に加えて，`.claude/hooks/protect-default-branch.sh`(hooks)が，デフォルトブランチ上での`git add`/`git commit`を別途拒否する．auto modeの判断やpermissionsのdeny/askとは独立した，第三の強制レイヤーである．
 
 ## Issue対応の徹底
 
