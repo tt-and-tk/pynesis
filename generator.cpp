@@ -320,7 +320,7 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
     this->asm_file_ << "    mov fh r0 r" << (reg + 5) << " " << (sym->type.array_size - 1) << "\n";  // r{reg+5} = 配列サイズ-1
     this->asm_file_ << "    mov fh r0 r" << (reg + 6) << " 1\n";                        // r{reg+6} = 1
     this->asm_file_ << "    mov fh r0 r" << (reg + 7) << " 0\n";                        // r{reg+7} = 0
-    this->asm_file_ << "    mov fh r0 r" << (reg + 8) << " 127\n";                      // r{reg+8} = DEL(0x7F)
+    this->asm_file_ << "    mov fh r0 r" << (reg + 8) << " 7Fh\n";                      // r{reg+8} = DEL(0x7F)
 
     // 先頭の改行はすべて読み飛ばす
     this->asm_file_ << "    scan r" << reg << "\n";

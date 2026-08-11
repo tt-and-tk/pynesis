@@ -6,7 +6,7 @@ main:
     mov fh r0 r5 7
     mov fh r0 r6 1
     mov fh r0 r7 0
-    mov fh r0 r8 127
+    mov fh r0 r8 7Fh
     scan r0
 .L0:
     ne r0 r4 .L1
@@ -36,7 +36,7 @@ main:
     mov fh r0 r5 7
     mov fh r0 r6 1
     mov fh r0 r7 0
-    mov fh r0 r8 127
+    mov fh r0 r8 7Fh
     scan r0
 .L6:
     ne r0 r4 .L7
