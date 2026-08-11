@@ -299,16 +299,19 @@ void Generator::gen_print_string(const symbol_t *sym, int reg) {
 // 標準入力を改行(\n=10)まで読み込み，char配列へヌル終端付きで格納するループを生成する
 // 先頭の改行はすべて読み飛ばす．配列サイズ-1文字を超えたら追加のscanを行わず打ち切る
 // (超過分は次にscanを実行したときに読み込まれる．そのためのscanが1回多く消費されることはない)
+// DEL(0x7F，バックスペース)を受け取った場合は，直前に格納した1文字分インデックスを戻す(先頭では何もしない)
 // レジスタ使用: r{reg}=読み込んだ文字, r{reg+1}=インデックス, r{reg+2}=ベースアドレス(不変), r{reg+3}=アドレス(作業用),
 //              r{reg+4}='\n'(不変), r{reg+5}=配列サイズ-1(格納できる最大文字数，不変), r{reg+6}=1(インデックス加算用，不変),
-//              r{reg+7}=0(ヌル終端書き込み用，不変)
+//              r{reg+7}=0(ヌル終端書き込み用兼インデックス0判定用，不変), r{reg+8}=DEL(0x7F，不変)
 void Generator::gen_scan_line(const symbol_t *sym, int reg) {
-    if (reg + 7 >= MAX_REG) {
+    if (reg + 8 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers)");
     }
     const std::string skip_loop = this->new_label();
     const std::string skip_end = this->new_label();
     const std::string read_loop = this->new_label();
+    const std::string del_branch = this->new_label();
+    const std::string scan_next = this->new_label();
     const std::string read_end = this->new_label();
 
     // 必要な変数をレジスタに格納する
@@ -317,6 +320,7 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
     this->asm_file_ << "    mov fh r0 r" << (reg + 5) << " " << (sym->type.array_size - 1) << "\n";  // r{reg+5} = 配列サイズ-1
     this->asm_file_ << "    mov fh r0 r" << (reg + 6) << " 1\n";                        // r{reg+6} = 1
     this->asm_file_ << "    mov fh r0 r" << (reg + 7) << " 0\n";                        // r{reg+7} = 0
+    this->asm_file_ << "    mov fh r0 r" << (reg + 8) << " 7Fh\n";                      // r{reg+8} = DEL(0x7F)
 
     // 先頭の改行はすべて読み飛ばす
     this->asm_file_ << "    scan r" << reg << "\n";
@@ -330,11 +334,18 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";                        // r{reg+1} = インデックス(0)
     this->asm_file_ << read_loop << ":\n";
     this->asm_file_ << "    eq r" << reg << " r" << (reg + 4) << " " << read_end << "\n";  // 改行なら終了
+    this->asm_file_ << "    eq r" << reg << " r" << (reg + 8) << " " << del_branch << "\n";  // DELならバックスペース処理へ
     this->asm_file_ << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 3) << "\n";  // アドレス = base+index
     this->asm_file_ << "    wm 1h r" << (reg + 3) << " r" << reg << "\n";                // buf[index] = 文字
     this->asm_file_ << "    add r" << (reg + 1) << " r" << (reg + 6) << " r" << (reg + 1) << "\n";  // index += 1
     // 配列サイズ上限に達したら，これ以上scanせずに打ち切る (残りは次回のscanで読む)
     this->asm_file_ << "    egt r" << (reg + 1) << " r" << (reg + 5) << " " << read_end << "\n";
+    this->asm_file_ << "    jmp " << scan_next << "\n";
+    // バックスペース: 先頭(インデックス0)なら取り消す文字が無いので何もしない
+    this->asm_file_ << del_branch << ":\n";
+    this->asm_file_ << "    eq r" << (reg + 1) << " r" << (reg + 7) << " " << scan_next << "\n";
+    this->asm_file_ << "    sub r" << (reg + 1) << " r" << (reg + 6) << " r" << (reg + 1) << "\n";  // index -= 1
+    this->asm_file_ << scan_next << ":\n";
     this->asm_file_ << "    scan r" << reg << "\n";
     this->asm_file_ << "    jmp " << read_loop << "\n";
     this->asm_file_ << read_end << ":\n";
