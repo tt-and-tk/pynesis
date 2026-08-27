@@ -19,7 +19,7 @@ typedef struct {
 static void get_args(int argc, char **argv, args_t &args);     // コマンドライン引数を取得する
 
 // メイン関数: compile_c_to_asmをそのまま呼ぶだけ
-// c2bin.cppに直接組み込むビルド(C2ASM_NO_MAIN定義時)ではmain多重定義を避けるため除外する
+// c2sv.cppに直接組み込むビルド(C2ASM_NO_MAIN定義時)ではmain多重定義を避けるため除外する
 #ifndef C2ASM_NO_MAIN
 int main(int argc, char **argv) {
     return compile_c_to_asm(argc, argv);
