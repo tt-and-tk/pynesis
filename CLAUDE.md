@@ -28,7 +28,7 @@ CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
 - `asm2sv.exe`: `-pt`(入力アセンブリファイル) `-sv`(出力`.sv`ファイル，省略時は`.pt`から自動導出)
 - `c2sv.exe`: `-pn` `-pt` `-sv` の3つ全てを指定する(自動導出はサポートしない．省略すると内部でエラーになる)
 
-`c2sv.exe`のビルドには，`c2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`C2ASM_NO_MAIN`・`ASM2BIN_NO_MAIN`)を指定し，両者の本処理ソースを`c2sv.cpp`と一緒にコンパイルする．`ASM2BIN_NO_MAIN`は，`asm2sv.cpp`側のプリプロセッサガード名が改名されていないためこの名前のまま使う．
+`c2sv.exe`のビルドには，`c2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`C2ASM_NO_MAIN`・`ASM2BIN_NO_MAIN`)を指定し，両者の本処理ソースを`c2sv.cpp`と一緒にコンパイルする．
 ```
 g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2sv.exe c2sv.cpp c2asm.cpp lexer.cpp parser.cpp analyzer.cpp generator.cpp ../assembler/asm2sv.cpp
 ```
