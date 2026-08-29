@@ -12,7 +12,7 @@ import tempfile
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COMPILER_DIR = os.path.dirname(SCRIPT_DIR)
 SRC_ERR_DIR = os.path.join(SCRIPT_DIR, "src_err")
-C2ASM = os.path.join(COMPILER_DIR, "c2asm.exe")
+PN2ASM = os.path.join(COMPILER_DIR, "pn2asm.exe")
 
 def main():
     if not os.path.isdir(SRC_ERR_DIR):
@@ -36,7 +36,7 @@ def main():
             asm_path = os.path.join(tmpdir, src_file.replace(".pn", ".pt"))
 
             result = subprocess.run(
-                [C2ASM, "-pn", src_path, "-pt", asm_path],
+                [PN2ASM, "-pn", src_path, "-pt", asm_path],
                 capture_output=True,
                 text=True,
             )

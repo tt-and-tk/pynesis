@@ -11,7 +11,7 @@ const int MAX_CALL_DEPTH = 10;
 // ソフトウェア側の安全上限: プログラムの最大命令数
 // (ROM自体に固定容量は無く，ROM_SIZEはコンパイル対象プログラムのサイズに応じてアセンブラが自動算出する．
 //  現行のROM読み出し回路は組合せ論理でLUT資源を消費するため，その範囲で安全に収まる値として設定．
-//  c2asm.cppで生成後に検査する．詳細は ../specification/limitations.md を参照)
+//  pn2asm.cppで生成後に検査する．詳細は ../specification/limitations.md を参照)
 const int MAX_INSTRUCTION_COUNT = 4096;
 // ハードウェア制約: 汎用レジスタの本数 (r0〜r15の16本)
 const int MAX_REG = 16;

@@ -18,19 +18,19 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 入力(.pn) → [pynesis(本リポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
 ```
 
-`c2sv.cpp`(`c2sv.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
-内部では`c2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2sv.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_c_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
-`c2asm.exe`・`../assembler/asm2sv.exe`は単体の実行ファイルとしても引き続き動作する．  
-**このプロジェクトのテスト対象は`c2asm.cpp`(アセンブリ生成まで)のままとする**．`c2sv`はビルド確認のみで自動テストの対象外．
+`pn2sv.cpp`(`pn2sv.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
+内部では`pn2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2sv.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_pn_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
+`pn2asm.exe`・`../assembler/asm2sv.exe`は単体の実行ファイルとしても引き続き動作する．  
+**このプロジェクトのテスト対象は`pn2asm.cpp`(アセンブリ生成まで)のままとする**．`pn2sv`はビルド確認のみで自動テストの対象外．
 
 CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
-- `c2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出)
+- `pn2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出)
 - `asm2sv.exe`: `-pt`(入力アセンブリファイル) `-sv`(出力`.sv`ファイル，省略時は`.pt`から自動導出)
-- `c2sv.exe`: `-pn` `-pt` `-sv` の3つ全てを指定する(自動導出はサポートしない．省略すると内部でエラーになる)
+- `pn2sv.exe`: `-pn` `-pt` `-sv` の3つ全てを指定する(自動導出はサポートしない．省略すると内部でエラーになる)
 
-`c2sv.exe`のビルドには，`c2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`C2ASM_NO_MAIN`・`ASM2BIN_NO_MAIN`)を指定し，両者の本処理ソースを`c2sv.cpp`と一緒にコンパイルする．
+`pn2sv.exe`のビルドには，`pn2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`PN2ASM_NO_MAIN`・`ASM2BIN_NO_MAIN`)を指定し，両者の本処理ソースを`pn2sv.cpp`と一緒にコンパイルする．
 ```
-g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2sv.exe c2sv.cpp c2asm.cpp lexer.cpp parser.cpp analyzer.cpp generator.cpp ../assembler/asm2sv.cpp
+g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.cpp lexer.cpp parser.cpp analyzer.cpp generator.cpp ../assembler/asm2sv.cpp
 ```
 
 ## コーディング規約
@@ -77,7 +77,7 @@ g++ -std=c++17 -DC2ASM_NO_MAIN -DASM2BIN_NO_MAIN -o c2sv.exe c2sv.cpp c2asm.cpp 
 
 ## 開発フロー
 
-1. `c2asm`がPynesisソースファイルをアセンブリファイル(`.pt`)に翻訳する
+1. `pn2asm`がPynesisソースファイルをアセンブリファイル(`.pt`)に翻訳する
 2. `asm2sv`(アセンブラ)がアセンブリファイルをSystemVerilog ROMファイル(`.sv`)に変換する
-3. `c2sv`は上記1・2を順に呼び出し，Pynesisソースから`.sv`まで一貫して変換する
-4. テストでは`c2asm`の翻訳結果(アセンブリ)が期待値と一致するか確認する(`c2sv`はテスト対象外)
+3. `pn2sv`は上記1・2を順に呼び出し，Pynesisソースから`.sv`まで一貫して変換する
+4. テストでは`pn2asm`の翻訳結果(アセンブリ)が期待値と一致するか確認する(`pn2sv`はテスト対象外)

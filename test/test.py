@@ -14,14 +14,14 @@ COMPILER_DIR = os.path.dirname(SCRIPT_DIR)
 SRC_DIR = os.path.join(SCRIPT_DIR, "src")
 ASM_DIR = os.path.join(SCRIPT_DIR, "asm")
 ASM_ANS_DIR = os.path.join(SCRIPT_DIR, "asm_ans")
-C2ASM = os.path.join(COMPILER_DIR, "c2asm.exe")
+PN2ASM = os.path.join(COMPILER_DIR, "pn2asm.exe")
 
 # ビルド対象のソース一式
-SOURCES = ["lexer.cpp", "parser.cpp", "analyzer.cpp", "generator.cpp", "c2asm.cpp"]
+SOURCES = ["lexer.cpp", "parser.cpp", "analyzer.cpp", "generator.cpp", "pn2asm.cpp"]
 
 def build_compiler():
     """コンパイラをビルドする。成功すれば True を返す。"""
-    cmd = ["g++", "-Wall", "-Wextra", "-std=c++17", "-o", C2ASM]
+    cmd = ["g++", "-Wall", "-Wextra", "-std=c++17", "-o", PN2ASM]
     cmd += [os.path.join(COMPILER_DIR, s) for s in SOURCES]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -57,7 +57,7 @@ def main():
         ans_path = os.path.join(ASM_ANS_DIR, asm_name)
 
         result = subprocess.run(
-            [C2ASM, "-pn", src_path, "-pt", asm_path],
+            [PN2ASM, "-pn", src_path, "-pt", asm_path],
             capture_output=True,
             text=True,
         )
