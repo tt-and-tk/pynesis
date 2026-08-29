@@ -3,7 +3,7 @@
 #include <map>
 #include <sstream>
 
-#include "c2asm.hpp"
+#include "pn2asm.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "analyzer.hpp"
@@ -18,17 +18,17 @@ typedef struct {
 // 前宣言
 static void get_args(int argc, char **argv, args_t &args);     // コマンドライン引数を取得する
 
-// メイン関数: compile_c_to_asmをそのまま呼ぶだけ
-// c2sv.cppに直接組み込むビルド(C2ASM_NO_MAIN定義時)ではmain多重定義を避けるため除外する
-#ifndef C2ASM_NO_MAIN
+// メイン関数: compile_pn_to_asmをそのまま呼ぶだけ
+// pn2sv.cppに直接組み込むビルド(PN2ASM_NO_MAIN定義時)ではmain多重定義を避けるため除外する
+#ifndef PN2ASM_NO_MAIN
 int main(int argc, char **argv) {
-    return compile_c_to_asm(argc, argv);
+    return compile_pn_to_asm(argc, argv);
 }
 #endif
 
 // Pynesisソースをアセンブリに変換する本処理
 // 処理に成功したら0，失敗したら1を返す
-int compile_c_to_asm(int argc, char **argv) {
+int compile_pn_to_asm(int argc, char **argv) {
     args_t args;                                // コマンドライン引数
     std::vector<token_t> tokens;                // トークン列 (字句解析結果)
     node_t *ast = nullptr;                      // AST (構文解析結果)
