@@ -21,7 +21,7 @@ typedef struct {
     // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
     // メンバの型としてbase==BASE_STRUCTが現れることはそもそもない
     std::string struct_name;
-    // const修飾されているかどうか (スカラー変数宣言でのみtrueになりうる．それ以外への付与は構文解析でエラーにする)
+    // const修飾されているかどうか (constを付けられない対象への付与は構文解析でエラーにする)
     bool is_const = false;
 } type_t;
 

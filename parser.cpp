@@ -627,7 +627,7 @@ node_t *Parser::parse_param() {
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [const] [signed|unsigned] 型 変数名 [= 式] ;
-// const変数はスカラー型(int/char/short)のみで，初期化子を必須とする．
+// const変数はスカラー型のみで，初期化子を必須とする．
 // 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
 //   struct 構造体名 変数名;         (単一変数)
 //   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
