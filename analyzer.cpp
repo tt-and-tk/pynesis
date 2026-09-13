@@ -386,7 +386,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         if (sym == nullptr) {
             sym = this->resolve_global_const(expr->sval);
         }
-        // シンボルも宣言もない名前は未宣言
+        // シンボル表にも宣言にもない名前の場合 (未宣言なのでエラーにする)
         if (sym == nullptr && !this->global_var_decls_.count(expr->sval)) {
             throw std::string("compiler error: use of undeclared identifier '") + expr->sval
                   + "' at line " + std::to_string(expr->line);
