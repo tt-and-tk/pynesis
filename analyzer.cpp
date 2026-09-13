@@ -959,27 +959,33 @@ void Analyzer::analyze_expr(node_t *expr) {
 
         // 代入: 左辺は書き込み可能なスカラーの変数・構造体メンバまたは配列要素でなければならない
         case ND_ASSIGN: {
-            node_t *lhs = expr->children[0];
+            node_t *lhs = expr->children[0];   // 代入先(左辺)
             // 左辺を名前解決する
             if (lhs->kind == ND_VAR) {
                 // 変数はanalyze_exprを通さず直接名前解決する
-                // (analyze_exprはconst変数を整数リテラルに置き換えて書き込み可否の検査をすり抜けさせ，
-                //  読み取り不可の変数への単純代入も読み取り検査でエラーにしてしまうため)
-                const symbol_t *sym = this->lookup_symbol(lhs->sval);
+                // (analyze_exprの変数参照は値を読み出す側の検査であり，const変数を値のリテラルに置き換え，
+                //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
+                //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
+                const symbol_t *sym = this->lookup_symbol(lhs->sval);   // 左辺の変数のシンボル
+                // 宣言されていない変数の場合
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + lhs->sval + "' at line " + std::to_string(lhs->line);
                 }
+                // 名前解決の結果と型を左辺に注釈する
                 lhs->sym  = sym;
                 lhs->type = sym->type;
             } else if (lhs->kind == ND_ARRAY_ACCESS || lhs->kind == ND_MEMBER_ACCESS) {
                 // 配列要素・構造体メンバはそれぞれのアクセスの検査に名前解決させる
                 this->analyze_expr(lhs);
             } else {
+                // 変数・配列要素・構造体メンバ以外(リテラルや式の結果)には代入できない
                 throw std::string("compiler error: left side of assignment must be a variable at line ")
                       + std::to_string(expr->line);
             }
+            // 配列・構造体そのものへの代入を禁止する
             Analyzer::check_scalar_operand(lhs, "assignment");
+            // 書き込みできない左辺には代入できない
             if (!lhs->sym->writable) {
                 throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not writable at line " + std::to_string(lhs->line);
@@ -995,6 +1001,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot assign void value at line ")
                       + std::to_string(expr->line);
             }
+            // 代入式の値の型は左辺の型とする
             expr->type = lhs->type;
             return;
         }
