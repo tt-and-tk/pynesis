@@ -28,6 +28,7 @@ static int lex_source(const std::string &src, const std::string &file_name, cons
 // #で始まる指令を読み，#includeならファイルを展開し，#pragma onceなら記録する
 static void lex_directive(const std::string &src, int &i, const loc_t &loc,
                           const std::string &key, include_state_t &state, std::vector<token_t> &tokens);
+static void check_directive_line_end(const std::string &src, int i, const loc_t &loc);  // 指令の後ろの同じ行に空白とコメント以外が無いことを確認する
 static std::string read_word(const std::string &src, int &i);  // 現在位置から識別子に使える文字の並びを読み進めて返す
 static token_kind_t get_keyword_kind(const std::string &word);  // 識別子がキーワードならその種別を，そうでなければ TK_IDENT を返す
 
@@ -262,6 +263,13 @@ static void lex_directive(const std::string &src, int &i, const loc_t &loc,
                           const std::string &key, include_state_t &state, std::vector<token_t> &tokens) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
 
+    // 指令は行頭に書く (#の前の同じ行には空白だけを置ける)
+    int before = i - 1;  // #の前の同じ行を後ろから調べる位置
+    while (before >= 0 && (src[before] == ' ' || src[before] == '\t')) before--;
+    if (before >= 0 && src[before] != '\n') {
+        throw std::string("compiler error: directive must be at the beginning of a line at ") + loc_to_string(loc);
+    }
+
     // 指令名は#の直後に続けて書く
     i++;
     const std::string name = read_word(src, i);  // 指令名
@@ -287,6 +295,7 @@ static void lex_directive(const std::string &src, int &i, const loc_t &loc,
         if (pragma != "once") {
             throw std::string("compiler error: unknown pragma '") + pragma + "' at " + loc_to_string(loc);
         }
+        check_directive_line_end(src, i, loc);
         state.once.insert(key);
         return;
     }
@@ -302,6 +311,7 @@ static void lex_directive(const std::string &src, int &i, const loc_t &loc,
     }
     const std::string written = src.substr(start, i - start);  // 取り込み指令に書かれたパス
     i++;  // 閉じ " をスキップする
+    check_directive_line_end(src, i, loc);
 
     // 取り込むファイルもPynesisソースに限る
     if (written.length() < 3 || written.substr(written.length() - 3) != ".pn") {
@@ -330,6 +340,20 @@ static void lex_directive(const std::string &src, int &i, const loc_t &loc,
               + "' is included more than once (add '#pragma once' to it) at " + loc_to_string(loc);
     }
     lex_source(src_included, path, key_included, state, tokens);
+}
+
+// 指令の後ろの同じ行に，空白とコメント以外が書かれていないことを確認する
+// (位置iは読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
+static void check_directive_line_end(const std::string &src, int i, const loc_t &loc) {
+    const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
+    // 空白を読み飛ばす
+    while (i < src_size && (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')) i++;
+    const bool only_comment_follows =   // 行末・ファイル末尾・コメントの開始のいずれかか
+        i >= src_size || src[i] == '\n'
+        || (src[i] == '/' && i + 1 < src_size && (src[i + 1] == '/' || src[i + 1] == '*'));
+    if (!only_comment_follows) {
+        throw std::string("compiler error: unexpected text after directive at ") + loc_to_string(loc);
+    }
 }
 
 // 現在位置から識別子に使える文字(英数字と_)の並びを読み進めて返す

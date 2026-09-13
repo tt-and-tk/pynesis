@@ -1,0 +1,4 @@
+// 字句解析エラー: 指令は行頭に書く (宣言の後ろの同じ行には書けない) (異常系)
+int g; #include "include/177_lib.pn"
+void main(void) {
+}

@@ -1,0 +1,4 @@
+// 字句解析エラー: #pragma onceの後ろの同じ行にはコメントのみ書ける (宣言は書けない) (異常系)
+#pragma once int g;
+void main(void) {
+}
