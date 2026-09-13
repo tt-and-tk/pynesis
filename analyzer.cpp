@@ -343,16 +343,13 @@ long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
     }
 
     // const変数の参照は確定済みの値を返す
+    // (見つからない名前は後続のパスで登録されるグローバル変数の場合もあるため未宣言とは断定せず，
+    //  通常の変数と同じく末尾の「定数式でない」エラーに落とす)
     if (expr->kind == ND_VAR) {
         const symbol_t *sym = this->lookup_symbol(expr->sval);
-        if (sym == nullptr) {
-            throw std::string("compiler error: use of undeclared identifier '") + expr->sval
-                  + "' at line " + std::to_string(expr->line);
-        }
-        if (sym->location == LOC_CONST) {
+        if (sym != nullptr && sym->location == LOC_CONST) {
             return sym->address;
         }
-        // 通常の変数は値がコンパイル時に確定しないので，末尾のエラーに落とす
     }
 
     // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない)
