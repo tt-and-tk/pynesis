@@ -789,6 +789,16 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
     }
 }
 
+// 演算の対象(名前解決・型注釈済み)がスカラーであることを検査する
+// 配列・構造体を丸ごと読み書きするコード生成の仕組みは無く，そのまま通すと先頭ワードだけを
+// 読み書きするコードになる(構造体は内部エラーになる)ため，意味解析の段階でエラーにする
+void Analyzer::check_scalar_operand(const node_t *target, const std::string &operation) {
+    if (target->type.is_array || target->type.base == BASE_STRUCT) {
+        throw std::string("compiler error: ") + operation + " is not supported for array or struct at line "
+              + std::to_string(target->line);
+    }
+}
+
 // 式を検査し，名前解決と型注釈を行う
 // ノード種別ごとに固有の検査を行い，子を持つノードは子へ再帰する．
 //   リテラル: 末端なので何もしない
@@ -947,7 +957,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 代入: 左辺は書き込み可能な変数・構造体メンバまたは配列要素でなければならない
+        // 代入: 左辺は書き込み可能なスカラーの変数・構造体メンバまたは配列要素でなければならない
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];
             // 配列要素への代入: 左辺を先に解析して名前解決する
@@ -965,6 +975,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             // 構造体メンバへの代入: 左辺を先に解析して名前解決する
             if (lhs->kind == ND_MEMBER_ACCESS) {
                 this->analyze_expr(lhs);
+                Analyzer::check_scalar_operand(lhs, "assignment");
                 if (!lhs->sym->writable) {
                     throw std::string("compiler error: '") + lhs->sym->name
                           + "' is not writable at line " + std::to_string(lhs->line);
@@ -1002,6 +1013,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             }
             lhs->sym  = sym;
             lhs->type = sym->type;
+            Analyzer::check_scalar_operand(lhs, "assignment");
             this->analyze_expr(expr->children[1]);   // 右辺を検査する
             // void関数の戻り値(値を持たない)を代入することはできない
             if (expr->children[1]->type.base == BASE_VOID) {
@@ -1012,7 +1024,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // インクリメント・デクリメント: 対象は読み書き両方可能な変数または構造体メンバでなければならない
+        // インクリメント・デクリメント: 対象は読み書き両方可能なスカラーの変数または構造体メンバでなければならない
         case ND_UNOP:
         case ND_POST_UNOP:
             if (expr->sval == "++" || expr->sval == "--") {
@@ -1043,6 +1055,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: operand of '") + expr->sval
                           + "' must be a variable at line " + std::to_string(expr->line);
                 }
+                Analyzer::check_scalar_operand(operand, "'" + expr->sval + "'");
                 if (!sym->readable || !sym->writable) {
                     throw std::string("compiler error: '") + sym->name
                           + "' is not readable and writable at line " + std::to_string(expr->line);

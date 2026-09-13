@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体変数のメンバ配列そのものへ代入できない (ローカル，異常系)
+struct Tag {
+    char name[4];
+};
+void main(void) {
+    struct Tag v;
+    v.name = 1;
+}
