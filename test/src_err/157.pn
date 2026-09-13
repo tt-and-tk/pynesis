@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体配列要素のメンバ配列そのものへ代入できない (ローカル，異常系)
+struct Entry {
+    char name[4];
+};
+void main(void) {
+    struct Entry arr[3];
+    arr[1].name = 1;
+}
