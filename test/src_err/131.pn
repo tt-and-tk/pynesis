@@ -1,5 +1,8 @@
-// 意味解析エラー: ローカルのconst変数の初期化子にもsizeof(変数名)は使えない (異常系)
+// 意味解析エラー: const変数の初期化子で配列パラメータ(サイズ不明)のsizeofは使えない (異常系)
+void f(int a[]) {
+    const int N = sizeof(a);
+}
 void main(void) {
-    int buf[4];
-    const int N = sizeof(buf);
+    int x[2];
+    f(x);
 }

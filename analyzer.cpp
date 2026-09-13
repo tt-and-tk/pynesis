@@ -37,13 +37,11 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
-    // 1パス目: グローバルのconst変数を登録する (構造体メンバ・グローバル変数の配列サイズがconst変数を参照しうる)
-    this->collect_global_consts();
+    // 1パス目: グローバル宣言の索引を作り，名前の重複を検査する
+    // (定数式が後方の宣言を参照しても，宣言ノードをたどって型・値を解決できるようにする)
+    this->index_global_decls();
 
-    // 2パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
-    this->collect_struct_decls();
-
-    // 3パス目: グローバル変数の登録と関数名の収集を行う
+    // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
 
     // プログラムの開始点となるmain関数が必要
@@ -51,7 +49,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 4パス目: 各関数本体を検査する
+    // 3パス目: 各関数本体を検査する
     // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
@@ -86,111 +84,157 @@ int Analyzer::scratch_base() const {
     return this->scratch_base_;
 }
 
-// 1パス目: プログラム直下のconst変数宣言を宣言順に登録する
-// 後続のパスが扱う構造体メンバ・グローバル変数の配列サイズや初期化子は宣言順によらずconst変数を参照できる．
-// 一方，const変数の初期化子自体はこのパスの中で評価するため，参照できるのは先に宣言されたconst変数に限られる
-void Analyzer::collect_global_consts() {
+// 1パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する
+// 定数式(配列サイズ・const変数の初期化子等)は後方で宣言された変数・const変数・構造体を参照しうるため，
+// それらの宣言ノードを名前から引けるようにしておき，2パス目で必要になった時点で型・値を解決する．
+// 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
+void Analyzer::index_global_decls() {
+    std::set<std::string> func_names;   // 関数名の重複検出用
     for (node_t *child : this->root_->children) {
-        if (child->kind != ND_VAR_DECL || !child->type.is_const) continue;
+        if (child->kind == ND_STRUCT_DECL) {
+            // 同じ名前の構造体を再定義することは禁止する
+            if (this->struct_decl_nodes_.count(child->sval)) {
+                throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
+            }
+            this->struct_decl_nodes_[child->sval] = child;
+            continue;
+        }
 
-        // 名前の重複チェック (ハードウェア変数・先に宣言したconst変数と衝突しないこと．
-        // 通常のグローバル変数・関数との衝突は3パス目のcollect_globalsが検出する)
-        if (this->symbols_.count(child->sval)) {
+        // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
+        if (this->symbols_.count(child->sval) || this->global_var_decls_.count(child->sval)
+            || func_names.count(child->sval)) {
             throw std::string("compiler error: redefinition of '") + child->sval
                   + "' at line " + std::to_string(child->line);
         }
-
-        symbol_t *sym = this->register_const_var(child);
-        this->symbols_[child->sval] = sym;
-        child->sym = sym;
+        if (child->kind == ND_VAR_DECL) {
+            this->global_var_decls_[child->sval] = child;
+        } else {
+            func_names.insert(child->sval);
+        }
     }
 }
 
-// 2パス目: プログラム直下の構造体定義(ND_STRUCT_DECL)を登録する
+// 宣言ノードの型を確定させる (確定済みなら何もしない)
+// 構造体型なら構造体定義を解決し，配列なら要素数を文字列リテラルの長さ，または定数式から計算して畳み込む
+void Analyzer::resolve_decl_type(node_t *decl) {
+    if (decl->type.base == BASE_STRUCT) {
+        // 宣言されている構造体が定義済みか確認する
+        if (!this->struct_decl_nodes_.count(decl->type.struct_name)) {
+            throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
+                  + "' at line " + std::to_string(decl->line);
+        }
+        this->resolve_struct_def(decl->type.struct_name);
+    }
+    // スカラー，または要素数が確定済みの配列 (配列の要素数は正の値に限るため，0は未確定を表す)
+    if (!decl->type.is_array || decl->type.array_size > 0) return;
+
+    if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
+        // 文字列リテラルによる初期化: char msg[] = "hello";
+        if (decl->type.base != BASE_CHAR) {
+            throw std::string("compiler error: string literal can only initialize char array at line ")
+                  + std::to_string(decl->children[0]->line);
+        }
+        // サイズは文字列長 + 1(ヌル終端)
+        decl->type.array_size = static_cast<int>(decl->children[0]->sval.size()) + 1;
+        return;
+    }
+
+    // サイズ明示の配列宣言: int table[10];
+    this->begin_resolving(decl);
+    const long long size = this->eval_const_expr(decl->children[0]);   // 配列の要素数
+    if (size <= 0) {
+        throw std::string("compiler error: array size must be positive at line ")
+              + std::to_string(decl->children[0]->line);
+    }
+    decl->type.array_size = static_cast<int>(size);
+    // サイズ式を畳み込み済みリテラルに置き換える
+    node_t *folded = new node_t;
+    folded->kind = ND_INT_LIT;
+    folded->ival = size;
+    folded->line = decl->children[0]->line;
+    decl->children[0] = folded;
+    this->end_resolving(decl);
+}
+
+// 構造体定義のメンバ構成を確定させ，struct_defs_に登録する (登録済みなら何もしない)
 // メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
 // 無名構造体に続けて即座に変数宣言されていた場合，その変数自体は別のND_VAR_DECLノードとして
 // root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
-// 変数宣言側は3パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
-void Analyzer::collect_struct_decls() {
-    for (node_t *child : this->root_->children) {
-        // 構造体定義(ND_STRUCT_DECL)以外(グローバル変数・関数定義)はここでは扱わないので読み飛ばす
-        if (child->kind != ND_STRUCT_DECL) continue;
+// 変数宣言側は2パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
+void Analyzer::resolve_struct_def(const std::string &name) {
+    if (this->struct_defs_.count(name)) return;
 
-        // 同じ名前の構造体を再定義することは禁止する
-        if (this->struct_defs_.count(child->sval)) {
-            throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
+    const node_t *decl = this->struct_decl_nodes_.at(name);   // 構造体定義ノード
+    this->begin_resolving(decl);
+
+    struct_def_t def;
+    def.total_words = 0;
+    std::set<std::string> member_names;   // メンバ名の重複検出用
+
+    for (node_t *member : decl->children) {
+        if (member_names.count(member->sval)) {
+            throw std::string("compiler error: duplicate member '") + member->sval
+                  + "' in struct '" + name + "' at line " + std::to_string(member->line);
         }
+        member_names.insert(member->sval);
 
-        struct_def_t def;
-        def.total_words = 0;
-        std::set<std::string> member_names;   // メンバ名の重複検出用
+        // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
+        this->resolve_decl_type(member);
 
-        for (node_t *member : child->children) {
-            if (member_names.count(member->sval)) {
-                throw std::string("compiler error: duplicate member '") + member->sval
-                      + "' in struct '" + child->sval + "' at line " + std::to_string(member->line);
-            }
-            member_names.insert(member->sval);
-
-            if (member->type.is_array) {
-                // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
-                const long long size = this->eval_const_expr(member->children[0]);
-                if (size <= 0) {
-                    throw std::string("compiler error: array size must be positive at line ")
-                          + std::to_string(member->children[0]->line);
-                }
-                member->type.array_size = static_cast<int>(size);
-                // サイズ式を畳み込み済みリテラルに置き換える
-                node_t *folded = new node_t;
-                folded->kind = ND_INT_LIT;
-                folded->ival = size;
-                folded->line = member->children[0]->line;
-                member->children[0] = folded;
-            }
-
-            const int words = member->type.is_array ? Analyzer::calc_array_words(member->type) : 1;
-            def.members.push_back({member->sval, member->type, def.total_words});
-            def.total_words += words;
-        }
-
-        this->struct_defs_[child->sval] = def;
+        const int words = member->type.is_array ? Analyzer::calc_array_words(member->type) : 1;
+        def.members.push_back({member->sval, member->type, def.total_words});
+        def.total_words += words;
     }
+
+    this->struct_defs_[name] = def;
+    this->end_resolving(decl);
+}
+
+// グローバルのconst変数を名前から解決してシンボルを返す (値が未確定なら初期化子を計算して登録する)
+// 該当するグローバルのconst変数の宣言がなければnullptrを返す
+const symbol_t *Analyzer::resolve_global_const(const std::string &name) {
+    const auto it = this->global_var_decls_.find(name);
+    if (it == this->global_var_decls_.end() || !it->second->type.is_const) return nullptr;
+
+    node_t *decl = it->second;   // const変数の宣言ノード
+    if (decl->sym == nullptr) {
+        this->begin_resolving(decl);
+        symbol_t *sym = this->register_const_var(decl);
+        this->symbols_[name] = sym;
+        decl->sym = sym;
+        this->end_resolving(decl);
+    }
+    return decl->sym;
+}
+
+// 宣言の解決を始める
+// 解決中の宣言に再び到達した場合は，宣言の型・値が自身に依存しているため循環参照としてエラーにする
+void Analyzer::begin_resolving(const node_t *decl) {
+    if (this->resolving_decls_.count(decl)) {
+        throw std::string("compiler error: circular reference in declaration of '") + decl->sval
+              + "' at line " + std::to_string(decl->line);
+    }
+    this->resolving_decls_.insert(decl);
+}
+
+// 宣言の解決を終える
+void Analyzer::end_resolving(const node_t *decl) {
+    this->resolving_decls_.erase(decl);
 }
 
 // 構造体型の変数1つ分(配列宣言ならその配列全体分)のアドレスを確保し，シンボルを生成して返す
 // (シンボル表への格納自体はグローバル用のcollect_globals・ローカル用のanalyze_local_declが
 //  それぞれ自分のシンボル表(symbols_・scopes_)へ行うため，この関数ではまだ行わない)
 symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
-    // 宣言されている構造体が定義済みか確認する (2パス目のcollect_struct_declsで全て登録済み)
-    const auto it = this->struct_defs_.find(decl->type.struct_name);
-    if (it == this->struct_defs_.end()) {
-        throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
-              + "' at line " + std::to_string(decl->line);
-    }
-
-    // 構造体配列: 要素数を定数式として確定する (通常の配列宣言のサイズ指定と同じ扱い)
-    int element_count = 1;
-    if (decl->type.is_array) {
-        const long long size = this->eval_const_expr(decl->children[0]);
-        if (size <= 0) {
-            throw std::string("compiler error: array size must be positive at line ")
-                  + std::to_string(decl->children[0]->line);
-        }
-        decl->type.array_size = static_cast<int>(size);
-        // サイズ式を畳み込み済みリテラルに置き換える
-        node_t *folded = new node_t;
-        folded->kind = ND_INT_LIT;
-        folded->ival = size;
-        folded->line = decl->children[0]->line;
-        decl->children[0] = folded;
-        element_count = decl->type.array_size;
-    }
+    // 宣言されている構造体の定義と，構造体配列なら要素数を確定させる (通常の配列宣言のサイズ指定と同じ扱い)
+    this->resolve_decl_type(decl);
+    const int element_count = decl->type.is_array ? decl->type.array_size : 1;   // 構造体の個数
 
     // 構造体変数(配列なら配列全体)のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
     // 構造体1個分のワード数×要素数ぶん，次に割り当てるアドレスを進める
     // (メンバのメモリレイアウトは../specification/compiler.mdの「構造体」節を参照)
-    this->next_addr_ += it->second.total_words * 4 * element_count;
+    this->next_addr_ += this->struct_defs_.at(decl->type.struct_name).total_words * 4 * element_count;
     // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
     return sym;
 }
@@ -199,7 +243,7 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
 // メモリ番地は割り当てず，値は参照箇所(analyze_exprのND_VAR)で整数リテラルとして埋め込まれる
 symbol_t *Analyzer::register_const_var(const node_t *decl) {
     const node_t *init = decl->children[0];                       // 初期化子の式
-    const long long value = this->eval_const_expr(init, false);   // 初期化子を計算した値
+    const long long value = this->eval_const_expr(init);          // 初期化子を計算した値
 
     // 値を宣言した型の範囲に収める (範囲外の値を黙って切り詰めると，同じ型の通常の変数と値が食い違うため)
     long long min_value;   // 宣言した型で表せる最小値
@@ -221,54 +265,29 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
     return new symbol_t{decl->sval, decl->type, LOC_CONST, static_cast<int>(value), true, false};
 }
 
-// 3パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
-// 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする
+// 2パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+// 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
+// 定数式が後方の宣言を参照していた場合，その宣言はこの走査で到達するより前に解決済みになっている
+// (名前の重複は1パス目のindex_global_declsで検査済み)
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
-        // 構造体定義(ND_STRUCT_DECL)は2パス目(collect_struct_decls)で処理済みなので読み飛ばす
-        // (構造体名は変数・関数とは別の名前空間のため，このあとの重複チェックの対象にもしない)
-        if (child->kind == ND_STRUCT_DECL) continue;
-        // const変数は1パス目(collect_global_consts)で登録済みなので読み飛ばす
-        if (child->kind == ND_VAR_DECL && child->type.is_const) continue;
-
-        // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
-        if (this->symbols_.count(child->sval) || this->func_names_.count(child->sval)) {
-            throw std::string("compiler error: redefinition of '") + child->sval
-                  + "' at line " + std::to_string(child->line);
+        // 構造体定義: メンバ構成を確定させる
+        if (child->kind == ND_STRUCT_DECL) {
+            this->resolve_struct_def(child->sval);
         }
-
         // グローバル変数宣言: 初期化子を評価し，アドレスを割り当てて登録する
-        if (child->kind == ND_VAR_DECL) {
-            if (child->type.base == BASE_STRUCT) {
+        else if (child->kind == ND_VAR_DECL) {
+            if (child->type.is_const) {
+                // const変数: 値を確定させて登録する (メモリ番地は割り当てない)
+                this->resolve_global_const(child->sval);
+            } else if (child->type.base == BASE_STRUCT) {
                 // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
                 symbol_t *sym = this->register_struct_var(child, LOC_GLOBAL);
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
             } else if (child->type.is_array) {
-                if (!child->children.empty() && child->children[0]->kind == ND_STRING_LIT) {
-                    // 文字列リテラルによる初期化: char msg[] = "hello";
-                    if (child->type.base != BASE_CHAR) {
-                        throw std::string("compiler error: string literal can only initialize char array at line ")
-                              + std::to_string(child->children[0]->line);
-                    }
-                    // サイズは文字列長 + 1(ヌル終端)
-                    const int size = static_cast<int>(child->children[0]->sval.size()) + 1;
-                    child->type.array_size = size;
-                } else {
-                    // サイズ明示の配列宣言: int table[10];
-                    const long long size = Analyzer::eval_const_expr(child->children[0]);
-                    if (size <= 0) {
-                        throw std::string("compiler error: array size must be positive at line ")
-                              + std::to_string(child->children[0]->line);
-                    }
-                    child->type.array_size = static_cast<int>(size);
-                    // サイズ式を畳み込み済みリテラルに置き換える
-                    node_t *folded = new node_t;
-                    folded->kind = ND_INT_LIT;
-                    folded->ival = size;
-                    folded->line = child->children[0]->line;
-                    child->children[0] = folded;
-                }
+                // 配列の要素数を確定させる (定数式から後方参照された場合は解決済み)
+                this->resolve_decl_type(child);
                 // アドレスを割り当てて登録する (確保ワード数は型に応じて計算)
                 symbol_t *sym =
                     new symbol_t{child->sval, child->type, LOC_GLOBAL, this->next_addr_, true, true};
@@ -295,8 +314,8 @@ void Analyzer::collect_globals() {
             }
         }
         // 関数定義: 関数名・戻り値型・パラメータのシンボルを登録する
-        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は4パス目より前に全関数のパラメータが必要なため，
-        // パラメータの番地割り当てもここ(3パス目)で行う．4パス目(analyze_functions)はここで作った
+        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
+        // パラメータの番地割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
             this->func_names_[child->sval] = child->type;
@@ -332,23 +351,31 @@ void Analyzer::collect_globals() {
 // コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
 // 呼び出し元は定数式が要求される文脈 (配列サイズ・初期化子・case値等．一覧は../specification/compiler.mdの「定数式」節を参照)
 // 通常の変数の参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
-// const変数の参照は，値がシンボルに確定済みのためその値として計算する．
+// const変数の参照は，その値として計算する．
 // また sizeof(変数名) も例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
-long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
+// (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
+long long Analyzer::eval_const_expr(const node_t *expr) {
     // リテラルはそのまま値を返す
     if (expr->kind == ND_INT_LIT || expr->kind == ND_CHAR_LIT) {
         return expr->ival;
     }
 
-    // const変数の参照は確定済みの値を返す
-    // (見つからない名前は定数式の評価より後に登録されるグローバル変数の場合もあるため未宣言とは断定せず，
-    //  通常の変数と同じく「定数式でない」エラーとして扱う)
+    // const変数の参照は値を返す
     if (expr->kind == ND_VAR) {
         const symbol_t *sym = this->lookup_symbol(expr->sval);
+        if (sym == nullptr) {
+            sym = this->resolve_global_const(expr->sval);
+        }
+        // シンボルも宣言もない名前は未宣言
+        if (sym == nullptr && !this->global_var_decls_.count(expr->sval)) {
+            throw std::string("compiler error: use of undeclared identifier '") + expr->sval
+                  + "' at line " + std::to_string(expr->line);
+        }
         if (sym != nullptr && sym->location == LOC_CONST) {
             return sym->address;
         }
+        // 通常の変数は値がコンパイル時に確定しないので，「定数式でない」エラーとして扱う
     }
 
     // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない)
@@ -359,31 +386,33 @@ long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
         }
         // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
         const node_t *inner = expr->children[0];
-        if (!allow_sizeof_var) {
-            throw std::string("compiler error: sizeof(variable) cannot be used in a const variable "
-                               "initializer at line ") + std::to_string(inner->line);
-        }
         if (inner->kind != ND_VAR) {
             throw std::string("compiler error: sizeof argument in a constant expression "
                                "must be a type name or variable name at line ")
                   + std::to_string(inner->line);
         }
         const symbol_t *sym = this->lookup_symbol(inner->sval);
-        if (sym == nullptr) {
+        if (sym != nullptr) {
+            // 関数引数の配列が使用される可能性もあるのでそれをチェック
+            if (sym->type.is_array && sym->type.array_size == 0) {
+                throw std::string("compiler error: sizeof of an array parameter (size unknown) at line ")
+                      + std::to_string(inner->line);
+            }
+            return this->type_size_bytes(sym->type);
+        }
+        // まだ登録されていないグローバルの宣言は，宣言ノードから型を確定させてサイズを求める
+        const auto it = this->global_var_decls_.find(inner->sval);
+        if (it == this->global_var_decls_.end()) {
             throw std::string("compiler error: use of undeclared identifier '") + inner->sval
                   + "' at line " + std::to_string(inner->line);
         }
-        // 関数引数の配列が使用される可能性もあるのでそれをチェック
-        if (sym->type.is_array && sym->type.array_size == 0) {
-            throw std::string("compiler error: sizeof of an array parameter (size unknown) at line ")
-                  + std::to_string(inner->line);
-        }
-        return this->type_size_bytes(sym->type);
+        this->resolve_decl_type(it->second);
+        return this->type_size_bytes(it->second->type);
     }
 
     // 前置単項演算
     if (expr->kind == ND_UNOP) {
-        const long long v = this->eval_const_expr(expr->children[0], allow_sizeof_var);
+        const long long v = this->eval_const_expr(expr->children[0]);
         if      (expr->sval == "-") return -v;
         else if (expr->sval == "+") return v;
         else if (expr->sval == "~") return ~v;
@@ -393,8 +422,8 @@ long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
 
     // 二項演算
     if (expr->kind == ND_BINOP) {
-        const long long l = this->eval_const_expr(expr->children[0], allow_sizeof_var);
-        const long long r = this->eval_const_expr(expr->children[1], allow_sizeof_var);
+        const long long l = this->eval_const_expr(expr->children[0]);
+        const long long r = this->eval_const_expr(expr->children[1]);
         // ゼロ除算はコンパイル時に検出する
         if ((expr->sval == "/" || expr->sval == "%") && r == 0) {
             throw std::string("compiler error: division by zero at line ")
@@ -422,9 +451,9 @@ long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
 
     // 三項演算
     if (expr->kind == ND_TERNARY) {
-        return Analyzer::eval_const_expr(expr->children[0], allow_sizeof_var)
-             ? Analyzer::eval_const_expr(expr->children[1], allow_sizeof_var)
-             : Analyzer::eval_const_expr(expr->children[2], allow_sizeof_var);
+        return Analyzer::eval_const_expr(expr->children[0])
+             ? Analyzer::eval_const_expr(expr->children[1])
+             : Analyzer::eval_const_expr(expr->children[2]);
     }
 
     // 通常の変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
@@ -448,8 +477,8 @@ int Analyzer::calc_array_words(const type_t &type) {
 // 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
 int Analyzer::type_size_bytes(const type_t &type) const {
     if (type.base == BASE_STRUCT) {
-        // BASE_STRUCT型のsymbol_tはregister_struct_varが構造体の存在を検証した後にしか
-        // 生成しないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
+        // BASE_STRUCT型の型情報はresolve_decl_typeが構造体の存在を検証して定義を解決した後にしか
+        // 使われないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
         // typeのstruct_nameは常に登録済みであり，探索に失敗することはない．
         // 構造体配列は「構造体1個分のバイト数×要素数」を返す
         const int struct_bytes = this->struct_defs_.at(type.struct_name).total_words * 4;
@@ -466,7 +495,7 @@ int Analyzer::type_size_bytes(const type_t &type) const {
     return type.is_array ? elem_bytes * type.array_size : elem_bytes;
 }
 
-// 4パス目: 各関数本体を検査する
+// 3パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (パラメータがなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
@@ -480,7 +509,7 @@ void Analyzer::analyze_functions() {
         // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // パラメータをスコープに登録する (シンボル自体は3パス目のcollect_globalsで作成済み)
+        // パラメータをスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
@@ -690,30 +719,8 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
     } else if (decl->type.is_array) {
-        if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
-            // 文字列リテラルによる初期化: char msg[] = "hello";
-            if (decl->type.base != BASE_CHAR) {
-                throw std::string("compiler error: string literal can only initialize char array at line ")
-                      + std::to_string(decl->children[0]->line);
-            }
-            // サイズは文字列長 + 1(ヌル終端)
-            const int size = static_cast<int>(decl->children[0]->sval.size()) + 1;
-            decl->type.array_size = size;
-        } else {
-            // サイズ明示の配列宣言: int table[10];
-            const long long size = Analyzer::eval_const_expr(decl->children[0]);
-            if (size <= 0) {
-                throw std::string("compiler error: array size must be positive at line ")
-                      + std::to_string(decl->children[0]->line);
-            }
-            decl->type.array_size = static_cast<int>(size);
-            // サイズ式を畳み込み済みリテラルに置き換える
-            node_t *folded = new node_t;
-            folded->kind = ND_INT_LIT;
-            folded->ival = size;
-            folded->line = decl->children[0]->line;
-            decl->children[0] = folded;
-        }
+        // 配列の要素数を確定させる (文字列リテラルの長さ，または定数式)
+        this->resolve_decl_type(decl);
         // アドレスを割り当てて登録する
         symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL, this->next_addr_, true, true};
         this->next_addr_ += Analyzer::calc_array_words(decl->type) * 4;
