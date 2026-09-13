@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体変数のメンバ配列そのものに++を適用できない (グローバル，異常系)
+struct Tag {
+    int arr[4];
+};
+struct Tag v;
+void main(void) {
+    ++v.arr;
+}
