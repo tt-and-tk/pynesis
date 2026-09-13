@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -182,12 +181,12 @@ void Analyzer::resolve_struct_def(const std::string &name) {
 
     // メンバを宣言順に登録し，構造体先頭からのオフセットを決める
     for (node_t *member : decl->children) {
-        // 登録済みのメンバと同じ名前の場合
-        const bool is_duplicate = std::any_of(def.members.begin(), def.members.end(),
-            [&](const struct_member_t &registered) { return registered.name == member->sval; });   // 同名のメンバが登録済みか
-        if (is_duplicate) {
-            throw std::string("compiler error: duplicate member '") + member->sval
-                  + "' in struct '" + name + "' at line " + std::to_string(member->line);
+        for (const struct_member_t &registered : def.members) {
+            // 登録済みのメンバと同じ名前の場合
+            if (registered.name == member->sval) {
+                throw std::string("compiler error: duplicate member '") + member->sval
+                      + "' in struct '" + name + "' at line " + std::to_string(member->line);
+            }
         }
 
         // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
