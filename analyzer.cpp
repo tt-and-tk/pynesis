@@ -167,14 +167,15 @@ void Analyzer::resolve_struct_def(const std::string &name) {
 
     struct_def_t def;
     def.total_words = 0;
-    std::set<std::string> member_names;   // メンバ名の重複検出用
 
     for (node_t *member : decl->children) {
-        if (member_names.count(member->sval)) {
-            throw std::string("compiler error: duplicate member '") + member->sval
-                  + "' in struct '" + name + "' at line " + std::to_string(member->line);
+        for (const struct_member_t &registered : def.members) {
+            // 登録済みのメンバと同じ名前の場合
+            if (registered.name == member->sval) {
+                throw std::string("compiler error: duplicate member '") + member->sval
+                      + "' in struct '" + name + "' at line " + std::to_string(member->line);
+            }
         }
-        member_names.insert(member->sval);
 
         // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
         this->resolve_decl_type(member);
