@@ -172,11 +172,14 @@ void Analyzer::resolve_struct_def(const std::string &name) {
     if (this->struct_defs_.count(name)) return;
 
     const node_t *decl = this->struct_decl_nodes_.at(name);   // 構造体定義ノード
+    // 構造体定義の解決を始める (メンバの配列サイズがこの構造体自身に依存する循環参照を検出する)
     this->begin_resolving(decl);
 
+    // メンバがない状態から構造体定義を組み立てる
     struct_def_t def;
     def.total_words = 0;
 
+    // メンバを宣言順に登録し，構造体先頭からのオフセットを決める
     for (node_t *member : decl->children) {
         for (const struct_member_t &registered : def.members) {
             // 登録済みのメンバと同じ名前の場合
@@ -189,11 +192,13 @@ void Analyzer::resolve_struct_def(const std::string &name) {
         // 配列メンバのサイズを定数式として確定する (変数宣言の配列サイズと同じ扱い)
         this->resolve_decl_type(member);
 
-        const int words = member->type.is_array ? Analyzer::calc_array_words(member->type) : 1;
+        const int words = member->type.is_array ? Analyzer::calc_array_words(member->type) : 1;   // メンバが占めるワード数
+        // それまでのメンバの合計ワード数をオフセットとしてメンバを登録し，合計ワード数を進める
         def.members.push_back({member->sval, member->type, def.total_words});
         def.total_words += words;
     }
 
+    // 組み立てた構造体定義を登録し，解決を終える
     this->struct_defs_[name] = def;
     this->end_resolving(decl);
 }
