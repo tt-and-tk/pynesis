@@ -1,0 +1,12 @@
+// 配列サイズ・構造体メンバの配列サイズ・構造体配列のサイズは，後方で宣言したconst変数や変数のsizeofを宣言順によらず使える
+int a[sizeof(b)];                   // 後方で宣言した配列のサイズ: 3 × 4 = 12要素 (12ワード)
+int b[3];
+struct Rec { char name[NAME]; };    // メンバ配列のサイズに後方のconst変数を使う: 4要素 = 1ワード
+struct Rec recs[COUNT];             // 構造体配列のサイズに後方のconst変数を使う: 3個 = 3ワード
+const char NAME = 4;
+const int COUNT = 3;
+int g;
+
+void main(void) {
+    g = sizeof(a) + sizeof(recs);   // 48 + 12 = 60
+}
