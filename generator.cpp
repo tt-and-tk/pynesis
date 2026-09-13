@@ -496,7 +496,7 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
     // 比較条件: 否定したF系で「偽のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
-        this->gen_expr_protecting(cond->children[1], reg + 1, reg);   // 右 → r{reg+1}
+        this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
         this->asm_file_ << "    " << negated_branch(cond->sval)
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
@@ -519,7 +519,7 @@ void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int r
     // 比較条件: そのままのF系で「真のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
-        this->gen_expr_protecting(cond->children[1], reg + 1, reg);   // 右 → r{reg+1}
+        this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
         this->asm_file_ << "    " << comparison_branch(cond->sval)
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
@@ -537,7 +537,7 @@ void Generator::gen_compare(node_t *expr, int reg) {
     const std::string t = this->new_label();      // 真の場合の飛び先
     const std::string end = this->new_label();
     this->gen_expr(expr->children[0], reg);        // 左 → r{reg}
-    this->gen_expr_protecting(expr->children[1], reg + 1, reg);    // 右 → r{reg+1}
+    this->gen_expr_protecting(expr->children[1], reg + 1, {reg});    // 右 → r{reg+1}
     // 比較が真なら .Lt へ
     this->asm_file_ << "    " << comparison_branch(expr->sval)
                     << " r" << reg << " r" << (reg + 1) << " " << t << "\n";
@@ -920,16 +920,19 @@ void Generator::gen_sign_extend(int reg, int bits, int work_reg) {
 }
 
 // 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しを含む場合，
-// 呼び出し先はr0から使い直すため，別に指定したレジスタの値を一時メモリへ退避してから評価し，評価後に復元する
-void Generator::gen_expr_protecting(node_t *expr, int reg, int protect_reg) {
+// 呼び出し先はr0から使い直すため，別に指定したレジスタ(複数可)の値を一時メモリへ退避してから評価し，評価後に復元する
+void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs) {
     if (!contains_call(expr)) {
         this->gen_expr(expr, reg);
         return;
     }
-    const int addr = this->scratch_base_ + protect_reg * 4;
-    this->asm_file_ << "    wm fh r0 r" << protect_reg << " " << addr << "\n";   // 退避
+    for (const int protect_reg : protect_regs) {
+        this->asm_file_ << "    wm fh r0 r" << protect_reg << " " << (this->scratch_base_ + protect_reg * 4) << "\n";   // 退避
+    }
     this->gen_expr(expr, reg);
-    this->asm_file_ << "    rm fh r0 r" << protect_reg << " " << addr << "\n";   // 復元
+    for (const int protect_reg : protect_regs) {
+        this->asm_file_ << "    rm fh r0 r" << protect_reg << " " << (this->scratch_base_ + protect_reg * 4) << "\n";   // 復元
+    }
 }
 
 // 式を評価し，結果をr{reg}に残す
@@ -985,7 +988,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 this->gen_logical(expr, reg);
             } else {
                 this->gen_expr(expr->children[0], reg);
-                this->gen_expr_protecting(expr->children[1], reg + 1, reg);
+                this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                 this->gen_binop_instr(expr->sval, reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
             }
             break;
@@ -1076,29 +1079,17 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 if (expr->sval == "=") {
                     // 単純代入: 右辺を先にr{reg}へ評価してから，アドレスをr{reg+1}へ求める(r{reg}を保護)
                     this->gen_expr(expr->children[1], reg);
-                    this->gen_struct_array_member_addr(lhs, reg + 1, reg);
+                    this->gen_struct_array_member_addr(lhs, reg + 1, {reg});
                 } else {
                     // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む
                     // (char/shortの符号拡張は，r{reg+1}のアドレスを壊さないようr{reg+2}を作業用に使う)．
                     // 右辺の評価が関数呼び出しを含む場合，呼び出し先はr0から使い直すため
-                    // r{reg}(現在値)・r{reg+1}(アドレス)の両方が破壊されうる．
-                    // gen_expr_protectingは1本のレジスタしか保護できないため，
-                    // 2本とも退避してから評価し，あとで復元する
+                    // r{reg}(現在値)・r{reg+1}(アドレス)の両方を保護して評価する
                     this->gen_struct_array_member_addr(lhs, reg + 1);
                     this->asm_file_ << "    mov fh r" << (reg + 1) << " r" << reg << "\n";  // r{reg} = アドレス
                     this->gen_load_indirect(reg, lhs->type, reg + 2);                       // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
-                    if (contains_call(expr->children[1])) {
-                        const int addr0 = this->scratch_base_ + reg * 4;
-                        const int addr1 = this->scratch_base_ + (reg + 1) * 4;
-                        this->asm_file_ << "    wm fh r0 r" << reg << " " << addr0 << "\n";        // 退避
-                        this->asm_file_ << "    wm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 退避
-                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
-                        this->asm_file_ << "    rm fh r0 r" << reg << " " << addr0 << "\n";        // 復元
-                        this->asm_file_ << "    rm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 復元
-                    } else {
-                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
-                    }
+                    this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
                     this->gen_binop_instr(op, reg, reg, reg + 2);
                 }
                 this->gen_store_indirect(reg + 1, reg, lhs->type);
@@ -1110,7 +1101,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 } else {
                     // 複合代入 x op= e : 左辺の現在値をr{reg}・右辺をr{reg+1}に評価し，opで畳む
                     this->gen_load(reg, lhs->sym);
-                    this->gen_expr_protecting(expr->children[1], reg + 1, reg);
+                    this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
                     this->gen_binop_instr(op, reg, reg, reg + 1);
                 }
@@ -1146,7 +1137,7 @@ void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
 // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にexpr->ivalへ保存済み)
 //          + インデックス(実行時，member_access->children[0]->children[0]) × 構造体1要素分のバイト数
 // レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(要素間隔・ベース，作業用)
-void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg) {
+void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
     if (reg + 1 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at line ")
               + std::to_string(member_access->line);
@@ -1156,12 +1147,8 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int
     const int stride_bytes = this->struct_defs_.at(arr_sym->type.struct_name).total_words * 4;
     const int base_const = arr_sym->address + static_cast<int>(member_access->ival) * 4;  // 配列先頭+メンバオフセット
 
-    // r{reg} = インデックス式 (protect_regが指定されていれば，その値を評価中も保護する)
-    if (protect_reg >= 0) {
-        this->gen_expr_protecting(array_access->children[0], reg, protect_reg);
-    } else {
-        this->gen_expr(array_access->children[0], reg);
-    }
+    // r{reg} = インデックス式 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
+    this->gen_expr_protecting(array_access->children[0], reg, protect_regs);
     // r{reg+1} = 要素間隔(構造体1要素分のバイト数．2の冪とは限らないためmulで乗算する)
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << stride_bytes << "\n";
     this->asm_file_ << "    mul r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
@@ -1174,10 +1161,10 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int
 // 構造体メンバ配列アクセス(children.size()==2のND_ARRAY_ACCESS)の配列先頭アドレスをr{addr_reg}に載せる
 // 通常の単一構造体変数のメンバ配列(entry.name[i])はコンパイル時アドレス確定，
 // 構造体配列要素のメンバ配列(arr[i].name[j])は実行時アドレス計算になるため分岐する
-void Generator::gen_member_array_base(node_t *expr, int addr_reg, int protect_reg) {
+void Generator::gen_member_array_base(node_t *expr, int addr_reg, const std::vector<int> &protect_regs) {
     node_t *designator = expr->children[1];   // ND_MEMBER_ACCESS
     if (designator->children[0]->kind == ND_ARRAY_ACCESS) {
-        this->gen_struct_array_member_addr(designator, addr_reg, protect_reg);
+        this->gen_struct_array_member_addr(designator, addr_reg, protect_regs);
     } else {
         this->gen_array_base_addr(addr_reg, designator->sym);
     }
@@ -1223,7 +1210,7 @@ void Generator::gen_array_load(node_t *expr, int reg) {
     // 実行後: r{reg+1} = base番地 (通常配列・単一構造体メンバ配列はコンパイル時定数，
     //         構造体配列要素のメンバ配列は実行時計算．r{reg}を保護しつつr{reg+2}を作業用に使う)
     if (expr->children.size() == 2) {
-        this->gen_member_array_base(expr, reg + 1, reg);
+        this->gen_member_array_base(expr, reg + 1, {reg});
     } else {
         this->gen_array_base_addr(reg + 1, expr->sym);
     }
@@ -1257,7 +1244,7 @@ void Generator::gen_array_store(node_t *expr, int val_reg, int work_reg) {
         (expr->children.size() == 2) ? expr->children[1]->type.base : expr->sym->type.base;
 
     // r{work_reg} = index (r{work_reg+1}はまだ未使用)
-    this->gen_expr_protecting(expr->children[0], work_reg, val_reg);
+    this->gen_expr_protecting(expr->children[0], work_reg, {val_reg});
 
     // 型ごとの要素サイズ(2^shift バイト)とmask(バイト位置)を決定する
     const char *mask;
@@ -1280,7 +1267,7 @@ void Generator::gen_array_store(node_t *expr, int val_reg, int work_reg) {
     // アドレス = base + オフセット
     // 実行後: r{work_reg+1} = base番地 (val_reg・work_regを保護しつつr{work_reg+2}を作業用に使う)
     if (expr->children.size() == 2) {
-        this->gen_member_array_base(expr, work_reg + 1, val_reg);
+        this->gen_member_array_base(expr, work_reg + 1, {val_reg, work_reg});
     } else {
         this->gen_array_base_addr(work_reg + 1, expr->sym);
     }
