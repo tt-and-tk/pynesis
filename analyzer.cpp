@@ -38,7 +38,6 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     }
 
     // 1パス目: グローバル宣言の索引を作り，名前の重複を検査する
-    // (定数式が後方の宣言を参照しても，宣言ノードをたどって型・値を解決できるようにする)
     this->index_global_decls();
 
     // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
@@ -85,8 +84,7 @@ int Analyzer::scratch_base() const {
 }
 
 // 1パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する
-// 定数式(配列サイズ・const変数の初期化子等)は後方で宣言された変数・const変数・構造体を参照しうるため，
-// それらの宣言ノードを名前から引けるようにしておき，2パス目で必要になった時点で型・値を解決する．
+// 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
 // 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
     std::set<std::string> func_names;   // 関数名の重複検出用
@@ -270,7 +268,7 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
 
 // 2パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
-// 定数式が後方の宣言を参照していた場合，その宣言はこの走査で到達するより前に解決済みになっている
+// 後方の宣言が先に参照された場合，その宣言はこの走査で到達するより前に参照した時点で解決済みになっている
 // (名前の重複は1パス目のindex_global_declsで検査済み)
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
@@ -289,7 +287,7 @@ void Analyzer::collect_globals() {
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
             } else if (child->type.is_array) {
-                // 配列の要素数を確定させる (定数式から後方参照された場合は解決済み)
+                // 配列の要素数を確定させる (先に参照されて解決済みなら何もしない)
                 this->resolve_decl_type(child);
                 // アドレスを割り当てて登録する (確保ワード数は型に応じて計算)
                 symbol_t *sym =
