@@ -1,0 +1,5 @@
+// 意味解析エラー: グローバルのconst変数にも++は使えない (異常系)
+const int N = 1;
+void main(void) {
+    N++;
+}
