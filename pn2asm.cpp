@@ -57,7 +57,7 @@ int compile_pn_to_asm(int argc, char **argv) {
         // (字句解析〜意味解析でエラーになった場合に空のファイルを残さないよう，コード生成の直前に開く)
         asm_file.open(args.pt_file_name);
         if (!asm_file) {
-            throw std::string("cannot open asm file: ") + args.pt_file_name;
+            throw std::string("compiler error: cannot open file '") + args.pt_file_name + "'";
         }
 
         // アセンブリコードを生成する (Code Generator)
