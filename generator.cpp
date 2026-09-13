@@ -1213,8 +1213,8 @@ void Generator::gen_member_array_base(node_t *expr, int addr_reg, const std::vec
 // コンパイル時定数・メモリからの読み出し・実行時計算のいずれかで求める
 // レジスタ使用: r{reg}=index→アドレス, r{reg+1}=シフト量・配列先頭番地 (2本．構造体配列要素のメンバ配列の場合，
 // 先頭番地の計算(gen_struct_array_member_addr)がさらにr{reg+2}を使うため3本必要)
-// 読み書きの際の型に応じたマスクはここでは扱わない．求めたアドレスを使う読み込み(gen_load_indirect)・
-// 書き込み(gen_store_indirect)の側が型から選ぶ(読み出しと書き込みでアドレス計算を共有するため)
+// 読み書きの際の型に応じたマスクはここでは扱わない．求めたアドレスを使うレジスタ間接の読み込み・
+// 書き込みの側が型から選ぶ(読み出しと書き込みでアドレス計算を共有するため)
 void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs) {
     // 作業用のr{reg+2}が上限(r15)を超えないことを確認する
     if (reg + 2 >= MAX_REG) {
