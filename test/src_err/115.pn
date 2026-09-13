@@ -1,5 +1,4 @@
-// 意味解析エラー: グローバルのconst変数の初期化子に通常の変数は使えない (異常系)
-int x = 1;
-const int N = x;
+// 意味解析エラー: const変数の初期化子にハードウェア変数は使えない (異常系)
+const int N = DIPSW;
 void main(void) {
 }
