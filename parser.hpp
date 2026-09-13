@@ -108,7 +108,7 @@ private:
     static bool is_type_start(token_kind_t kind);          // 型の先頭になりうるトークン種別かどうか返す
     static bool is_assign_op(token_kind_t kind);           // 代入演算子のトークン種別かどうか返す
     static std::string token_kind_name(token_kind_t kind); // トークン種別をエラーメッセージ用の文字列に変換する
-    static long long parse_int_literal(const std::string &text);   // 整数リテラル文字列を数値に変換する
+    static long long parse_int_literal(const token_t &token);      // 整数リテラルのトークンを数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
     // const修飾子・signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)を読み，型情報を返す

@@ -1007,7 +1007,7 @@ node_t *Parser::parse_primary() {
     // 整数リテラル
     if (this->token_kind_is(TK_INT_LIT)) {
         node_t *node = this->new_node(ND_INT_LIT);
-        node->ival = Parser::parse_int_literal(this->get_token().value);
+        node->ival = Parser::parse_int_literal(this->get_token());
         return node;
     }
 
@@ -1044,9 +1044,10 @@ node_t *Parser::parse_primary() {
           + this->peek_token().value + "' at " + loc_to_string(this->peek_token().loc);
 }
 
-// 整数リテラル文字列を数値に変換する (0x/0X接頭辞があれば16進数，無ければ10進数)
+// 整数リテラルのトークンを数値に変換する (0x/0X接頭辞があれば16進数，無ければ10進数)
 // long long(64bit)の範囲を超えるリテラルはstd::stollがstd::out_of_rangeを投げるため，ここで捕捉してコンパイルエラーに変換する
-long long Parser::parse_int_literal(const std::string &text) {
+long long Parser::parse_int_literal(const token_t &token) {
+    const std::string &text = token.value;   // リテラルの文字列
     long long value;
     try {
         if (text.size() >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
@@ -1055,15 +1056,18 @@ long long Parser::parse_int_literal(const std::string &text) {
             value = std::stoll(text, nullptr, 10);
         }
     } catch (const std::out_of_range &) {
-        throw std::string("compiler error: integer literal out of range: ") + text;
+        throw std::string("compiler error: integer literal out of range: ") + text
+              + " at " + loc_to_string(token.loc);
     } catch (const std::invalid_argument &) {
-        throw std::string("compiler error: invalid integer literal: ") + text;
+        throw std::string("compiler error: invalid integer literal: ") + text
+              + " at " + loc_to_string(token.loc);
     }
     // intは32ビットなので，リテラル自体はint型の範囲(0〜2147483647)に収まっているか検査する
     // (単項マイナスは別トークンとして扱われここでは付与されていないため，C言語同様リテラル自体の絶対値だけで判定する．
     //  そのため-2147483648(intの最小値)はこの言語では表現できない)
     if (value < 0 || value > 2147483647LL) {
-        throw std::string("compiler error: integer literal out of range: ") + text;
+        throw std::string("compiler error: integer literal out of range: ") + text
+              + " at " + loc_to_string(token.loc);
     }
     return value;
 }
