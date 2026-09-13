@@ -190,7 +190,7 @@ node_t *Parser::parse_program() {
         }
         // 型キーワード(const/int/char/short等)で始まるなら関数定義またはグローバル変数宣言
         else if (Parser::is_type_start(this->peek_token().kind)) {
-            // const・signed/unsignedがあれば，本体の型キーワードはその分だけ後ろにずれる
+            // const修飾子と符号修飾子(signed/unsigned)があれば，本体の型キーワードはその分だけ後ろにずれる
             int offset = 0;
             if (this->peek_kind_ahead(offset) == TK_CONST) {
                 offset++;
