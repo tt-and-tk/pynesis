@@ -1,0 +1,5 @@
+// 意味解析エラー: const変数の初期化子から後方で宣言したconst変数は参照できない (異常系)
+const int A = B;
+const int B = 1;
+void main(void) {
+}

@@ -37,10 +37,13 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
-    // 1パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
+    // 1パス目: グローバルのconst変数を登録する (構造体メンバ・グローバル変数の配列サイズがconst変数を参照しうる)
+    this->collect_global_consts();
+
+    // 2パス目: 構造体定義を登録する (グローバル変数のアドレス確保より前に，全構造体のメンバ構成が必要)
     this->collect_struct_decls();
 
-    // 2パス目: グローバル変数の登録と関数名の収集を行う
+    // 3パス目: グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
 
     // プログラムの開始点となるmain関数が必要
@@ -48,7 +51,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 3パス目: 各関数本体を検査する
+    // 4パス目: 各関数本体を検査する
     // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
@@ -83,11 +86,31 @@ int Analyzer::scratch_base() const {
     return this->scratch_base_;
 }
 
-// 1パス目: プログラム直下の構造体定義(ND_STRUCT_DECL)を登録する
+// 1パス目: プログラム直下のconst変数宣言を宣言順に登録する
+// 後続のパスが扱う構造体メンバ・グローバル変数の配列サイズや初期化子は宣言順によらずconst変数を参照できる．
+// 一方，const変数の初期化子自体はこのパスの中で評価するため，参照できるのは先に宣言されたconst変数に限られる
+void Analyzer::collect_global_consts() {
+    for (node_t *child : this->root_->children) {
+        if (child->kind != ND_VAR_DECL || !child->type.is_const) continue;
+
+        // 名前の重複チェック (ハードウェア変数・先に宣言したconst変数と衝突しないこと．
+        // 通常のグローバル変数・関数との衝突は3パス目のcollect_globalsが検出する)
+        if (this->symbols_.count(child->sval)) {
+            throw std::string("compiler error: redefinition of '") + child->sval
+                  + "' at line " + std::to_string(child->line);
+        }
+
+        symbol_t *sym = this->register_const_var(child);
+        this->symbols_[child->sval] = sym;
+        child->sym = sym;
+    }
+}
+
+// 2パス目: プログラム直下の構造体定義(ND_STRUCT_DECL)を登録する
 // メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
 // 無名構造体に続けて即座に変数宣言されていた場合，その変数自体は別のND_VAR_DECLノードとして
 // root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
-// 変数宣言側は2パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
+// 変数宣言側は3パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
 void Analyzer::collect_struct_decls() {
     for (node_t *child : this->root_->children) {
         // 構造体定義(ND_STRUCT_DECL)以外(グローバル変数・関数定義)はここでは扱わないので読み飛ばす
@@ -138,7 +161,7 @@ void Analyzer::collect_struct_decls() {
 // (シンボル表への格納自体はグローバル用のcollect_globals・ローカル用のanalyze_local_declが
 //  それぞれ自分のシンボル表(symbols_・scopes_)へ行うため，この関数ではまだ行わない)
 symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
-    // 宣言されている構造体が定義済みか確認する (1パス目のcollect_struct_declsで全て登録済み)
+    // 宣言されている構造体が定義済みか確認する (2パス目のcollect_struct_declsで全て登録済み)
     const auto it = this->struct_defs_.find(decl->type.struct_name);
     if (it == this->struct_defs_.end()) {
         throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
@@ -172,13 +195,41 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
     return sym;
 }
 
-// 2パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
+// const変数の初期化子を定数式として計算し，値を持つシンボルを生成して返す
+// メモリ番地は割り当てず，値は参照箇所(analyze_exprのND_VAR)で整数リテラルとして埋め込まれる
+symbol_t *Analyzer::register_const_var(const node_t *decl) {
+    const node_t *init = decl->children[0];
+    const long long value = this->eval_const_expr(init, false);
+
+    // 値を宣言した型の範囲に収める (範囲外の値を黙って切り詰めると，同じ型の通常の変数と値が食い違うため)
+    long long min_value;
+    long long max_value;
+    switch (decl->type.base) {
+        case BASE_CHAR:  min_value = -128LL;        max_value = 127LL;        break;
+        case BASE_SHORT: min_value = -32768LL;      max_value = 32767LL;      break;
+        case BASE_INT:   min_value = -2147483648LL; max_value = 2147483647LL; break;
+        default:
+            throw std::string("compiler error: unsupported const variable type at line ")
+                  + std::to_string(decl->line);
+    }
+    if (value < min_value || value > max_value) {
+        throw std::string("compiler error: value of const variable '") + decl->sval
+              + "' is out of range for its type at line " + std::to_string(init->line);
+    }
+
+    // 読み取り専用のシンボルにすることで，代入・++/--・scan等の書き込みを既存の検査でエラーにする
+    return new symbol_t{decl->sval, decl->type, LOC_CONST, static_cast<int>(value), true, false};
+}
+
+// 3パス目: プログラム直下を走査し，グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
-        // 構造体定義(ND_STRUCT_DECL)は1パス目(collect_struct_decls)で処理済みなので読み飛ばす
+        // 構造体定義(ND_STRUCT_DECL)は2パス目(collect_struct_decls)で処理済みなので読み飛ばす
         // (構造体名は変数・関数とは別の名前空間のため，このあとの重複チェックの対象にもしない)
         if (child->kind == ND_STRUCT_DECL) continue;
+        // const変数は1パス目(collect_global_consts)で登録済みなので読み飛ばす
+        if (child->kind == ND_VAR_DECL && child->type.is_const) continue;
 
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
         if (this->symbols_.count(child->sval) || this->func_names_.count(child->sval)) {
@@ -244,8 +295,8 @@ void Analyzer::collect_globals() {
             }
         }
         // 関数定義: 関数名・戻り値型・パラメータのシンボルを登録する
-        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
-        // パラメータの番地割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
+        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は4パス目より前に全関数のパラメータが必要なため，
+        // パラメータの番地割り当てもここ(3パス目)で行う．4パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
             this->func_names_[child->sval] = child->type;
@@ -280,14 +331,28 @@ void Analyzer::collect_globals() {
 
 // コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
 // 呼び出し元 (=定数式が要求される文脈): グローバル配列のサイズ指定・グローバルスカラー変数の初期化子・
-// ローカル配列のサイズ指定・構造体メンバ配列のサイズ指定・switch文のcase値
-// 変数参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
-// ただし sizeof(変数名) だけは例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
+// ローカル配列のサイズ指定・構造体メンバ配列のサイズ指定・switch文のcase値・const変数の初期化子
+// 通常の変数の参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
+// const変数の参照は，値がシンボルに確定済みのためその値として計算する．
+// また sizeof(変数名) も例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
-long long Analyzer::eval_const_expr(const node_t *expr) {
+long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
     // リテラルはそのまま値を返す
     if (expr->kind == ND_INT_LIT || expr->kind == ND_CHAR_LIT) {
         return expr->ival;
+    }
+
+    // const変数の参照は確定済みの値を返す
+    if (expr->kind == ND_VAR) {
+        const symbol_t *sym = this->lookup_symbol(expr->sval);
+        if (sym == nullptr) {
+            throw std::string("compiler error: use of undeclared identifier '") + expr->sval
+                  + "' at line " + std::to_string(expr->line);
+        }
+        if (sym->location == LOC_CONST) {
+            return sym->address;
+        }
+        // 通常の変数は値がコンパイル時に確定しないので，末尾のエラーに落とす
     }
 
     // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない)
@@ -298,6 +363,10 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         }
         // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
         const node_t *inner = expr->children[0];
+        if (!allow_sizeof_var) {
+            throw std::string("compiler error: sizeof(variable) cannot be used in a const variable "
+                               "initializer at line ") + std::to_string(inner->line);
+        }
         if (inner->kind != ND_VAR) {
             throw std::string("compiler error: sizeof argument in a constant expression "
                                "must be a type name or variable name at line ")
@@ -318,7 +387,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
 
     // 前置単項演算
     if (expr->kind == ND_UNOP) {
-        const long long v = this->eval_const_expr(expr->children[0]);
+        const long long v = this->eval_const_expr(expr->children[0], allow_sizeof_var);
         if      (expr->sval == "-") return -v;
         else if (expr->sval == "+") return v;
         else if (expr->sval == "~") return ~v;
@@ -328,8 +397,8 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
 
     // 二項演算
     if (expr->kind == ND_BINOP) {
-        const long long l = this->eval_const_expr(expr->children[0]);
-        const long long r = this->eval_const_expr(expr->children[1]);
+        const long long l = this->eval_const_expr(expr->children[0], allow_sizeof_var);
+        const long long r = this->eval_const_expr(expr->children[1], allow_sizeof_var);
         // ゼロ除算はコンパイル時に検出する
         if ((expr->sval == "/" || expr->sval == "%") && r == 0) {
             throw std::string("compiler error: division by zero at line ")
@@ -357,13 +426,13 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
 
     // 三項演算
     if (expr->kind == ND_TERNARY) {
-        return Analyzer::eval_const_expr(expr->children[0])
-             ? Analyzer::eval_const_expr(expr->children[1])
-             : Analyzer::eval_const_expr(expr->children[2]);
+        return Analyzer::eval_const_expr(expr->children[0], allow_sizeof_var)
+             ? Analyzer::eval_const_expr(expr->children[1], allow_sizeof_var)
+             : Analyzer::eval_const_expr(expr->children[2], allow_sizeof_var);
     }
 
-    // 変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
-    throw std::string("compiler error: global variable initializer must be a constant expression at line ")
+    // 通常の変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
+    throw std::string("compiler error: expression must be a constant expression at line ")
           + std::to_string(expr->line);
 }
 
@@ -401,7 +470,7 @@ int Analyzer::type_size_bytes(const type_t &type) const {
     return type.is_array ? elem_bytes * type.array_size : elem_bytes;
 }
 
-// 3パス目: 各関数本体を検査する
+// 4パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (パラメータがなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
@@ -415,7 +484,7 @@ void Analyzer::analyze_functions() {
         // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // パラメータをスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
+        // パラメータをスコープに登録する (シンボル自体は3パス目のcollect_globalsで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
@@ -613,7 +682,13 @@ void Analyzer::analyze_local_decl(node_t *decl) {
               + "' at line " + std::to_string(decl->line);
     }
 
-    if (decl->type.base == BASE_STRUCT) {
+    if (decl->type.is_const) {
+        // const変数: 初期化子を定数式として計算して値を持たせる (メモリ番地は割り当てない)
+        // 登録より前に計算するため，初期化子中の同名の参照は外側のスコープの変数を指す
+        symbol_t *sym = this->register_const_var(decl);
+        this->scopes_.back()[decl->sval] = sym;
+        decl->sym = sym;
+    } else if (decl->type.base == BASE_STRUCT) {
         // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
         symbol_t *sym = this->register_struct_var(decl, LOC_LOCAL);
         this->scopes_.back()[decl->sval] = sym;
@@ -755,6 +830,13 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (!sym->readable) {
                 throw std::string("compiler error: '") + expr->sval
                       + "' is not readable at line " + std::to_string(expr->line);
+            }
+            // const変数はメモリを持たないため，参照そのものを値の整数リテラルに置き換える
+            if (sym->location == LOC_CONST) {
+                expr->kind = ND_INT_LIT;
+                expr->ival = sym->address;
+                expr->type = type_t{BASE_INT, true};
+                return;
             }
             expr->sym  = sym;        // 名前解決の結果を結びつける
             expr->type = sym->type;  // 型を注釈する

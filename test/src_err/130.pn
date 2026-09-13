@@ -1,0 +1,4 @@
+// 意味解析エラー: const変数の初期化子で自分自身は参照できない (異常系)
+const int A = A;
+void main(void) {
+}

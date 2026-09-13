@@ -21,6 +21,8 @@ typedef struct {
     // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
     // メンバの型としてbase==BASE_STRUCTが現れることはそもそもない
     std::string struct_name;
+    // const修飾されているかどうか (スカラー変数宣言でのみtrueになりうる．それ以外への付与は構文解析でエラーにする)
+    bool is_const = false;
 } type_t;
 
 // ASTノード種別
@@ -109,7 +111,7 @@ private:
     static long long parse_int_literal(const std::string &text);   // 整数リテラル文字列を数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
-    // signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)を読み，型情報を返す
+    // const修飾子・signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)を読み，型情報を返す
     // 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
     type_t parse_type(bool allow_void);
 

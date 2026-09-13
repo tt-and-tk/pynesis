@@ -1,0 +1,4 @@
+// 構文解析エラー: 配列はconstにできない (異常系)
+const char msg[] = "hi";
+void main(void) {
+}

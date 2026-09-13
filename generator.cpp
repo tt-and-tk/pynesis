@@ -226,6 +226,9 @@ void Generator::gen_stmt(node_t *stmt) {
 // 変数宣言を生成する
 // 初期化子があれば，初期値を変数の番地へ書き込むコードを生成する
 void Generator::gen_var_decl(node_t *decl) {
+    // const変数はメモリを持たず，参照箇所へ値が埋め込み済みのため何も出力しない
+    if (decl->type.is_const) return;
+
     // 配列宣言: 文字列リテラルによる初期化のみ対応 (サイズ指定のみの宣言はスキップ)
     if (decl->type.is_array) {
         if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {

@@ -1,0 +1,5 @@
+// 意味解析エラー: const変数には複合代入もできない (異常系)
+void main(void) {
+    const int N = 1;
+    N += 1;
+}

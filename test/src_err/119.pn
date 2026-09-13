@@ -1,0 +1,6 @@
+// 構文解析エラー: 関数パラメータはconstにできない (異常系)
+void f(const int a) {
+}
+void main(void) {
+    f(1);
+}

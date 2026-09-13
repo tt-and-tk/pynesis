@@ -75,7 +75,7 @@ node_t *Parser::new_node(node_kind_t kind) {
 // 型の先頭になりうるトークン種別かどうか返す
 bool Parser::is_type_start(token_kind_t kind) {
     return kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT
-        || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT;
+        || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT || kind == TK_CONST;
 }
 
 // 代入演算子のトークン種別かどうか返す
@@ -102,10 +102,17 @@ std::string Parser::token_kind_name(token_kind_t kind) {
     }
 }
 
-// signed/unsigned修飾子と型キーワードを読み，型情報を返す
+// const修飾子・signed/unsigned修飾子と型キーワードを読み，型情報を返す
 // 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
 // allow_voidがtrueのときのみvoid型を許可する(関数の戻り値型のみ該当し，それ以外は常にfalseで呼ぶ)
+// constはどの文脈でも読んで型情報に記録し，許可するかどうかは呼び出し元が文脈に応じて判定する
 type_t Parser::parse_type(bool allow_void) {
+    // const修飾子 (型名より前にのみ書ける)
+    const bool is_const = this->token_kind_is(TK_CONST);
+    if (is_const) {
+        this->get_token();
+    }
+
     // signed/unsigned修飾子 (デフォルトはsigned)
     // unsignedは予約語として受理するが当面未対応 (将来対応予定．is_signed等の符号情報の機構は残してある)
     bool is_signed = true;
@@ -118,6 +125,7 @@ type_t Parser::parse_type(bool allow_void) {
 
     type_t type;
     type.is_signed = is_signed;
+    type.is_const = is_const;
 
     // 構造体型: struct 構造体名
     if (this->token_kind_is(TK_STRUCT)) {
@@ -180,11 +188,17 @@ node_t *Parser::parse_program() {
                 node->children.push_back(this->parse_var_decl());
             }
         }
-        // 型キーワード(int/char/short等)で始まるなら関数定義またはグローバル変数宣言
+        // 型キーワード(const/int/char/short等)で始まるなら関数定義またはグローバル変数宣言
         else if (Parser::is_type_start(this->peek_token().kind)) {
-            // signed/unsignedがあれば，本体の型キーワードは1つ後ろにずれる
-            const token_kind_t first_kind = this->peek_token().kind;
-            const int offset = (first_kind == TK_SIGNED || first_kind == TK_UNSIGNED) ? 1 : 0;
+            // const・signed/unsignedがあれば，本体の型キーワードはその分だけ後ろにずれる
+            int offset = 0;
+            if (this->peek_kind_ahead(offset) == TK_CONST) {
+                offset++;
+            }
+            const token_kind_t sign_kind = this->peek_kind_ahead(offset);
+            if (sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED) {
+                offset++;
+            }
 
             // 型の次が識別子でなければエラー (範囲外アクセスを避けてEOF扱いで判定する)
             if (this->peek_kind_ahead(offset + 1) != TK_IDENT) {
@@ -213,10 +227,14 @@ node_t *Parser::parse_program() {
 node_t *Parser::parse_func_def() {
     node_t *node = this->new_node(ND_FUNC_DEF);   // 関数ノード
 
-    // 戻り値型を読む (void/int/char/shortのみ許可，構造体は非対応)
+    // 戻り値型を読む (void/int/char/shortのみ許可，構造体・constは非対応)
     node->type = this->parse_type(true);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: struct cannot be used as a function return type at line ")
+              + std::to_string(node->line);
+    }
+    if (node->type.is_const) {
+        throw std::string("compiler error: function return type cannot be const at line ")
               + std::to_string(node->line);
     }
 
@@ -583,10 +601,14 @@ node_t *Parser::parse_sizeof() {
 node_t *Parser::parse_param() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
-    // パラメータの型 (構造体は非対応)
+    // パラメータの型 (構造体・constは非対応)
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: struct cannot be used as a function parameter type at line ")
+              + std::to_string(node->line);
+    }
+    if (node->type.is_const) {
+        throw std::string("compiler error: function parameter cannot be const at line ")
               + std::to_string(node->line);
     }
 
@@ -604,7 +626,8 @@ node_t *Parser::parse_param() {
 }
 
 // 変数宣言を解析してND_VAR_DECLを返す
-// 構文: [signed|unsigned] 型 変数名 [= 式] ;
+// 構文: [const] [signed|unsigned] 型 変数名 [= 式] ;
+// const変数はスカラー型(int/char/short)のみで，初期化子を必須とする．
 // 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
 //   struct 構造体名 変数名;         (単一変数)
 //   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
@@ -616,6 +639,23 @@ node_t *Parser::parse_var_decl() {
 
     // 変数名を読む
     node->sval = this->get_token(TK_IDENT).value;
+
+    // const変数: 配列・構造体は初期値リストで値を与える手段がないため非対応とし，
+    // スカラーは値を与えないと使い道がないため初期化子を必須とする
+    if (node->type.is_const) {
+        if (node->type.base == BASE_STRUCT) {
+            throw std::string("compiler error: struct variable cannot be const at line ")
+                  + std::to_string(node->line);
+        }
+        if (this->token_kind_is(TK_LBRACKET)) {
+            throw std::string("compiler error: array cannot be const at line ")
+                  + std::to_string(node->line);
+        }
+        if (!this->token_kind_is(TK_ASSIGN)) {
+            throw std::string("compiler error: const variable '") + node->sval
+                  + "' requires an initializer at line " + std::to_string(node->line);
+        }
+    }
 
     // 構造体変数: 配列にも対応する(要素数省略・初期化子はメンバ初期化の仕組みが無いため非対応)
     if (node->type.base == BASE_STRUCT) {
@@ -672,6 +712,11 @@ node_t *Parser::parse_struct_member() {
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
         throw std::string("compiler error: nested struct members are not supported at line ")
+              + std::to_string(node->line);
+    }
+    // メンバの初期化子が非対応で値を与える手段がないため，constメンバも非対応
+    if (node->type.is_const) {
+        throw std::string("compiler error: struct member cannot be const at line ")
               + std::to_string(node->line);
     }
 

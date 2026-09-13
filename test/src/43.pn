@@ -1,0 +1,21 @@
+// const変数(ローカル): ブロックスコープに従って外側の同名変数を隠し，for文の初期化部でも宣言できる
+const int SIZE = 3;
+int g;
+int h;
+
+void main(void) {
+    const char LEN = SIZE + 1;      // グローバルのconst変数を初期化子に使える
+    char buf[LEN];                  // 4要素 = 1ワード
+    g = LEN;
+    {
+        int SIZE = 7;               // 通常のローカル変数がグローバルのconst変数を隠す
+        g = SIZE;
+    }
+    {
+        const int h = 10;           // const変数がグローバルの通常の変数を隠す
+        g = h;
+    }
+    h = SIZE;                       // ブロックを抜けるとグローバルのconst変数に戻る
+    for (const int K = 2; g < K; g += 1) {
+    }
+}

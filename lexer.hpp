@@ -7,6 +7,8 @@ typedef enum {
     // 型キーワード
     TK_INT, TK_CHAR, TK_SHORT, TK_VOID, TK_SIGNED, TK_UNSIGNED,
     TK_STRUCT,
+    // 型修飾子キーワード
+    TK_CONST,
     // 制御構文キーワード
     TK_IF, TK_ELSE, TK_FOR, TK_WHILE, TK_DO,
     TK_SWITCH, TK_CASE, TK_DEFAULT,

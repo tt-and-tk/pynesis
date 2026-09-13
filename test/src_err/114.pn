@@ -1,0 +1,4 @@
+// 構文解析エラー: const変数は初期化子が必須 (異常系)
+const int N;
+void main(void) {
+}
