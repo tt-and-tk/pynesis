@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体配列変数そのものに--を適用できない (グローバル，異常系)
+struct Tag {
+    int x;
+};
+struct Tag arr[3];
+void main(void) {
+    arr--;
+}

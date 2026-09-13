@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体変数そのものへ代入できない (グローバル，異常系)
+struct Tag {
+    int x;
+};
+struct Tag s;
+void main(void) {
+    s = 1;
+}

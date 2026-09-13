@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体変数そのものに++を適用できない (ローカル，異常系)
+struct Tag {
+    int x;
+};
+void main(void) {
+    struct Tag s;
+    s++;
+}
