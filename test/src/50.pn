@@ -29,5 +29,6 @@ void main(void) {
     bufs[i].data[i] *= 5;
     la[two() - 1] ^= i;
     bufs[i].data[i] %= two();
+    bufs[two() - 1].data[i] += 1;
     halve(la);
 }
