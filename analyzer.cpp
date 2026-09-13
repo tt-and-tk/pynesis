@@ -87,7 +87,6 @@ int Analyzer::scratch_base() const {
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
 // 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
-    std::set<std::string> func_names;   // 関数名の重複検出用
     for (node_t *child : this->root_->children) {
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体を再定義することは禁止する
@@ -100,14 +99,15 @@ void Analyzer::index_global_decls() {
 
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
         if (this->symbols_.count(child->sval) || this->global_var_decls_.count(child->sval)
-            || func_names.count(child->sval)) {
+            || this->func_names_.count(child->sval)) {
             throw std::string("compiler error: redefinition of '") + child->sval
                   + "' at line " + std::to_string(child->line);
         }
         if (child->kind == ND_VAR_DECL) {
             this->global_var_decls_[child->sval] = child;
         } else {
-            func_names.insert(child->sval);
+            // 関数定義: 関数名と戻り値型を登録する
+            this->func_names_[child->sval] = child->type;
         }
     }
 }
@@ -314,13 +314,11 @@ void Analyzer::collect_globals() {
                 this->next_addr_ += 4;   // 型に関係なく1変数=1ワード(4バイト)使う
             }
         }
-        // 関数定義: 関数名・戻り値型・パラメータのシンボルを登録する
+        // 関数定義: パラメータのシンボルを登録する (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
         // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
         // パラメータの番地割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
-            this->func_names_[child->sval] = child->type;
-
             std::vector<const symbol_t *> params;
             for (size_t i = 0; i + 1 < child->children.size(); i++) {
                 node_t *param = child->children[i];
