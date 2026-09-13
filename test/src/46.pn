@@ -1,0 +1,8 @@
+// const変数の初期化子で，後方で宣言した文字列リテラル初期化の配列にもsizeofを使える
+const int LEN = sizeof(msg);    // "hi" + ヌル終端 = 3
+char msg[] = "hi";
+int g;
+
+void main(void) {
+    g = LEN;
+}
