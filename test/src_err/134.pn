@@ -1,0 +1,5 @@
+// 意味解析エラー: 同じスコープでconst変数を二重に宣言できない (異常系)
+void main(void) {
+    const int N = 1;
+    const int N = 2;
+}

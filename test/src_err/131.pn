@@ -1,0 +1,5 @@
+// 意味解析エラー: ローカルのconst変数の初期化子にもsizeof(変数名)は使えない (異常系)
+void main(void) {
+    int buf[4];
+    const int N = sizeof(buf);
+}

@@ -1,0 +1,35 @@
+// const変数: 構造体メンバの配列・構造体配列のサイズ，関数の引数・戻り値，ローカルのcase値に使え，型の範囲の境界値を受理する
+struct Entry { char name[NAME_LEN]; int size; };   // メンバ配列は8要素=2ワード，構造体1個=3ワード
+struct Entry table[COUNT];                          // 構造体2個=6ワード
+const char NAME_LEN = 8;
+const short COUNT = 2;
+const char CHAR_MIN_VALUE = -128;
+const char CHAR_MAX_VALUE = 127;
+const short SHORT_MIN_VALUE = -32768;
+const short SHORT_MAX_VALUE = 32767;
+const int INT_MIN_VALUE = -2147483647 - 1;
+const int INT_MAX_VALUE = 2147483647;
+int g;
+
+int twice(int x) {
+    return x * COUNT;
+}
+
+int limit(void) {
+    return INT_MAX_VALUE;
+}
+
+void main(void) {
+    const int KEY = 24;
+    g = twice(CHAR_MAX_VALUE);
+    g = limit();
+    g = sizeof(table);              // 3ワード(12バイト) × 2個 = 24
+    switch (g) {
+        case KEY:
+            g = SHORT_MIN_VALUE + CHAR_MIN_VALUE;
+            break;
+        default:
+            g = INT_MIN_VALUE;
+    }
+    g = SHORT_MAX_VALUE;
+}
