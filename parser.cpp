@@ -109,6 +109,7 @@ std::string Parser::token_kind_name(token_kind_t kind) {
 type_t Parser::parse_type(bool allow_void) {
     // const修飾子 (型名より前にのみ書ける)
     const bool is_const = this->token_kind_is(TK_CONST);   // const修飾子が付いているか
+    // const修飾子が付いている場合は読み進める
     if (is_const) {
         this->get_token();
     }
@@ -192,10 +193,12 @@ node_t *Parser::parse_program() {
         else if (Parser::is_type_start(this->peek_token().kind)) {
             // const修飾子と符号修飾子(signed/unsigned)があれば，本体の型キーワードはその分だけ後ろにずれる
             int offset = 0;   // 現在位置から型キーワードまでのトークン数
+            // const修飾子がある場合
             if (this->peek_kind_ahead(offset) == TK_CONST) {
                 offset++;
             }
             const token_kind_t sign_kind = this->peek_kind_ahead(offset);   // 符号修飾子がありうる位置のトークン種別
+            // 符号修飾子がある場合
             if (sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED) {
                 offset++;
             }
@@ -233,6 +236,7 @@ node_t *Parser::parse_func_def() {
         throw std::string("compiler error: struct cannot be used as a function return type at line ")
               + std::to_string(node->line);
     }
+    // 戻り値型にconstが付いている場合
     if (node->type.is_const) {
         throw std::string("compiler error: function return type cannot be const at line ")
               + std::to_string(node->line);
@@ -607,6 +611,7 @@ node_t *Parser::parse_param() {
         throw std::string("compiler error: struct cannot be used as a function parameter type at line ")
               + std::to_string(node->line);
     }
+    // パラメータの型にconstが付いている場合
     if (node->type.is_const) {
         throw std::string("compiler error: function parameter cannot be const at line ")
               + std::to_string(node->line);
@@ -643,14 +648,17 @@ node_t *Parser::parse_var_decl() {
     // const変数: 配列・構造体は初期値リストで値を与える手段がないため非対応とし，
     // スカラーは値を与えないと使い道がないため初期化子を必須とする
     if (node->type.is_const) {
+        // 構造体変数の場合
         if (node->type.base == BASE_STRUCT) {
             throw std::string("compiler error: struct variable cannot be const at line ")
                   + std::to_string(node->line);
         }
+        // 配列の場合
         if (this->token_kind_is(TK_LBRACKET)) {
             throw std::string("compiler error: array cannot be const at line ")
                   + std::to_string(node->line);
         }
+        // 初期化子がない場合
         if (!this->token_kind_is(TK_ASSIGN)) {
             throw std::string("compiler error: const variable '") + node->sval
                   + "' requires an initializer at line " + std::to_string(node->line);
@@ -714,7 +722,7 @@ node_t *Parser::parse_struct_member() {
         throw std::string("compiler error: nested struct members are not supported at line ")
               + std::to_string(node->line);
     }
-    // メンバの初期化子が非対応で値を与える手段がないため，constメンバも非対応
+    // メンバの型にconstが付いている場合 (メンバの初期化子が非対応で値を与える手段がないため，constメンバも非対応)
     if (node->type.is_const) {
         throw std::string("compiler error: struct member cannot be const at line ")
               + std::to_string(node->line);

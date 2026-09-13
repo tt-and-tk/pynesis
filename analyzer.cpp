@@ -88,8 +88,9 @@ int Analyzer::scratch_base() const {
 // 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
+        // 構造体定義の場合 (構造体名は変数・関数とは別の名前空間のため，構造体名どうしでのみ重複を検査する)
         if (child->kind == ND_STRUCT_DECL) {
-            // 同じ名前の構造体を再定義することは禁止する
+            // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
             if (this->struct_decl_nodes_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
             }
@@ -103,6 +104,7 @@ void Analyzer::index_global_decls() {
             throw std::string("compiler error: redefinition of '") + child->sval
                   + "' at line " + std::to_string(child->line);
         }
+        // 変数宣言(const変数を含む)の場合
         if (child->kind == ND_VAR_DECL) {
             this->global_var_decls_[child->sval] = child;
         } else {
@@ -115,6 +117,7 @@ void Analyzer::index_global_decls() {
 // 宣言ノードの型を確定させる (確定済みなら何もしない)
 // 構造体型なら構造体定義を解決し，配列なら要素数を文字列リテラルの長さ，または定数式から計算して畳み込む
 void Analyzer::resolve_decl_type(node_t *decl) {
+    // 構造体型の場合 (メンバ構成が確定しないとサイズを求められないため，先に構造体定義を解決する)
     if (decl->type.base == BASE_STRUCT) {
         // 宣言されている構造体が定義済みか確認する
         if (!this->struct_decl_nodes_.count(decl->type.struct_name)) {
@@ -123,11 +126,15 @@ void Analyzer::resolve_decl_type(node_t *decl) {
         }
         this->resolve_struct_def(decl->type.struct_name);
     }
-    // スカラー，または要素数が確定済みの配列 (配列の要素数は正の値に限るため，0は未確定を表す)
+    // スカラー，または要素数が確定済みの配列の場合
+    // (スカラーは確定させる要素数を持たず，確定済みの配列は計算し直す必要がないため，これ以上何もしない．
+    //  配列の要素数は正の値に限るため，0は未確定を表す)
     if (!decl->type.is_array || decl->type.array_size > 0) return;
 
+    // 文字列リテラルで初期化されている場合 (要素数は文字列長から決まるため，定数式を計算しない)
     if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
         // 文字列リテラルによる初期化: char msg[] = "hello";
+        // char以外の配列の場合
         if (decl->type.base != BASE_CHAR) {
             throw std::string("compiler error: string literal can only initialize char array at line ")
                   + std::to_string(decl->children[0]->line);
@@ -140,6 +147,7 @@ void Analyzer::resolve_decl_type(node_t *decl) {
     // サイズ明示の配列宣言: int table[10];
     this->begin_resolving(decl);
     const long long size = this->eval_const_expr(decl->children[0]);   // 配列の要素数
+    // 要素数が正でない場合
     if (size <= 0) {
         throw std::string("compiler error: array size must be positive at line ")
               + std::to_string(decl->children[0]->line);
@@ -160,6 +168,7 @@ void Analyzer::resolve_decl_type(node_t *decl) {
 // root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
 // 変数宣言側は2パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
 void Analyzer::resolve_struct_def(const std::string &name) {
+    // 構造体定義が登録済みの場合 (メンバ構成は確定済みで，同じ定義を計算し直す必要がないため，これ以上何もしない)
     if (this->struct_defs_.count(name)) return;
 
     const node_t *decl = this->struct_decl_nodes_.at(name);   // 構造体定義ノード
@@ -193,9 +202,11 @@ void Analyzer::resolve_struct_def(const std::string &name) {
 // 該当するグローバルのconst変数の宣言がなければnullptrを返す
 const symbol_t *Analyzer::resolve_global_const(const std::string &name) {
     const auto it = this->global_var_decls_.find(name);
+    // 該当する宣言がない，または通常の変数の宣言の場合 (解決すべきconst変数がないため，これ以上何もしない)
     if (it == this->global_var_decls_.end() || !it->second->type.is_const) return nullptr;
 
     node_t *decl = it->second;   // const変数の宣言ノード
+    // 値が未確定の場合 (確定済みなら登録済みのシンボルをそのまま返す)
     if (decl->sym == nullptr) {
         this->begin_resolving(decl);
         symbol_t *sym = this->register_const_var(decl);
@@ -209,6 +220,7 @@ const symbol_t *Analyzer::resolve_global_const(const std::string &name) {
 // 宣言の解決を始める
 // 解決中の宣言に再び到達した場合は，宣言の型・値が自身に依存しているため循環参照としてエラーにする
 void Analyzer::begin_resolving(const node_t *decl) {
+    // 解決中の宣言に再び到達した場合
     if (this->resolving_decls_.count(decl)) {
         // 無名構造体の名前はパーサが割り当てた内部名でソースに現れないため，無名であることを示す
         const std::string name = (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$')
@@ -258,6 +270,7 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
             throw std::string("compiler error: unsupported const variable type at line ")
                   + std::to_string(decl->line);
     }
+    // 値が型の範囲外の場合
     if (value < min_value || value > max_value) {
         throw std::string("compiler error: value of const variable '") + decl->sval
               + "' is out of range for its type at line " + std::to_string(init->line);
@@ -364,6 +377,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
     // const変数の参照は値を返す
     if (expr->kind == ND_VAR) {
         const symbol_t *sym = this->lookup_symbol(expr->sval);
+        // シンボル表にない場合 (未解決の後方のグローバルのconst変数でありうるため，宣言から解決を試みる)
         if (sym == nullptr) {
             sym = this->resolve_global_const(expr->sval);
         }
@@ -372,6 +386,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
             throw std::string("compiler error: use of undeclared identifier '") + expr->sval
                   + "' at line " + std::to_string(expr->line);
         }
+        // const変数の場合
         if (sym != nullptr && sym->location == LOC_CONST) {
             return sym->address;
         }
@@ -392,6 +407,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
                   + std::to_string(inner->line);
         }
         const symbol_t *sym = this->lookup_symbol(inner->sval);
+        // シンボル表に登録済みの変数の場合
         if (sym != nullptr) {
             // 関数引数の配列が使用される可能性もあるのでそれをチェック
             if (sym->type.is_array && sym->type.array_size == 0) {
@@ -402,6 +418,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         }
         // まだ登録されていないグローバルの宣言は，宣言ノードから型を確定させてサイズを求める
         const auto it = this->global_var_decls_.find(inner->sval);
+        // グローバルの宣言もない場合
         if (it == this->global_var_decls_.end()) {
             throw std::string("compiler error: use of undeclared identifier '") + inner->sval
                   + "' at line " + std::to_string(inner->line);
