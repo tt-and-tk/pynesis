@@ -108,7 +108,7 @@ std::string Parser::token_kind_name(token_kind_t kind) {
 // constはどの文脈でも読んで型情報に記録し，許可するかどうかは呼び出し元が文脈に応じて判定する
 type_t Parser::parse_type(bool allow_void) {
     // const修飾子 (型名より前にのみ書ける)
-    const bool is_const = this->token_kind_is(TK_CONST);
+    const bool is_const = this->token_kind_is(TK_CONST);   // const修飾子が付いているか
     if (is_const) {
         this->get_token();
     }
@@ -191,11 +191,11 @@ node_t *Parser::parse_program() {
         // 型キーワード(const/int/char/short等)で始まるなら関数定義またはグローバル変数宣言
         else if (Parser::is_type_start(this->peek_token().kind)) {
             // const修飾子と符号修飾子(signed/unsigned)があれば，本体の型キーワードはその分だけ後ろにずれる
-            int offset = 0;
+            int offset = 0;   // 現在位置から型キーワードまでのトークン数
             if (this->peek_kind_ahead(offset) == TK_CONST) {
                 offset++;
             }
-            const token_kind_t sign_kind = this->peek_kind_ahead(offset);
+            const token_kind_t sign_kind = this->peek_kind_ahead(offset);   // 符号修飾子がありうる位置のトークン種別
             if (sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED) {
                 offset++;
             }

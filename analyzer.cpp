@@ -198,12 +198,12 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
 // const変数の初期化子を定数式として計算し，値を持つシンボルを生成して返す
 // メモリ番地は割り当てず，値は参照箇所(analyze_exprのND_VAR)で整数リテラルとして埋め込まれる
 symbol_t *Analyzer::register_const_var(const node_t *decl) {
-    const node_t *init = decl->children[0];
-    const long long value = this->eval_const_expr(init, false);
+    const node_t *init = decl->children[0];                       // 初期化子の式
+    const long long value = this->eval_const_expr(init, false);   // 初期化子を計算した値
 
     // 値を宣言した型の範囲に収める (範囲外の値を黙って切り詰めると，同じ型の通常の変数と値が食い違うため)
-    long long min_value;
-    long long max_value;
+    long long min_value;   // 宣言した型で表せる最小値
+    long long max_value;   // 宣言した型で表せる最大値
     switch (decl->type.base) {
         case BASE_CHAR:  min_value = -128LL;        max_value = 127LL;        break;
         case BASE_SHORT: min_value = -32768LL;      max_value = 32767LL;      break;
