@@ -92,7 +92,8 @@ void Analyzer::index_global_decls() {
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
             if (this->struct_decl_nodes_.count(child->sval)) {
-                throw std::string("compiler error: redefinition of struct '") + child->sval + "'";
+                throw std::string("compiler error: redefinition of struct '") + child->sval
+                      + "' at " + loc_to_string(child->loc);
             }
             this->struct_decl_nodes_[child->sval] = child;
             continue;
@@ -102,7 +103,7 @@ void Analyzer::index_global_decls() {
         if (this->symbols_.count(child->sval) || this->global_var_decls_.count(child->sval)
             || this->func_names_.count(child->sval)) {
             throw std::string("compiler error: redefinition of '") + child->sval
-                  + "' at line " + std::to_string(child->line);
+                  + "' at " + loc_to_string(child->loc);
         }
         // 変数宣言(const変数を含む)の場合
         if (child->kind == ND_VAR_DECL) {
@@ -122,7 +123,7 @@ void Analyzer::resolve_decl_type(node_t *decl) {
         // 宣言されている構造体が定義済みか確認する
         if (!this->struct_decl_nodes_.count(decl->type.struct_name)) {
             throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
-                  + "' at line " + std::to_string(decl->line);
+                  + "' at " + loc_to_string(decl->loc);
         }
         this->resolve_struct_def(decl->type.struct_name);
     }
@@ -136,8 +137,8 @@ void Analyzer::resolve_decl_type(node_t *decl) {
         // 文字列リテラルによる初期化: char msg[] = "hello";
         // char以外の配列の場合
         if (decl->type.base != BASE_CHAR) {
-            throw std::string("compiler error: string literal can only initialize char array at line ")
-                  + std::to_string(decl->children[0]->line);
+            throw std::string("compiler error: string literal can only initialize char array at ")
+                  + loc_to_string(decl->children[0]->loc);
         }
         // サイズは文字列長 + 1(ヌル終端)
         decl->type.array_size = static_cast<int>(decl->children[0]->sval.size()) + 1;
@@ -149,15 +150,15 @@ void Analyzer::resolve_decl_type(node_t *decl) {
     const long long size = this->eval_const_expr(decl->children[0]);   // 配列の要素数
     // 要素数が正でない場合
     if (size <= 0) {
-        throw std::string("compiler error: array size must be positive at line ")
-              + std::to_string(decl->children[0]->line);
+        throw std::string("compiler error: array size must be positive at ")
+              + loc_to_string(decl->children[0]->loc);
     }
     decl->type.array_size = static_cast<int>(size);
     // サイズ式を畳み込み済みリテラルに置き換える
     node_t *folded = new node_t;
     folded->kind = ND_INT_LIT;
     folded->ival = size;
-    folded->line = decl->children[0]->line;
+    folded->loc = decl->children[0]->loc;
     decl->children[0] = folded;
     this->end_resolving(decl);
 }
@@ -185,7 +186,7 @@ void Analyzer::resolve_struct_def(const std::string &name) {
             // 登録済みのメンバと同じ名前の場合
             if (registered.name == member->sval) {
                 throw std::string("compiler error: duplicate member '") + member->sval
-                      + "' in struct '" + name + "' at line " + std::to_string(member->line);
+                      + "' in struct '" + name + "' at " + loc_to_string(member->loc);
             }
         }
 
@@ -231,7 +232,7 @@ void Analyzer::begin_resolving(const node_t *decl) {
         const std::string name = (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$')
                                      ? "anonymous struct" : "'" + decl->sval + "'";   // エラーメッセージに表示する宣言名
         throw std::string("compiler error: circular reference in declaration of ") + name
-              + " at line " + std::to_string(decl->line);
+              + " at " + loc_to_string(decl->loc);
     }
     this->resolving_decls_.insert(decl);
 }
@@ -272,13 +273,13 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
         case BASE_SHORT: min_value = -32768LL;      max_value = 32767LL;      break;
         case BASE_INT:   min_value = -2147483648LL; max_value = 2147483647LL; break;
         default:
-            throw std::string("compiler error: unsupported const variable type at line ")
-                  + std::to_string(decl->line);
+            throw std::string("compiler error: unsupported const variable type at ")
+                  + loc_to_string(decl->loc);
     }
     // 値が型の範囲外の場合
     if (value < min_value || value > max_value) {
         throw std::string("compiler error: value of const variable '") + decl->sval
-              + "' is out of range for its type at line " + std::to_string(init->line);
+              + "' is out of range for its type at " + loc_to_string(init->loc);
     }
 
     // 読み取り専用のシンボルにすることで，代入・++/--・scan等の書き込みを既存の検査でエラーにする
@@ -320,7 +321,7 @@ void Analyzer::collect_globals() {
                     node_t *folded = new node_t;
                     folded->kind = ND_INT_LIT;
                     folded->ival = Analyzer::eval_const_expr(child->children[0]);
-                    folded->line = child->children[0]->line;
+                    folded->loc = child->children[0]->loc;
                     // 差し替え前の旧部分木はあえて解放しない
                     // (ASTは全ノードをdeleteせず，プロセス終了時のOS回収に任せる方針のため)
                     child->children[0] = folded;  // 初期化式の子要素を計算済みのリテラルで更新する
@@ -346,14 +347,14 @@ void Analyzer::collect_globals() {
                 for (const symbol_t *p : params) {
                     if (p->name == param->sval) {
                         throw std::string("compiler error: duplicate parameter name '") + param->sval
-                              + "' at line " + std::to_string(param->line);
+                              + "' at " + loc_to_string(param->loc);
                     }
                 }
                 // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
                     throw std::string("compiler error: cannot shadow hardware register '") + param->sval
-                          + "' at line " + std::to_string(param->line);
+                          + "' at " + loc_to_string(param->loc);
                 }
 
                 symbol_t *sym = new symbol_t{param->sval, param->type, LOC_LOCAL, this->next_addr_, true, true};
@@ -389,7 +390,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         // シンボル表にも宣言にもない名前の場合 (未宣言なのでエラーにする)
         if (sym == nullptr && !this->global_var_decls_.count(expr->sval)) {
             throw std::string("compiler error: use of undeclared identifier '") + expr->sval
-                  + "' at line " + std::to_string(expr->line);
+                  + "' at " + loc_to_string(expr->loc);
         }
         // const変数の場合
         if (sym != nullptr && sym->location == LOC_CONST) {
@@ -408,16 +409,16 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         const node_t *inner = expr->children[0];
         if (inner->kind != ND_VAR) {
             throw std::string("compiler error: sizeof argument in a constant expression "
-                               "must be a type name or variable name at line ")
-                  + std::to_string(inner->line);
+                               "must be a type name or variable name at ")
+                  + loc_to_string(inner->loc);
         }
         const symbol_t *sym = this->lookup_symbol(inner->sval);
         // シンボル表に登録済みの変数の場合
         if (sym != nullptr) {
             // 関数引数の配列が使用される可能性もあるのでそれをチェック
             if (sym->type.is_array && sym->type.array_size == 0) {
-                throw std::string("compiler error: sizeof of an array parameter (size unknown) at line ")
-                      + std::to_string(inner->line);
+                throw std::string("compiler error: sizeof of an array parameter (size unknown) at ")
+                      + loc_to_string(inner->loc);
             }
             return this->type_size_bytes(sym->type);
         }
@@ -426,7 +427,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         // グローバルの宣言もない場合
         if (it == this->global_var_decls_.end()) {
             throw std::string("compiler error: use of undeclared identifier '") + inner->sval
-                  + "' at line " + std::to_string(inner->line);
+                  + "' at " + loc_to_string(inner->loc);
         }
         this->resolve_decl_type(it->second);
         return this->type_size_bytes(it->second->type);
@@ -448,8 +449,8 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         const long long r = this->eval_const_expr(expr->children[1]);
         // ゼロ除算はコンパイル時に検出する
         if ((expr->sval == "/" || expr->sval == "%") && r == 0) {
-            throw std::string("compiler error: division by zero at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: division by zero at ")
+                  + loc_to_string(expr->loc);
         }
         if      (expr->sval == "+")  return l + r;
         else if (expr->sval == "-")  return l - r;
@@ -479,8 +480,8 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
     }
 
     // 通常の変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
-    throw std::string("compiler error: expression must be a constant expression at line ")
-          + std::to_string(expr->line);
+    throw std::string("compiler error: expression must be a constant expression at ")
+          + loc_to_string(expr->loc);
 }
 
 // 配列が占有するワード数を計算する (int=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
@@ -605,12 +606,12 @@ void Analyzer::analyze_stmt(node_t *stmt) {
             // void関数はreturn文自体が任意なので，値なしのreturn;はvoid以外のときのみエラー
             if (this->current_return_type_.base != BASE_VOID) {
                 throw std::string("compiler error: non-void function '") + this->current_function_
-                      + "' must return a value at line " + std::to_string(stmt->line);
+                      + "' must return a value at " + loc_to_string(stmt->loc);
             }
         } else {
             if (this->current_return_type_.base == BASE_VOID) {
                 throw std::string("compiler error: void function '") + this->current_function_
-                      + "' cannot return a value at line " + std::to_string(stmt->line);
+                      + "' cannot return a value at " + loc_to_string(stmt->loc);
             }
             this->analyze_expr(stmt->children[0]);
         }
@@ -656,15 +657,15 @@ void Analyzer::analyze_stmt(node_t *stmt) {
     // break文 (ループまたはswitchの中でのみ許される)
     else if (stmt->kind == ND_BREAK) {
         if (this->loop_depth_ == 0 && this->switch_depth_ == 0) {
-            throw std::string("compiler error: 'break' outside loop or switch at line ")
-                  + std::to_string(stmt->line);
+            throw std::string("compiler error: 'break' outside loop or switch at ")
+                  + loc_to_string(stmt->loc);
         }
     }
     // continue文 (ループの中でのみ許される)
     else if (stmt->kind == ND_CONTINUE) {
         if (this->loop_depth_ == 0) {
-            throw std::string("compiler error: 'continue' outside loop at line ")
-                  + std::to_string(stmt->line);
+            throw std::string("compiler error: 'continue' outside loop at ")
+                  + loc_to_string(stmt->loc);
         }
     }
     // それ以外は式文として検査する
@@ -690,8 +691,8 @@ void Analyzer::analyze_switch(node_t *stmt) {
         if (child->kind == ND_CASE) {
             const long long v = Analyzer::eval_const_expr(child->children[0]);
             if (case_values.count(v)) {
-                throw std::string("compiler error: duplicate case value at line ")
-                      + std::to_string(child->line);
+                throw std::string("compiler error: duplicate case value at ")
+                      + loc_to_string(child->loc);
             }
             case_values.insert(v);
             child->ival = v;   // コード生成器が参照できるよう畳み込み結果を保存する
@@ -699,8 +700,8 @@ void Analyzer::analyze_switch(node_t *stmt) {
         // default節: 重複は不可
         else if (child->kind == ND_DEFAULT) {
             if (has_default) {
-                throw std::string("compiler error: multiple default labels at line ")
-                      + std::to_string(child->line);
+                throw std::string("compiler error: multiple default labels at ")
+                      + loc_to_string(child->loc);
             }
             has_default = true;
         }
@@ -719,14 +720,14 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     // 同一スコープ内での二重宣言はエラー (外側スコープの同名はシャドーイングとして許容)
     if (this->scopes_.back().count(decl->sval)) {
         throw std::string("compiler error: redefinition of '") + decl->sval
-              + "' at line " + std::to_string(decl->line);
+              + "' at " + loc_to_string(decl->loc);
     }
 
     // ハードウェア変数と同名のローカル変数は宣言できない (I/Oレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
         throw std::string("compiler error: cannot redeclare hardware register '") + decl->sval
-              + "' at line " + std::to_string(decl->line);
+              + "' at " + loc_to_string(decl->loc);
     }
 
     if (decl->type.is_const) {
@@ -754,8 +755,8 @@ void Analyzer::analyze_local_decl(node_t *decl) {
             this->analyze_expr(decl->children[0]);
             // void関数の戻り値(値を持たない)で初期化することはできない
             if (decl->children[0]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot initialize with void value at line ")
-                      + std::to_string(decl->line);
+                throw std::string("compiler error: cannot initialize with void value at ")
+                      + loc_to_string(decl->loc);
             }
         }
         // メモリ番地を割り当てて登録する (ローカルも静的割り当てで固定番地)
@@ -773,19 +774,19 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
     this->analyze_expr(target);
     // char型の配列でない場合はエラー
     if (!target->type.is_array || target->type.base != BASE_CHAR) {
-        throw std::string("compiler error: ") + builtin_name + " requires a char array at line "
-              + std::to_string(target->line);
+        throw std::string("compiler error: ") + builtin_name + " requires a char array at "
+              + loc_to_string(target->loc);
     }
     // 関数の配列引数(サイズ不明，array_size==0)の場合はエラー
     if (target->type.array_size == 0) {
         throw std::string("compiler error: ") + builtin_name
-              + " does not support array parameters (size unknown) at line " + std::to_string(target->line);
+              + " does not support array parameters (size unknown) at " + loc_to_string(target->loc);
     }
     // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，コード生成が前提とする
     // 「コンパイル時に確定したアドレス」と相容れないためエラー
     if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
         throw std::string("compiler error: ") + builtin_name + " does not support an array member of "
-              "a struct array element at line " + std::to_string(target->line);
+              "a struct array element at " + loc_to_string(target->loc);
     }
 }
 
@@ -829,12 +830,12 @@ void Analyzer::analyze_expr(node_t *expr) {
                 node_t *inner = expr->children[0];
                 if (inner->kind != ND_VAR) {
                     throw std::string("compiler error: sizeof argument must be a type name or "
-                                       "variable name at line ") + std::to_string(inner->line);
+                                       "variable name at ") + loc_to_string(inner->loc);
                 }
                 const symbol_t *sym = this->lookup_symbol(inner->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + inner->sval + "' at line " + std::to_string(inner->line);
+                          + inner->sval + "' at " + loc_to_string(inner->loc);
                 }
                 inner->sym  = sym;
                 inner->type = sym->type;
@@ -850,11 +851,11 @@ void Analyzer::analyze_expr(node_t *expr) {
             const symbol_t *sym = this->lookup_symbol(expr->sval);
             if (sym == nullptr) {
                 throw std::string("compiler error: use of undeclared identifier '")
-                      + expr->sval + "' at line " + std::to_string(expr->line);
+                      + expr->sval + "' at " + loc_to_string(expr->loc);
             }
             if (!sym->readable) {
                 throw std::string("compiler error: '") + expr->sval
-                      + "' is not readable at line " + std::to_string(expr->line);
+                      + "' is not readable at " + loc_to_string(expr->loc);
             }
             // const変数はメモリを持たないため，参照そのものを値の整数リテラルに置き換える
             if (sym->location == LOC_CONST) {
@@ -880,12 +881,12 @@ void Analyzer::analyze_expr(node_t *expr) {
                 base_sym = this->lookup_symbol(base->sval);   // 配列全体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + base->sval + "' at line " + std::to_string(base->line);
+                          + base->sval + "' at " + loc_to_string(base->loc);
                 }
                 // 構造体の配列でない変数へのarr[i].member形式のアクセスは禁止する
                 if (!base_sym->type.is_array || base_sym->type.base != BASE_STRUCT) {
                     throw std::string("compiler error: '") + base->sval
-                          + "' is not an array of struct at line " + std::to_string(base->line);
+                          + "' is not an array of struct at " + loc_to_string(base->loc);
                 }
                 base->sym  = base_sym;         // 配列全体のシンボルを結びつける
                 base->type = base_sym->type;   // 型を注釈する
@@ -894,20 +895,20 @@ void Analyzer::analyze_expr(node_t *expr) {
                 this->analyze_expr(index_expr);
                 // void値(戻り値のない関数呼び出し)は添字に使えない
                 if (index_expr->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot use void value in expression at line ")
-                          + std::to_string(index_expr->line);
+                    throw std::string("compiler error: cannot use void value in expression at ")
+                          + loc_to_string(index_expr->loc);
                 }
             } else {
                 // (1) 単一の構造体変数へのメンバアクセス: entry.member
                 base_sym = this->lookup_symbol(base->sval);   // 構造体変数自体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + base->sval + "' at line " + std::to_string(base->line);
+                          + base->sval + "' at " + loc_to_string(base->loc);
                 }
                 // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
                 if (base_sym->type.base != BASE_STRUCT) {
                     throw std::string("compiler error: '") + base->sval
-                          + "' is not a struct at line " + std::to_string(base->line);
+                          + "' is not a struct at " + loc_to_string(base->loc);
                 }
                 base->sym  = base_sym;         // 名前解決の結果を結びつける
                 base->type = base_sym->type;   // 型を注釈する
@@ -922,7 +923,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             // 定義に存在しないメンバ名を指定した場合はエラー
             if (member == nullptr) {
                 throw std::string("compiler error: struct '") + base_sym->type.struct_name
-                      + "' has no member '" + expr->sval + "' at line " + std::to_string(expr->line);
+                      + "' has no member '" + expr->sval + "' at " + loc_to_string(expr->loc);
             }
 
             if (base->kind == ND_ARRAY_ACCESS) {
@@ -956,8 +957,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                 this->analyze_expr(expr->children[1]);  // 右辺の式を検査する
                 // void関数の戻り値(値を持たない)を代入することはできない
                 if (expr->children[1]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot assign void value at line ")
-                          + std::to_string(expr->line);
+                    throw std::string("compiler error: cannot assign void value at ")
+                          + loc_to_string(expr->loc);
                 }
                 expr->type = lhs->type;
                 return;
@@ -967,46 +968,46 @@ void Analyzer::analyze_expr(node_t *expr) {
                 this->analyze_expr(lhs);
                 if (!lhs->sym->writable) {
                     throw std::string("compiler error: '") + lhs->sym->name
-                          + "' is not writable at line " + std::to_string(lhs->line);
+                          + "' is not writable at " + loc_to_string(lhs->loc);
                 }
                 // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
                 if (expr->sval != "=" && !lhs->sym->readable) {
                     throw std::string("compiler error: '") + lhs->sym->name
-                          + "' is not readable at line " + std::to_string(lhs->line);
+                          + "' is not readable at " + loc_to_string(lhs->loc);
                 }
                 this->analyze_expr(expr->children[1]);
                 if (expr->children[1]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot assign void value at line ")
-                          + std::to_string(expr->line);
+                    throw std::string("compiler error: cannot assign void value at ")
+                          + loc_to_string(expr->loc);
                 }
                 expr->type = lhs->type;
                 return;
             }
             if (lhs->kind != ND_VAR) {
-                throw std::string("compiler error: left side of assignment must be a variable at line ")
-                      + std::to_string(expr->line);
+                throw std::string("compiler error: left side of assignment must be a variable at ")
+                      + loc_to_string(expr->loc);
             }
             const symbol_t *sym = this->lookup_symbol(lhs->sval);
             if (sym == nullptr) {
                 throw std::string("compiler error: use of undeclared identifier '")
-                      + lhs->sval + "' at line " + std::to_string(lhs->line);
+                      + lhs->sval + "' at " + loc_to_string(lhs->loc);
             }
             if (!sym->writable) {
                 throw std::string("compiler error: '") + lhs->sval
-                      + "' is not writable at line " + std::to_string(lhs->line);
+                      + "' is not writable at " + loc_to_string(lhs->loc);
             }
             // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
             if (expr->sval != "=" && !sym->readable) {
                 throw std::string("compiler error: '") + lhs->sval
-                      + "' is not readable at line " + std::to_string(lhs->line);
+                      + "' is not readable at " + loc_to_string(lhs->loc);
             }
             lhs->sym  = sym;
             lhs->type = sym->type;
             this->analyze_expr(expr->children[1]);   // 右辺を検査する
             // void関数の戻り値(値を持たない)を代入することはできない
             if (expr->children[1]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot assign void value at line ")
-                      + std::to_string(expr->line);
+                throw std::string("compiler error: cannot assign void value at ")
+                      + loc_to_string(expr->loc);
             }
             expr->type = sym->type;
             return;
@@ -1023,7 +1024,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                     sym = this->lookup_symbol(operand->sval);
                     if (sym == nullptr) {
                         throw std::string("compiler error: use of undeclared identifier '")
-                              + operand->sval + "' at line " + std::to_string(operand->line);
+                              + operand->sval + "' at " + loc_to_string(operand->loc);
                     }
                     operand->sym  = sym;
                     operand->type = sym->type;
@@ -1032,8 +1033,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                     // (実行時に計算したアドレスへの++/--は追加のレジスタ計算が必要になるため．
                     //  後置は既にparse_postfixで弾いているが，前置(++arr[i].member)はここでしか検出できない)
                     if (operand->children[0]->kind == ND_ARRAY_ACCESS) {
-                        throw std::string("compiler error: '++'/'--' on array element is not supported at line ")
-                              + std::to_string(expr->line);
+                        throw std::string("compiler error: '++'/'--' on array element is not supported at ")
+                              + loc_to_string(expr->loc);
                     }
                     // 構造体メンバ: メンバアクセスの検査(analyze_exprのND_MEMBER_ACCESSケース)に解決させる
                     this->analyze_expr(operand);
@@ -1041,11 +1042,11 @@ void Analyzer::analyze_expr(node_t *expr) {
                 } else {
                     // それ以外(配列要素・リテラル・式の結果等)には++/--を適用できない
                     throw std::string("compiler error: operand of '") + expr->sval
-                          + "' must be a variable at line " + std::to_string(expr->line);
+                          + "' must be a variable at " + loc_to_string(expr->loc);
                 }
                 if (!sym->readable || !sym->writable) {
                     throw std::string("compiler error: '") + sym->name
-                          + "' is not readable and writable at line " + std::to_string(expr->line);
+                          + "' is not readable and writable at " + loc_to_string(expr->loc);
                 }
                 expr->type = sym->type;
                 return;
@@ -1053,8 +1054,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
             this->analyze_expr(expr->children[0]);
             if (expr->children[0]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at line ")
-                      + std::to_string(expr->line);
+                throw std::string("compiler error: cannot use void value in expression at ")
+                      + loc_to_string(expr->loc);
             }
             expr->type = expr->children[0]->type;
             return;
@@ -1064,7 +1065,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             auto it = this->func_names_.find(expr->sval);
             if (it == this->func_names_.end()) {
                 throw std::string("compiler error: call to undefined function '")
-                      + expr->sval + "' at line " + std::to_string(expr->line);
+                      + expr->sval + "' at " + loc_to_string(expr->loc);
             }
             // 呼び出しグラフに記録する (再帰・ネスト段数の検査用)
             this->call_graph_[this->current_function_].insert(expr->sval);
@@ -1074,20 +1075,20 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: function '") + expr->sval + "' expects "
                       + std::to_string(params.size()) + " argument(s) but got "
                       + std::to_string(expr->children.size())
-                      + " at line " + std::to_string(expr->line);
+                      + " at " + loc_to_string(expr->loc);
             }
             // 各引数式を検査する
             for (size_t i = 0; i < expr->children.size(); i++) {
                 this->analyze_expr(expr->children[i]);
                 // void値(戻り値のない関数呼び出し)は引数に使えない
                 if (expr->children[i]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot use void value in expression at line ")
-                          + std::to_string(expr->children[i]->line);
+                    throw std::string("compiler error: cannot use void value in expression at ")
+                          + loc_to_string(expr->children[i]->loc);
                 }
                 // 構造体はフルコピーの仕組みが無いため，引数として渡すこと自体を禁止する
                 if (expr->children[i]->type.base == BASE_STRUCT) {
-                    throw std::string("compiler error: struct cannot be passed as a function argument at line ")
-                          + std::to_string(expr->children[i]->line);
+                    throw std::string("compiler error: struct cannot be passed as a function argument at ")
+                          + loc_to_string(expr->children[i]->loc);
                 }
                 // 配列パラメータには配列変数(構造体メンバ配列を含む)または文字列リテラルを，
                 // スカラーパラメータにはスカラー式を渡す
@@ -1099,21 +1100,21 @@ void Analyzer::analyze_expr(node_t *expr) {
                     // メンバ自身ではなく配列全体を指すため，arg->sym->type.is_arrayでは判定できない)
                     if (!is_array_designator || !arg->type.is_array) {
                         throw std::string("compiler error: argument for array parameter '")
-                              + params[i]->name + "' must be an array variable or string literal at line "
-                              + std::to_string(arg->line);
+                              + params[i]->name + "' must be an array variable or string literal at "
+                              + loc_to_string(arg->loc);
                     }
                     // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，
                     // 関数呼び出し規約(呼び出し元がコンパイル時アドレスを直接書き込む方式)と
                     // 相容れないため，引数として渡すことを禁止する
                     if (arg->kind == ND_MEMBER_ACCESS && arg->children[0]->kind == ND_ARRAY_ACCESS) {
                         throw std::string("compiler error: array member of a struct array element cannot be "
-                                           "passed as a function argument at line ") + std::to_string(arg->line);
+                                           "passed as a function argument at ") + loc_to_string(arg->loc);
                     }
                     // TODO: スカラ変数の対応後にコメントアウトを外す
                     // // 要素型の不一致チェック (char配列をint配列パラメータに渡す等を防ぐ)
                     // if (arg->type.base != params[i]->type.base) {
                     //     throw std::string("compiler error: array element type mismatch for parameter '")
-                    //           + params[i]->name + "' at line " + std::to_string(arg->line);
+                    //           + params[i]->name + "' at " + loc_to_string(arg->loc);
                     // }
                 } else {
                     if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->type.is_array) {
@@ -1125,13 +1126,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                                 : arg->sym->name;
                         throw std::string("compiler error: cannot pass array '")
                               + arg_name + "' to scalar parameter '"
-                              + params[i]->name + "' at line " + std::to_string(arg->line);
+                              + params[i]->name + "' at " + loc_to_string(arg->loc);
                     }
                     // TODO: func(1 + 2) など計算式を引数に与えた場合に型を正確に推論する仕組みが出来たらコメントアウトを外す
                     // // スカラー引数の型不一致チェック (charをintパラメータに渡す等を防ぐ)
                     // if (arg->type.base != params[i]->type.base) {
                     //     throw std::string("compiler error: argument type mismatch for parameter '")
-                    //           + params[i]->name + "' at line " + std::to_string(arg->line);
+                    //           + params[i]->name + "' at " + loc_to_string(arg->loc);
                     // }
                 }
             }
@@ -1167,7 +1168,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             this->check_char_array_operand(src, "strcopy");
             if (!dst->sym->writable) {
                 throw std::string("compiler error: '") + dst->sym->name
-                      + "' is not writable at line " + std::to_string(dst->line);
+                      + "' is not writable at " + loc_to_string(dst->loc);
             }
             // strcopyは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
             expr->type = type_t{BASE_VOID, true};
@@ -1181,26 +1182,26 @@ void Analyzer::analyze_expr(node_t *expr) {
             const symbol_t *sym = this->lookup_symbol(target->sval);
             if (sym == nullptr) {
                 throw std::string("compiler error: use of undeclared identifier '")
-                      + target->sval + "' at line " + std::to_string(target->line);
+                      + target->sval + "' at " + loc_to_string(target->loc);
             }
             if (!sym->writable) {
                 throw std::string("compiler error: '") + target->sval
-                      + "' is not writable at line " + std::to_string(target->line);
+                      + "' is not writable at " + loc_to_string(target->loc);
             }
             target->sym  = sym;        // 名前解決の結果を結びつける
             target->type = sym->type;
             if (!sym->type.is_array || sym->type.base != BASE_CHAR) {
-                throw std::string("compiler error: scan requires a char array at line ")
-                      + std::to_string(target->line);
+                throw std::string("compiler error: scan requires a char array at ")
+                      + loc_to_string(target->loc);
             }
             if (sym->type.array_size == 0) {
-                throw std::string("compiler error: scan does not support array parameters (size unknown) at line ")
-                      + std::to_string(target->line);
+                throw std::string("compiler error: scan does not support array parameters (size unknown) at ")
+                      + loc_to_string(target->loc);
             }
             if (sym->type.array_size < 2) {
                 throw std::string("compiler error: scan target array must have at least 2 elements "
-                                   "(1 for content plus 1 for null terminator) at line ")
-                      + std::to_string(target->line);
+                                   "(1 for content plus 1 for null terminator) at ")
+                      + loc_to_string(target->loc);
             }
             // scanは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
             expr->type = type_t{BASE_VOID, true};
@@ -1226,7 +1227,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 sym = this->lookup_symbol(expr->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + expr->sval + "' at line " + std::to_string(expr->line);
+                          + expr->sval + "' at " + loc_to_string(expr->loc);
                 }
                 elem_type = sym->type;
                 // 構造体配列は，要素(構造体1個分)を直接使うことができない(メンバアクセス経由でのみ使える)．
@@ -1234,13 +1235,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                 // ここに到達するのは単独で使われた場合(x = arr[i];等)であり，常にエラーにしてよい
                 if (elem_type.is_array && elem_type.base == BASE_STRUCT) {
                     throw std::string("compiler error: struct array element must be accessed via a "
-                                       "member (e.g. arr[i].member) at line ") + std::to_string(expr->line);
+                                       "member (e.g. arr[i].member) at ") + loc_to_string(expr->loc);
                 }
             }
             if (!elem_type.is_array) {
                 const std::string name = expr->sval.empty() ? sym->name : expr->sval;
                 throw std::string("compiler error: '") + name
-                      + "' is not an array at line " + std::to_string(expr->line);
+                      + "' is not an array at " + loc_to_string(expr->loc);
             }
             expr->sym = sym;
             // 要素の型は配列のbase型(スカラー)
@@ -1250,8 +1251,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             this->analyze_expr(index_expr);
             // void値(戻り値のない関数呼び出し)は配列インデックスに使えない
             if (index_expr->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at line ")
-                      + std::to_string(index_expr->line);
+                throw std::string("compiler error: cannot use void value in expression at ")
+                      + loc_to_string(index_expr->loc);
             }
             return;
         }
@@ -1261,8 +1262,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             this->analyze_expr(expr->children[0]);
             this->analyze_expr(expr->children[1]);
             if (expr->children[0]->type.base == BASE_VOID || expr->children[1]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at line ")
-                      + std::to_string(expr->line);
+                throw std::string("compiler error: cannot use void value in expression at ")
+                      + loc_to_string(expr->loc);
             }
             expr->type = expr->children[0]->type;
             return;
@@ -1275,8 +1276,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (expr->children[0]->type.base == BASE_VOID ||
                 expr->children[1]->type.base == BASE_VOID ||
                 expr->children[2]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at line ")
-                      + std::to_string(expr->line);
+                throw std::string("compiler error: cannot use void value in expression at ")
+                      + loc_to_string(expr->loc);
             }
             expr->type = expr->children[1]->type;
             return;
@@ -1284,8 +1285,8 @@ void Analyzer::analyze_expr(node_t *expr) {
         // 到達しない (式ノードの全種類は上記いずれかのcaseで処理される)．
         // 将来式ノードを追加した際に検査漏れとなるのを防ぐため，未対応として即エラーにする
         default:
-            throw std::string("compiler error: unsupported expression node kind at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported expression node kind at ")
+                  + loc_to_string(expr->loc);
     }
 }
 

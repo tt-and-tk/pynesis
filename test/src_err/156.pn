@@ -1,0 +1,5 @@
+// 字句解析エラー: #pragma onceが無いファイルを，別々のファイルを経由して間接的に2回取り込む (異常系)
+#include "include/156_a.pn"
+#include "include/156_b.pn"
+void main(void) {
+}

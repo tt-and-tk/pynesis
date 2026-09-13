@@ -1,0 +1,4 @@
+// 字句解析エラー: #includeと#pragma以外の指令は書けない (異常系)
+#define N 1
+void main(void) {
+}

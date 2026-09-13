@@ -1,0 +1,4 @@
+// 字句解析エラー: #と指令名の間に空白を書けない (異常系)
+# include "include/162_lib.pn"
+void main(void) {
+}

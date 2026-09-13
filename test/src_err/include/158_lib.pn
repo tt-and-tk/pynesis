@@ -1,0 +1,3 @@
+// 158.pnから取り込まれ，#pragma onceをまだ処理していない158.pnを取り込み返す
+#pragma once
+#include "../158.pn"

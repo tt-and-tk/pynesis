@@ -1,0 +1,4 @@
+// 字句解析エラー: #includeに取り込むファイルのパスが無い (異常系)
+#include
+void main(void) {
+}

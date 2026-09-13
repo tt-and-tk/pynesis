@@ -64,10 +64,12 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 | パス | 内容 |
 |:-|:-|
 | `test/src/` | 入力Pynesisソースファイル(`NN.pn`，正常系) |
+| `test/src/include/` | 正常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
 | `test/asm/` | コンパイラの出力アセンブリ(`NN.pt`，自動生成) |
 | `test/asm_ans/` | 期待値アセンブリ(`NN.pt`，手動作成) |
 | `test/test.py` | 正常系テストスクリプト |
 | `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
+| `test/src_err/include/` | 異常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
 | `test/test_err.py` | 異常系テストスクリプト(アセンブラの`test_err.py`と同じ方針) |
 
 ### 実行方法

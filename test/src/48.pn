@@ -1,0 +1,7 @@
+// 取り込んだファイルで定義した定数・グローバル変数・関数を，取り込み元から使える
+#include "include/48_lib.pn"    // 取り込み指令と同じ行にコメントを書ける
+#include"include/48_comment.pn"
+int g;
+void main(void) {
+    g = add_base(LIB_BASE);     // 2 + 3 = 5
+}

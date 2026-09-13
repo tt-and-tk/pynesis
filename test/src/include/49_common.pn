@@ -1,0 +1,4 @@
+// 49.pnと49_user.pnから取り込まれる．#pragma onceはファイルの末尾に書いても，重複して書いてもよい
+int count = 1;
+#pragma once
+#pragma once

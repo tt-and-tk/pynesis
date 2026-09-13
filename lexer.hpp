@@ -80,12 +80,21 @@ typedef enum {
     TK_EOF,
 } token_kind_t;
 
+// ソース上の位置 (取り込んだファイルのトークンも区別できるようファイル名を持つ)
+typedef struct {
+    std::string file;   // ファイル名
+    int line;           // 行番号
+} loc_t;
+
 // トークン
 typedef struct {
     token_kind_t kind;  // 種別
     std::string value;  // 文字列値
-    int line;           // 行番号
+    loc_t loc;          // 位置
 } token_t;
 
-// 字句解析してトークン列を生成する
-void lex(const std::string &src, std::vector<token_t> &tokens);
+// 位置をエラーメッセージ用の「ファイル名:行番号」形式に変換する
+std::string loc_to_string(const loc_t &loc);
+
+// ファイルを読み込んで字句解析し，トークン列を生成する (#includeで指定されたファイルもその位置に展開する)
+void lex(const std::string &file_name, std::vector<token_t> &tokens);

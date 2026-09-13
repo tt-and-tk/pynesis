@@ -490,8 +490,8 @@ std::string Generator::new_label() {
 void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(cond->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(cond->loc);
     }
     // 比較条件: 否定したF系で「偽のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
@@ -513,8 +513,8 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
 void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(cond->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(cond->loc);
     }
     // 比較条件: そのままのF系で「真のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
@@ -553,8 +553,8 @@ void Generator::gen_compare(node_t *expr, int reg) {
 void Generator::gen_logical(node_t *expr, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
     const bool is_and = (expr->sval == "&&");
     const std::string shortcut = this->new_label();   // 短絡時の飛び先
@@ -596,8 +596,8 @@ void Generator::gen_ternary(node_t *expr, int reg) {
 void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
     node_t *var = expr->children[0];                          // 対象変数 (ND_VAR)
     const std::string op = (expr->sval == "++") ? "+" : "-";  // ++→加算, --→減算
@@ -630,8 +630,8 @@ void Generator::gen_unary(node_t *expr, int reg) {
     else if (op == "-") {
         // 単項- : 0 - x で符号反転する (r{reg+1}を使うため上限(r15)を超えないことを確認する)
         if (reg + 1 >= MAX_REG) {
-            throw std::string("compiler error: expression too complex (out of registers) at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: expression too complex (out of registers) at ")
+                  + loc_to_string(expr->loc);
         }
         this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";                          // r{reg+1} = 0
         this->asm_file_ << "    sub r" << (reg + 1) << " r" << reg << " r" << reg << "\n";    // r{reg} = 0 - x
@@ -641,8 +641,8 @@ void Generator::gen_unary(node_t *expr, int reg) {
     } else if (op == "!") {
         // 論理否定 : x==0 なら1，それ以外は0 (比較と同じ0/1生成パターン，r{reg+1}を使うため上限(r15)を超えないことを確認する)
         if (reg + 1 >= MAX_REG) {
-            throw std::string("compiler error: expression too complex (out of registers) at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: expression too complex (out of registers) at ")
+                  + loc_to_string(expr->loc);
         }
         const std::string t = this->new_label();      // 真(x==0)の飛び先
         const std::string end = this->new_label();
@@ -655,7 +655,7 @@ void Generator::gen_unary(node_t *expr, int reg) {
         this->asm_file_ << end << ":\n";
     } else {
         throw std::string("compiler error: unsupported unary operator '") + op
-              + "' at line " + std::to_string(expr->line);
+              + "' at " + loc_to_string(expr->loc);
     }
 }
 
@@ -936,8 +936,8 @@ void Generator::gen_expr_protecting(node_t *expr, int reg, int protect_reg) {
 void Generator::gen_expr(node_t *expr, int reg) {
     // レジスタは16本(r0〜r15)．深い式で枯渇したらエラーにする
     if (reg >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
 
     switch (expr->kind) {
@@ -1069,8 +1069,8 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 //  自身の作業用としてr{reg+1}を使い，アドレスを上書きしてしまう)．
                 // レジスタ使用: r{reg}=右辺値/現在値，r{reg+1}=アドレス(作業用にr{reg+2}も使う)
                 if (reg + 2 >= MAX_REG) {
-                    throw std::string("compiler error: expression too complex (out of registers) at line ")
-                          + std::to_string(expr->line);
+                    throw std::string("compiler error: expression too complex (out of registers) at ")
+                          + loc_to_string(expr->loc);
                 }
                 if (expr->sval == "=") {
                     // 単純代入: 右辺を先にr{reg}へ評価してから，アドレスをr{reg+1}へ求める(r{reg}を保護)
@@ -1124,8 +1124,8 @@ void Generator::gen_expr(node_t *expr, int reg) {
             break;
 
         default:
-            throw std::string("compiler error: unsupported expression in code generation at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported expression in code generation at ")
+                  + loc_to_string(expr->loc);
     }
 }
 
@@ -1146,8 +1146,8 @@ void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
 // レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(要素間隔・ベース，作業用)
 void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg) {
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(member_access->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(member_access->loc);
     }
     const symbol_t *arr_sym = member_access->sym;          // 配列全体のシンボル(先頭番地・構造体名)
     node_t *array_access = member_access->children[0];     // arr[i] (children[0]=インデックス式)
@@ -1188,8 +1188,8 @@ void Generator::gen_member_array_base(node_t *expr, int addr_reg, int protect_re
 // ベースアドレス計算(gen_struct_array_member_addr)がさらにr{reg+2}を使うため3本必要，reg<=13)
 void Generator::gen_array_load(node_t *expr, int reg) {
     if (reg + 2 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
 
     // 要素型は，通常配列ならexpr->symの型，構造体メンバ配列ならメンバ自身の型(children[1]->type)
@@ -1207,8 +1207,8 @@ void Generator::gen_array_load(node_t *expr, int reg) {
         case BASE_SHORT: mask = "3h"; shift = 1; break;
         case BASE_INT:   mask = "fh"; shift = 2; break;
         default:
-            throw std::string("compiler error: unsupported array element type at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported array element type at ")
+                  + loc_to_string(expr->loc);
     }
 
     // オフセット = index * サイズ (サイズ1のcharはシフト不要)
@@ -1246,8 +1246,8 @@ void Generator::gen_array_load(node_t *expr, int reg) {
 // メンバ配列の場合，ベースアドレス計算がさらにr{work_reg+2}を使うため3本必要，work_reg+2<=15)
 void Generator::gen_array_store(node_t *expr, int val_reg, int work_reg) {
     if (work_reg + 2 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
 
     // 要素型は，通常配列ならexpr->symの型，構造体メンバ配列ならメンバ自身の型(children[1]->type)
@@ -1265,8 +1265,8 @@ void Generator::gen_array_store(node_t *expr, int val_reg, int work_reg) {
         case BASE_SHORT: mask = "3h"; shift = 1; break;
         case BASE_INT:   mask = "fh"; shift = 2; break;
         default:
-            throw std::string("compiler error: unsupported array element type at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported array element type at ")
+                  + loc_to_string(expr->loc);
     }
 
     // オフセット = index * サイズ (サイズ1のcharはシフト不要)

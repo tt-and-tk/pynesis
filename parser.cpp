@@ -58,16 +58,16 @@ token_t Parser::get_token(token_kind_t kind) {
         const std::string actual_name = (actual.kind == TK_EOF) ? "EOF" : "'" + actual.value + "'";
         throw std::string("compiler error: expected ") + Parser::token_kind_name(kind)
               + " but got " + actual_name
-              + " at line " + std::to_string(actual.line);
+              + " at " + loc_to_string(actual.loc);
     }
     return this->tokens_[this->pos_++];
 }
 
-// 現在のトークンの行番号でASTノードを生成する
+// 現在のトークンの位置でASTノードを生成する
 node_t *Parser::new_node(node_kind_t kind) {
     node_t *node = new node_t;
     node->kind   = kind;
-    node->line   = this->peek_token().line;
+    node->loc   = this->peek_token().loc;
     node->ival   = 0;
     return node;
 }
@@ -120,8 +120,8 @@ type_t Parser::parse_type(bool allow_void) {
     if (this->token_kind_is(TK_SIGNED)) {
         this->get_token();
     } else if (this->token_kind_is(TK_UNSIGNED)) {
-        throw std::string("compiler error: 'unsigned' is not supported yet at line ")
-              + std::to_string(this->peek_token().line);
+        throw std::string("compiler error: 'unsigned' is not supported yet at ")
+              + loc_to_string(this->peek_token().loc);
     }
 
     type_t type;
@@ -148,8 +148,8 @@ type_t Parser::parse_type(bool allow_void) {
     if (this->token_kind_is(TK_CHAR))  { type.base = BASE_CHAR;  this->get_token(); return type; }
     if (this->token_kind_is(TK_SHORT)) { type.base = BASE_SHORT; this->get_token(); return type; }
 
-    throw std::string("compiler error: expected type at line ")
-          + std::to_string(this->peek_token().line);
+    throw std::string("compiler error: expected type at ")
+          + loc_to_string(this->peek_token().loc);
 }
 
 // プログラム全体を解析してND_PROGRAMを返す
@@ -205,8 +205,8 @@ node_t *Parser::parse_program() {
 
             // 型の次が識別子でなければエラー (範囲外アクセスを避けてEOF扱いで判定する)
             if (this->peek_kind_ahead(offset + 1) != TK_IDENT) {
-                throw std::string("compiler error: expected identifier after type at line ")
-                      + std::to_string(this->peek_token().line);
+                throw std::string("compiler error: expected identifier after type at ")
+                      + loc_to_string(this->peek_token().loc);
             }
             // 識別子の次が '(' なら関数定義，それ以外は変数宣言
             if (this->peek_kind_ahead(offset + 2) == TK_LPAREN) {
@@ -217,8 +217,8 @@ node_t *Parser::parse_program() {
         }
         // それ以外がファイル直下にあるならエラー
         else {
-            throw std::string("compiler error: expected function or variable declaration at line ")
-                  + std::to_string(this->peek_token().line);
+            throw std::string("compiler error: expected function or variable declaration at ")
+                  + loc_to_string(this->peek_token().loc);
         }
     }
 
@@ -233,13 +233,13 @@ node_t *Parser::parse_func_def() {
     // 戻り値型を読む (void/int/char/shortのみ許可，構造体・constは非対応)
     node->type = this->parse_type(true);
     if (node->type.base == BASE_STRUCT) {
-        throw std::string("compiler error: struct cannot be used as a function return type at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: struct cannot be used as a function return type at ")
+              + loc_to_string(node->loc);
     }
     // 戻り値型にconstが付いている場合
     if (node->type.is_const) {
-        throw std::string("compiler error: function return type cannot be const at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: function return type cannot be const at ")
+              + loc_to_string(node->loc);
     }
 
     // 関数名
@@ -297,8 +297,8 @@ node_t *Parser::parse_stmt() {
             const token_kind_t next_kind = has_tag ? this->peek_kind_ahead(2) : this->peek_kind_ahead(1);
             // struct [構造体名] { ... : 構造体定義はグローバル直下でのみ許可する
             if (next_kind == TK_LBRACE) {
-                throw std::string("compiler error: struct definition is only allowed at global scope at line ")
-                      + std::to_string(this->peek_token().line);
+                throw std::string("compiler error: struct definition is only allowed at global scope at ")
+                      + loc_to_string(this->peek_token().loc);
             }
             // ここでエラーにならなければ，struct 構造体名 変数名; (既存の構造体定義を使った変数宣言)であり，
             // 通常の変数宣言と同じくparse_var_declに処理を委ねてよい
@@ -608,13 +608,13 @@ node_t *Parser::parse_param() {
     // パラメータの型 (構造体・constは非対応)
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
-        throw std::string("compiler error: struct cannot be used as a function parameter type at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: struct cannot be used as a function parameter type at ")
+              + loc_to_string(node->loc);
     }
     // パラメータの型にconstが付いている場合
     if (node->type.is_const) {
-        throw std::string("compiler error: function parameter cannot be const at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: function parameter cannot be const at ")
+              + loc_to_string(node->loc);
     }
 
     // パラメータ名
@@ -650,18 +650,18 @@ node_t *Parser::parse_var_decl() {
     if (node->type.is_const) {
         // 構造体変数の場合
         if (node->type.base == BASE_STRUCT) {
-            throw std::string("compiler error: struct variable cannot be const at line ")
-                  + std::to_string(node->line);
+            throw std::string("compiler error: struct variable cannot be const at ")
+                  + loc_to_string(node->loc);
         }
         // 配列の場合
         if (this->token_kind_is(TK_LBRACKET)) {
-            throw std::string("compiler error: array cannot be const at line ")
-                  + std::to_string(node->line);
+            throw std::string("compiler error: array cannot be const at ")
+                  + loc_to_string(node->loc);
         }
         // 初期化子がない場合
         if (!this->token_kind_is(TK_ASSIGN)) {
             throw std::string("compiler error: const variable '") + node->sval
-                  + "' requires an initializer at line " + std::to_string(node->line);
+                  + "' requires an initializer at " + loc_to_string(node->loc);
         }
     }
 
@@ -674,8 +674,8 @@ node_t *Parser::parse_var_decl() {
             node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
             this->get_token(TK_RBRACKET);
         } else if (this->token_kind_is(TK_ASSIGN)) {
-            throw std::string("compiler error: struct variable initializer is not supported at line ")
-                  + std::to_string(this->peek_token().line);
+            throw std::string("compiler error: struct variable initializer is not supported at ")
+                  + loc_to_string(this->peek_token().loc);
         }
         this->get_token(TK_SEMICOLON);
         return node;
@@ -719,13 +719,13 @@ node_t *Parser::parse_struct_member() {
     // (struct Outer { struct Inner arr[3]; }のarr．配列の要素数を読むより前の判定)も同じエラーで弾かれる
     node->type = this->parse_type(false);
     if (node->type.base == BASE_STRUCT) {
-        throw std::string("compiler error: nested struct members are not supported at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: nested struct members are not supported at ")
+              + loc_to_string(node->loc);
     }
     // メンバの型にconstが付いている場合 (メンバの初期化子が非対応で値を与える手段がないため，constメンバも非対応)
     if (node->type.is_const) {
-        throw std::string("compiler error: struct member cannot be const at line ")
-              + std::to_string(node->line);
+        throw std::string("compiler error: struct member cannot be const at ")
+              + loc_to_string(node->loc);
     }
 
     // メンバ名を読む
@@ -784,8 +784,8 @@ std::vector<node_t *> Parser::parse_struct_decl() {
         }
         result.push_back(var);
     } else if (!has_tag) {
-        throw std::string("compiler error: anonymous struct must declare a variable at line ")
-              + std::to_string(this->peek_token().line);
+        throw std::string("compiler error: anonymous struct must declare a variable at ")
+              + loc_to_string(this->peek_token().loc);
     }
 
     this->get_token(TK_SEMICOLON);
@@ -813,7 +813,7 @@ node_t *Parser::parse_assign() {
     // 左辺が代入可能か(変数か)の検査は意味解析(analyze_exprのND_ASSIGN)に委ねる
     const token_t op = this->get_token();
     node_t *node = this->new_node(ND_ASSIGN);
-    node->line = op.line;       // 演算子の行番号を使う
+    node->loc = op.loc;         // 演算子の位置を使う
     node->sval = op.value;      // 演算子の文字列 ("=", "+=" 等)
     node->children = {left, this->parse_assign()};
     return node;
@@ -859,7 +859,7 @@ node_t *Parser::parse_binary(int min_prec) {
 
         // 二項演算ノードにまとめ，新しい左辺とする
         node_t *node = this->new_node(ND_BINOP);
-        node->line = op.line;       // 演算子の行番号を使う
+        node->loc = op.loc;         // 演算子の位置を使う
         node->sval = op.value;      // 演算子の文字列
         node->children = { left, right };
         left = node;
@@ -879,7 +879,7 @@ node_t *Parser::parse_unary() {
      || kind == TK_PLUSPLUS || kind == TK_MINUSMINUS) {
         const token_t op = this->get_token();
         node_t *node = this->new_node(ND_UNOP);
-        node->line = op.line;
+        node->loc = op.loc;
         node->sval = op.value;
         node->children = { this->parse_unary() };   // オペランドを再帰解析
         return node;
@@ -905,12 +905,12 @@ node_t *Parser::parse_postfix() {
             const bool is_struct_array_elem =
                 node->kind == ND_ARRAY_ACCESS && node->children.size() == 1;
             if (node->kind != ND_VAR && !is_struct_array_elem) {
-                throw std::string("compiler error: expected a struct variable before '.' at line ")
-                      + std::to_string(this->peek_token().line);
+                throw std::string("compiler error: expected a struct variable before '.' at ")
+                      + loc_to_string(this->peek_token().loc);
             }
             this->get_token(TK_DOT);                     // . を消費
             node_t *member = this->new_node(ND_MEMBER_ACCESS);  // メンバアクセスノード
-            member->line = node->line;                          // 行番号は基底の行を引き継ぐ
+            member->loc = node->loc;                            // 位置は基底の位置を引き継ぐ
             member->children.push_back(node);            // このメンバが属する構造体変数またはarr[i]を子に持つ
             member->sval = this->get_token(TK_IDENT).value;  // メンバ名
             node = member;   // 以降の連鎖判定の対象をこのメンバアクセス自身に置き換える
@@ -921,12 +921,12 @@ node_t *Parser::parse_postfix() {
         if (this->token_kind_is(TK_LBRACKET)) {
             // []の前は変数名かメンバアクセスでなければならない (例: (a+b)[0]は非対応)
             if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS) {
-                throw std::string("compiler error: expected a variable name before '[' at line ")
-                      + std::to_string(this->peek_token().line);
+                throw std::string("compiler error: expected a variable name before '[' at ")
+                      + loc_to_string(this->peek_token().loc);
             }
             this->get_token(TK_LBRACKET);           // [
             node_t *access = this->new_node(ND_ARRAY_ACCESS);  // 配列アクセスノード
-            access->line = node->line;                         // 行番号は基底の行を引き継ぐ
+            access->loc = node->loc;                           // 位置は基底の位置を引き継ぐ
             if (node->kind == ND_VAR) {
                 // 通常の配列変数: 名前で解決するのでインデックス式のみをchildren[0]に持つ
                 access->sval = node->sval;
@@ -953,12 +953,12 @@ node_t *Parser::parse_postfix() {
         const bool is_struct_array_member =
             node->kind == ND_MEMBER_ACCESS && node->children[0]->kind == ND_ARRAY_ACCESS;
         if (is_array_elem || is_struct_array_member) {
-            throw std::string("compiler error: '++'/'--' on array element is not supported at line ")
-                  + std::to_string(this->peek_token().line);
+            throw std::string("compiler error: '++'/'--' on array element is not supported at ")
+                  + loc_to_string(this->peek_token().loc);
         }
         const token_t op = this->get_token();
         node_t *post = this->new_node(ND_POST_UNOP);
-        post->line = op.line;
+        post->loc = op.loc;
         post->sval = op.value;
         post->children = { node };
         return post;
@@ -968,12 +968,12 @@ node_t *Parser::parse_postfix() {
     if (this->token_kind_is(TK_LPAREN)) {
         // (の前は関数名でなければならない (例: (a+b)(1)は非対応)
         if (node->kind != ND_VAR) {
-            throw std::string("compiler error: expected function name before '(' at line ")
-                  + std::to_string(this->peek_token().line);
+            throw std::string("compiler error: expected function name before '(' at ")
+                  + loc_to_string(this->peek_token().loc);
         }
         this->get_token();                  // (
         node_t *call = this->new_node(ND_CALL);
-        call->line = node->line;
+        call->loc = node->loc;
         call->sval = node->sval;            // 関数名
         // 引数がある場合はカンマ区切りでパースする
         if (!this->token_kind_is(TK_RPAREN)) {
@@ -1041,7 +1041,7 @@ node_t *Parser::parse_primary() {
     }
 
     throw std::string("compiler error: expected expression but got '")
-          + this->peek_token().value + "' at line " + std::to_string(this->peek_token().line);
+          + this->peek_token().value + "' at " + loc_to_string(this->peek_token().loc);
 }
 
 // 整数リテラル文字列を数値に変換する (0x/0X接頭辞があれば16進数，無ければ10進数)

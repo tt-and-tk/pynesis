@@ -1,0 +1,4 @@
+// 字句解析エラー: #pragma onceが無いファイルどうしで循環して取り込む (異常系)
+#include "include/157_lib.pn"
+void main(void) {
+}
