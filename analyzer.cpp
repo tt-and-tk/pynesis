@@ -960,67 +960,42 @@ void Analyzer::analyze_expr(node_t *expr) {
         // 代入: 左辺は書き込み可能なスカラーの変数・構造体メンバまたは配列要素でなければならない
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];
-            // 配列要素への代入: 左辺を先に解析して名前解決する
-            if (lhs->kind == ND_ARRAY_ACCESS) {
-                this->analyze_expr(lhs);                // 左辺(配列要素)の名前解決
-                this->analyze_expr(expr->children[1]);  // 右辺の式を検査する
-                // void関数の戻り値(値を持たない)を代入することはできない
-                if (expr->children[1]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot assign void value at line ")
-                          + std::to_string(expr->line);
+            // 左辺を名前解決する
+            if (lhs->kind == ND_VAR) {
+                // 変数はanalyze_exprを通さず直接名前解決する
+                // (analyze_exprはconst変数を整数リテラルに置き換えて書き込み可否の検査をすり抜けさせ，
+                //  読み取り不可の変数への単純代入も読み取り検査でエラーにしてしまうため)
+                const symbol_t *sym = this->lookup_symbol(lhs->sval);
+                if (sym == nullptr) {
+                    throw std::string("compiler error: use of undeclared identifier '")
+                          + lhs->sval + "' at line " + std::to_string(lhs->line);
                 }
-                expr->type = lhs->type;
-                return;
-            }
-            // 構造体メンバへの代入: 左辺を先に解析して名前解決する
-            if (lhs->kind == ND_MEMBER_ACCESS) {
+                lhs->sym  = sym;
+                lhs->type = sym->type;
+            } else if (lhs->kind == ND_ARRAY_ACCESS || lhs->kind == ND_MEMBER_ACCESS) {
+                // 配列要素・構造体メンバはそれぞれのアクセスの検査に名前解決させる
                 this->analyze_expr(lhs);
-                Analyzer::check_scalar_operand(lhs, "assignment");
-                if (!lhs->sym->writable) {
-                    throw std::string("compiler error: '") + lhs->sym->name
-                          + "' is not writable at line " + std::to_string(lhs->line);
-                }
-                // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
-                if (expr->sval != "=" && !lhs->sym->readable) {
-                    throw std::string("compiler error: '") + lhs->sym->name
-                          + "' is not readable at line " + std::to_string(lhs->line);
-                }
-                this->analyze_expr(expr->children[1]);
-                if (expr->children[1]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot assign void value at line ")
-                          + std::to_string(expr->line);
-                }
-                expr->type = lhs->type;
-                return;
-            }
-            if (lhs->kind != ND_VAR) {
+            } else {
                 throw std::string("compiler error: left side of assignment must be a variable at line ")
                       + std::to_string(expr->line);
             }
-            const symbol_t *sym = this->lookup_symbol(lhs->sval);
-            if (sym == nullptr) {
-                throw std::string("compiler error: use of undeclared identifier '")
-                      + lhs->sval + "' at line " + std::to_string(lhs->line);
-            }
-            if (!sym->writable) {
-                throw std::string("compiler error: '") + lhs->sval
+            Analyzer::check_scalar_operand(lhs, "assignment");
+            if (!lhs->sym->writable) {
+                throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not writable at line " + std::to_string(lhs->line);
             }
             // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
-            if (expr->sval != "=" && !sym->readable) {
-                throw std::string("compiler error: '") + lhs->sval
+            if (expr->sval != "=" && !lhs->sym->readable) {
+                throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not readable at line " + std::to_string(lhs->line);
             }
-            lhs->sym  = sym;
-            lhs->type = sym->type;
-            Analyzer::check_scalar_operand(lhs, "assignment");
             this->analyze_expr(expr->children[1]);   // 右辺を検査する
             // void関数の戻り値(値を持たない)を代入することはできない
             if (expr->children[1]->type.base == BASE_VOID) {
                 throw std::string("compiler error: cannot assign void value at line ")
                       + std::to_string(expr->line);
             }
-            expr->type = sym->type;
+            expr->type = lhs->type;
             return;
         }
 

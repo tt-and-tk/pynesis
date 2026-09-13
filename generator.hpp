@@ -53,8 +53,10 @@ private:
     void gen_store(int reg, const symbol_t *sym);  // r{reg}を変数へ書き込む (レジスタ直結ならmov・メモリならwm)
     // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用．r{work_reg}を作業用に使う)
     void gen_sign_extend(int reg, int bits, int work_reg);
-    void gen_array_load(node_t *expr, int reg);    // 配列要素をr{reg}へ読み込む
-    void gen_array_store(node_t *expr, int val_reg, int work_reg);  // r{val_reg}を配列要素へ書き込む
+    // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
+    void gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs = {});
+    // 番地が実行時に決まる代入先(配列要素または構造体配列要素のメンバ)の実アドレスをr{reg}に計算する
+    void gen_runtime_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
     void gen_array_base_addr(int reg, const symbol_t *sym);  // 配列の先頭アドレスをr{reg}に載せる (直接配列は即値，配列パラメータは間接読み出し)
     // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する．
     // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数) + インデックス(実行時)×構造体1要素分のバイト数．

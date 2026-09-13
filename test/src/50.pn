@@ -1,0 +1,33 @@
+// 配列要素への複合代入: 左辺の現在値と右辺を演算子で畳んだ結果を書き込む．
+// ローカル・グローバルのint/char/short配列，構造体変数のメンバ配列，構造体配列要素のメンバ配列，
+// 配列パラメータ，添字・右辺に関数呼び出しを含む場合を確認する
+struct Buf {
+    int head;
+    char data[2];
+};
+
+struct Buf one_buf;
+struct Buf bufs[2];
+char ca[4];
+short sa[4];
+
+int two(void) {
+    return 2;
+}
+
+void halve(int p[]) {
+    p[1] /= 3;
+}
+
+void main(void) {
+    int la[2];
+    int i = 1;
+    la[i] += 3;
+    ca[i] -= 1;
+    sa[i] <<= 2;
+    one_buf.data[i] |= 4;
+    bufs[i].data[i] *= 5;
+    la[two() - 1] ^= i;
+    bufs[i].data[i] %= two();
+    halve(la);
+}

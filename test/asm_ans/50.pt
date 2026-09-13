@@ -1,0 +1,121 @@
+.global two, halve, main
+
+main:
+    mov fh r0 r0 1
+    wm fh r0 r0 48
+    rm fh r0 r1 48
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 40
+    add r1 r2 r1
+    mov fh r1 r0
+    rm fh r0 r0
+    mov fh r0 r2 3
+    add r0 r2 r0
+    wm fh r1 r0
+    rm fh r0 r1 48
+    mov fh r0 r2 24
+    add r1 r2 r1
+    mov fh r1 r0
+    rm 1h r0 r0
+    mov fh r0 r2 24
+    sll r0 r2 r0
+    sra r0 r2 r0
+    mov fh r0 r2 1
+    sub r0 r2 r0
+    wm 1h r1 r0
+    rm fh r0 r1 48
+    mov fh r0 r2 1
+    sll r1 r2 r1
+    mov fh r0 r2 28
+    add r1 r2 r1
+    mov fh r1 r0
+    rm 3h r0 r0
+    mov fh r0 r2 16
+    sll r0 r2 r0
+    sra r0 r2 r0
+    mov fh r0 r2 2
+    sll r0 r2 r0
+    wm 3h r1 r0
+    rm fh r0 r1 48
+    mov fh r0 r2 4
+    add r1 r2 r1
+    mov fh r1 r0
+    rm 1h r0 r0
+    mov fh r0 r2 24
+    sll r0 r2 r0
+    sra r0 r2 r0
+    mov fh r0 r2 4
+    or r0 r2 r0
+    wm 1h r1 r0
+    rm fh r0 r1 48
+    rm fh r0 r2 48
+    mov fh r0 r3 8
+    mul r2 r3 r2
+    mov fh r0 r3 12
+    add r2 r3 r2
+    add r1 r2 r1
+    mov fh r1 r0
+    rm 1h r0 r0
+    mov fh r0 r2 24
+    sll r0 r2 r0
+    sra r0 r2 r0
+    mov fh r0 r2 5
+    mul r0 r2 r0
+    wm 1h r1 r0
+    call two
+    mov fh r30 r1
+    mov fh r0 r2 1
+    sub r1 r2 r1
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 40
+    add r1 r2 r1
+    mov fh r1 r0
+    rm fh r0 r0
+    rm fh r0 r2 48
+    xor r0 r2 r0
+    wm fh r1 r0
+    rm fh r0 r1 48
+    rm fh r0 r2 48
+    mov fh r0 r3 8
+    mul r2 r3 r2
+    mov fh r0 r3 12
+    add r2 r3 r2
+    add r1 r2 r1
+    mov fh r1 r0
+    rm 1h r0 r0
+    mov fh r0 r2 24
+    sll r0 r2 r0
+    sra r0 r2 r0
+    wm fh r0 r0 52
+    wm fh r0 r1 56
+    call two
+    mov fh r30 r2
+    rm fh r0 r0 52
+    rm fh r0 r1 56
+    div r0 r2 r2 0
+    wm 1h r1 r0
+    mov fh r0 r0 40
+    wm fh r0 r0 36
+    call halve
+    ret
+
+two:
+    mov fh r0 r0 2
+    mov fh r0 r30
+    ret
+    ret
+
+halve:
+    mov fh r0 r1 1
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    rm fh r0 r2 36
+    add r1 r2 r1
+    mov fh r1 r0
+    rm fh r0 r0
+    mov fh r0 r2 3
+    div r0 r2 r0
+    wm fh r1 r0
+    ret
