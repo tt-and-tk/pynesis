@@ -211,8 +211,11 @@ const symbol_t *Analyzer::resolve_global_const(const std::string &name) {
 // 解決中の宣言に再び到達した場合は，宣言の型・値が自身に依存しているため循環参照としてエラーにする
 void Analyzer::begin_resolving(const node_t *decl) {
     if (this->resolving_decls_.count(decl)) {
-        throw std::string("compiler error: circular reference in declaration of '") + decl->sval
-              + "' at line " + std::to_string(decl->line);
+        // 無名構造体の名前はパーサが割り当てた内部名でソースに現れないため，無名であることを示す
+        const std::string name = (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$')
+                                     ? "anonymous struct" : "'" + decl->sval + "'";   // エラーメッセージに表示する宣言名
+        throw std::string("compiler error: circular reference in declaration of ") + name
+              + " at line " + std::to_string(decl->line);
     }
     this->resolving_decls_.insert(decl);
 }
