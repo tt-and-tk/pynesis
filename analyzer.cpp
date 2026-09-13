@@ -247,7 +247,7 @@ void Analyzer::end_resolving(const node_t *decl) {
 symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
     // 宣言されている構造体の定義と，構造体配列なら要素数を確定させる (通常の配列宣言のサイズ指定と同じ扱い)
     this->resolve_decl_type(decl);
-    const int element_count = decl->type.is_array ? decl->type.array_size : 1;   // 構造体の個数
+    const int element_count = decl->type.is_array ? decl->type.array_size : 1;   // 配列の要素数 (配列でなければ1)
 
     // 構造体変数(配列なら配列全体)のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
