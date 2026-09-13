@@ -5,3 +5,5 @@
 void main(void) {
     count = count + step();     // 1 + 1 = 2
 }
+// 関数本体を閉じる}の直後にも取り込み指令を書ける
+#include "include/49_common.pn"

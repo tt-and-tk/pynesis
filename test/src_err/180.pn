@@ -1,0 +1,8 @@
+// 字句解析エラー: #includeは構造体定義を閉じる}と;の間に書けない (取り込む内容をつなげると宣言として正しくてもエラー) (異常系)
+struct S {
+    int x;
+}
+#include "include/180_lib.pn"
+;
+void main(void) {
+}

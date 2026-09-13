@@ -39,6 +39,7 @@ static void lex_directive(const source_t &source, int &i, int line, lex_state_t 
 static void lex_include(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
 // #pragmaを処理する
 static void lex_pragma(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
+static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_depth);  // トークン列がグローバルスコープの宣言と宣言の間で終わっているかを返す
 static void check_directive_line_end(const std::string &src, int i, const loc_t &loc);  // 指令の後ろの同じ行に空白とコメント以外が無いことを確認する
 static std::string read_word(const std::string &src, int &i);  // 現在位置から識別子に使える文字の並びを読み進めて返す
 static token_kind_t get_keyword_kind(const std::string &word);  // 識別子がキーワードならその種別を，そうでなければ TK_IDENT を返す
@@ -309,10 +310,7 @@ static void lex_directive(const source_t &source, int &i, int line, lex_state_t 
     }
 
     // 指令はグローバルスコープの宣言と宣言の間にのみ書ける
-    const bool at_decl_boundary =   // プログラムの先頭，またはグローバルスコープ直下の;か}の直後か
-        state.brace_depth == 0
-        && (tokens.empty() || tokens.back().kind == TK_SEMICOLON || tokens.back().kind == TK_RBRACE);
-    if (!at_decl_boundary) {
+    if (!is_at_decl_boundary(tokens, state.brace_depth)) {
         throw std::string("compiler error: '#") + name
               + "' is only allowed between global declarations at " + loc_to_string(loc);
     }
@@ -381,6 +379,30 @@ static void lex_pragma(const source_t &source, int &i, const loc_t &loc, lex_sta
     check_directive_line_end(source.text, i, loc);
     // このファイルに#pragma onceが書かれたことを記録する
     state.once_paths.insert(source.canonical_path);
+}
+
+// ここまでのトークン列が，グローバルスコープの宣言と宣言の間で終わっているかを返す
+// (プログラムの先頭，グローバルスコープ直下の;の直後，または関数本体を閉じる}の直後)
+// 構造体定義の}は後ろに;が続き宣言の途中にあたるため，}は対応する{の直前が)である関数本体の場合に限る
+static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_depth) {
+    // 波括弧の中なら宣言の途中
+    if (brace_depth != 0) return false;
+    // プログラムの先頭，または;の直後なら宣言の間
+    if (tokens.empty() || tokens.back().kind == TK_SEMICOLON) return true;
+    // ;と}以外の直後なら宣言の途中
+    if (tokens.back().kind != TK_RBRACE) return false;
+
+    // 末尾の}に対応する{を後ろから探す
+    int depth = 0;  // 探索中の波括弧の入れ子の深さ
+    for (int k = static_cast<int>(tokens.size()) - 1; k >= 0; k--) {
+        if (tokens[k].kind == TK_RBRACE) depth++;
+        if (tokens[k].kind == TK_LBRACE) depth--;
+        // 対応する{が見つかったら，その直前が)なら関数本体
+        if (depth == 0) {
+            return k > 0 && tokens[k - 1].kind == TK_RPAREN;
+        }
+    }
+    return false;
 }
 
 // 指令の後ろの同じ行に，空白とコメント以外が書かれていないことを確認する
