@@ -1178,8 +1178,8 @@ void Generator::gen_member_array_base(node_t *expr, int addr_reg, const std::vec
 }
 
 // 配列要素の実アドレスをr{reg}に計算する
-// アドレス = 配列先頭番地 + index * 要素サイズ(バイト単位)．配列先頭番地は，通常配列・単一構造体変数のメンバ配列は
-// コンパイル時定数，配列パラメータはメモリからの読み出し，構造体配列要素のメンバ配列は実行時計算で求める
+// アドレス = 配列先頭番地 + index * 要素サイズ(バイト単位)．配列先頭番地は配列の種類に応じて，
+// コンパイル時定数・メモリからの読み出し・実行時計算のいずれかで求める
 // レジスタ使用: r{reg}=index→アドレス, r{reg+1}=シフト量・配列先頭番地 (2本．構造体配列要素のメンバ配列の場合，
 // 先頭番地の計算(gen_struct_array_member_addr)がさらにr{reg+2}を使うため3本必要)
 void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs) {
