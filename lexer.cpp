@@ -112,7 +112,7 @@ void lex(const std::string &src, std::vector<token_t> &tokens) {
             i++;  // 開き ' をスキップする
             // エスケープシーケンスの場合，バックスラッシュの次の文字を文字本体として扱う
             if (i < src_size && src[i] == '\\') i++;
-            // 文字本体が改行なら，エスケープの有無に関わらずエラーにする
+            // 改行は，エスケープの有無に関わらずエラーにする
             if (i < src_size && src[i] == '\n') {
                 throw std::string("compiler error: newline in char literal at line ")
                       + std::to_string(line);
