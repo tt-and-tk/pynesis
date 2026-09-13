@@ -916,6 +916,10 @@ void Generator::gen_store_indirect(int addr_reg, int val_reg, const type_t &type
 
 // r{reg}の下位bitsビットを符号として32ビットへ符号拡張する(シフト量の保持にr{work_reg}を使う)
 void Generator::gen_sign_extend(int reg, int bits, int work_reg) {
+    // 作業用レジスタが上限(r15)を超えないことを確認する (r16以降はSP等の汎用でないレジスタのため)
+    if (work_reg >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers)");
+    }
     const int shift = 32 - bits;
     // シフト量を保存しておく
     this->asm_file_ << "    mov fh r0 r" << work_reg << " " << shift << "\n";
