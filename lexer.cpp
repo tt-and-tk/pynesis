@@ -409,13 +409,21 @@ static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_de
 // (位置iは読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
 static void check_directive_line_end(const std::string &src, int i, const loc_t &loc) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
-    // 空白を読み飛ばす
-    while (i < src_size && (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')) i++;
-    const bool only_comment_follows =   // 行末・ファイル末尾・コメントの開始のいずれかか
-        i >= src_size || src[i] == '\n'
-        || (src[i] == '/' && i + 1 < src_size && (src[i + 1] == '/' || src[i + 1] == '*'));
-    if (!only_comment_follows) {
-        throw std::string("compiler error: unexpected text after directive at ") + loc_to_string(loc);
+    while (true) {
+        // 空白を読み飛ばす
+        while (i < src_size && (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')) i++;
+        // 行末・ファイル末尾・行コメントに達したら，同じ行の残りに記述は無い
+        if (i >= src_size || src[i] == '\n' || src.compare(i, 2, "//") == 0) return;
+        // コメント以外が書かれている場合
+        if (src.compare(i, 2, "/*") != 0) {
+            throw std::string("compiler error: unexpected text after directive at ") + loc_to_string(loc);
+        }
+        // ブロックコメントの終わりを探す
+        const size_t end = src.find("*/", i + 2);   // ブロックコメントを閉じる*/の位置
+        // 閉じずにファイルが終わるか，途中で改行して行をまたぐなら，同じ行の残りに記述は無い
+        if (end == std::string::npos || src.find('\n', i) < end) return;
+        // 同じ行で閉じたブロックコメントの後ろも続けて調べる
+        i = static_cast<int>(end) + 2;
     }
 }
 
