@@ -84,7 +84,7 @@ private:
     void collect_globals();                                 // 3パス目: グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
-    // allow_sizeof_var: sizeof(変数名)を許可するか (const変数の初期化子では，参照先の変数が登録済みとは限らないため許可しない)
+    // allow_sizeof_var: sizeof(変数名)を許可するか (const変数の初期化子では，参照先の変数がシンボル表に登録済みとは限らないため許可しない)
     long long eval_const_expr(const node_t *expr, bool allow_sizeof_var = true);
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
     // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
