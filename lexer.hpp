@@ -80,7 +80,7 @@ typedef enum {
     TK_EOF,
 } token_kind_t;
 
-// ソース上の位置 (取り込んだファイルのトークンも区別できるようファイル名を持つ)
+// ソース上の位置 (エラー報告用)
 typedef struct {
     std::string file;   // ファイル名
     int line;           // 行番号
