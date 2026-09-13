@@ -1,0 +1,5 @@
+// 意味解析エラー: ローカルのconst変数の初期化子に通常の変数は使えない (異常系)
+void main(void) {
+    int x = 1;
+    const int N = x;
+}

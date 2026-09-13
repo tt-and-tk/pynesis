@@ -1,0 +1,4 @@
+// 意味解析エラー: 無名構造体のメンバの配列サイズが，その構造体の変数のsizeofに依存して循環している (異常系)
+struct { int m[sizeof(v)]; } v;
+void main(void) {
+}

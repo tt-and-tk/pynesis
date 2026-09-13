@@ -1,0 +1,5 @@
+// 意味解析エラー: const変数の初期化子どうしが互いを参照して循環している (異常系)
+const int A = B;
+const int B = A;
+void main(void) {
+}

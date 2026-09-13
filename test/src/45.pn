@@ -1,0 +1,17 @@
+// const変数の初期化子: 後方で宣言したconst変数・変数・構造体を，宣言順によらず参照やsizeofに使える
+const int TOTAL = HALF * 2;                 // 後方で宣言したconst変数を参照する: 4 * 2 = 8
+const int HALF = sizeof(buf) / 2;           // 後方で宣言した配列のサイズ: 8 / 2 = 4
+const int ENTRIES_BYTES = sizeof(table);    // 後方で定義した構造体の配列のサイズ: 2ワード(8バイト) × 2個 = 16
+char buf[LEN];                              // 配列サイズもさらに後方のconst変数で決まる(8要素 = 2ワード)
+const char LEN = 8;
+struct Pair { int a; int b; };
+struct Pair table[2];
+int g;
+
+void main(void) {
+    int local[3];
+    const int LOCAL_BYTES = sizeof(local);  // ローカル配列のサイズ: 3 × 4 = 12
+    g = TOTAL;
+    g = ENTRIES_BYTES;
+    g = LOCAL_BYTES;
+}

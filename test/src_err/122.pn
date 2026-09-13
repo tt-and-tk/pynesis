@@ -1,0 +1,4 @@
+// 意味解析エラー: char型のconst変数の値が型の範囲(-128〜127)を超える (異常系)
+const char C = 128;
+void main(void) {
+}

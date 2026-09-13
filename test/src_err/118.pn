@@ -1,0 +1,5 @@
+// 構文解析エラー: 構造体変数はconstにできない (異常系)
+struct S { int a; };
+const struct S s;
+void main(void) {
+}

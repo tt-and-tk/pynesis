@@ -21,6 +21,7 @@ typedef enum {
     LOC_REGISTER,   // レジスタ直結 (LED等のハードウェア変数)
     LOC_GLOBAL,     // メモリ上の絶対番地 (グローバル変数)
     LOC_LOCAL,      // 関数ローカルなメモリ領域 (現状は静的割り当ての固定番地，将来は相対アドレス)
+    LOC_CONST,      // 置き場所を持たないコンパイル時定数 (const変数．参照箇所へ値を直接埋め込む)
 } location_t;
 
 // シンボル情報
@@ -28,7 +29,7 @@ struct symbol_t {
     std::string name;       // 変数名
     type_t type;            // 型情報
     location_t location;    // 置き場所の種別
-    int address;            // レジスタ番地 / メモリ絶対番地 / SPオフセット (locationに応じて解釈)
+    int address;            // レジスタ番地 / メモリ絶対番地 / SPオフセット / 定数値 (locationに応じて解釈)
     bool readable;          // 読み込み可能かどうか (falseの参照はコンパイルエラー)
     bool writable;          // 書き込み可能かどうか (falseへの代入はコンパイルエラー)
 };
@@ -68,6 +69,9 @@ private:
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→パラメータのシンボル列
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
+    std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
+    std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
+    std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
     int next_addr_;                                      // 次に割り当てるメモリ番地 (グローバル→ローカルで連番)
     int scratch_base_;                                    // レジスタ退避領域の先頭番地 (全変数のアドレス割り当て後に確保)
     std::vector<std::map<std::string, const symbol_t *>> scopes_;  // ローカル変数のスコープスタック (内側ほど後ろ)
@@ -78,14 +82,22 @@ private:
     std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合 (ネスト段数検査用)
 
     // 解析メソッド
-    void collect_struct_decls();                            // 1パス目: 構造体定義の登録 (変数のアドレス確保より前に必要)
-    void collect_globals();                                 // 2パス目: グローバル変数の登録と関数名の収集
+    void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査
+    void collect_globals();                                 // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
     long long eval_const_expr(const node_t *expr);
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
     // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
     int type_size_bytes(const type_t &type) const;
+    // 宣言ノードの型を確定させる (構造体型なら構造体定義を解決し，配列なら要素数を計算して畳み込む．確定済みなら何もしない)
+    // 後方の宣言も解決できるよう，宣言順によらず必要になった時点で呼ばれる
+    void resolve_decl_type(node_t *decl);
+    void resolve_struct_def(const std::string &name);       // 構造体定義のメンバ構成を確定させて登録する (登録済みなら何もしない)
+    // グローバルのconst変数を名前から解決してシンボルを返す (値が未確定なら計算して登録する．該当する宣言がなければnullptr)
+    const symbol_t *resolve_global_const(const std::string &name);
+    void begin_resolving(const node_t *decl);               // 宣言の解決を始める (解決中の宣言に再び到達したら循環参照としてエラー)
+    void end_resolving(const node_t *decl);                 // 宣言の解決を終える
     // 構造体型の変数1つ分(配列宣言ならその配列全体分)のアドレスを確保し，シンボル(symbol_t)を生成して返す
     // decl: 構造体変数の宣言ノード(型・変数名・配列サイズ式を持つ)．location: グローバル/ローカルの区別
     // (シンボル表への格納自体は呼び出し元(collect_globals/analyze_local_decl)がグローバル/ローカルの
@@ -93,6 +105,9 @@ private:
     //  配列サイズを定数式から計算し，宣言ノードの子を計算済みの数値に置き換える(畳み込む)ため，
     //  declの中身を書き換える必要があり，読み取り専用にはできない)
     symbol_t *register_struct_var(node_t *decl, location_t location);
+    // const変数の初期化子を定数式として計算し，値を持つシンボル(置き場所LOC_CONST)を生成して返す
+    // (register_struct_varと同じく，シンボル表への格納はグローバル/ローカルの区別を知る呼び出し元が行う)
+    symbol_t *register_const_var(const node_t *decl);
     void analyze_functions();                               // 3パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する

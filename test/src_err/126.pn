@@ -1,0 +1,5 @@
+// 意味解析エラー: const変数の初期化子のsizeofと，配列サイズが互いに依存して循環している (異常系)
+const int N = sizeof(buf);
+int buf[N];
+void main(void) {
+}

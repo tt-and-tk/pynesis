@@ -1,0 +1,22 @@
+// const変数(グローバル): 宣言位置によらず配列サイズ・ループ上限・比較・case値・グローバル変数の初期化子に使え，メモリを確保せず値そのものとして埋め込まれる
+int before[CAP];                    // 後方で宣言したconst変数も配列サイズに使える
+const int CAP = 4;
+const short DOUBLE_CAP = CAP * 2;   // 先に宣言したconst変数は初期化子に使える
+const char NEG = -3;
+int g = DOUBLE_CAP + NEG;           // 8 + -3 = 5
+char after[DOUBLE_CAP];
+
+void main(void) {
+    int i;
+    for (i = 0; i < CAP; i += 1) {
+        g += sizeof(DOUBLE_CAP);    // 宣言した型(short)のバイト数2
+    }
+    if (g == DOUBLE_CAP + 5) {
+        g = NEG;
+    }
+    switch (g) {
+        case NEG:
+            g = sizeof(before) + sizeof(after);   // 16 + 8 = 24
+            break;
+    }
+}

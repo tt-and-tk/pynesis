@@ -1,0 +1,44 @@
+.global twice, limit, main
+
+main:
+    mov fh r0 r0 127
+    wm fh r0 r0 28
+    call twice
+    mov fh r30 r0
+    wm fh r0 r0 24
+    call limit
+    mov fh r30 r0
+    wm fh r0 r0 24
+    mov fh r0 r0 24
+    wm fh r0 r0 24
+    rm fh r0 r0 24
+    mov fh r0 r1 24
+    eq r0 r1 .L0
+    jmp .L1
+.L0:
+    mov fh r0 r0 -32768
+    mov fh r0 r1 -128
+    add r0 r1 r0
+    wm fh r0 r0 24
+    jmp .L2
+.L1:
+    mov fh r0 r0 -2147483648
+    wm fh r0 r0 24
+.L2:
+    mov fh r0 r0 32767
+    wm fh r0 r0 24
+    ret
+
+twice:
+    rm fh r0 r0 28
+    mov fh r0 r1 2
+    mul r0 r1 r0
+    mov fh r0 r30
+    ret
+    ret
+
+limit:
+    mov fh r0 r0 2147483647
+    mov fh r0 r30
+    ret
+    ret

@@ -1,0 +1,4 @@
+// 意味解析エラー: 配列のサイズが自身のsizeofに依存して循環している (異常系)
+int buf[sizeof(buf)];
+void main(void) {
+}

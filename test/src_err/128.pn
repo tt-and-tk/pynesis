@@ -1,0 +1,5 @@
+// 意味解析エラー: グローバルのconst変数と同名の変数は宣言できない (異常系)
+const int N = 1;
+int N;
+void main(void) {
+}
