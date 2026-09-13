@@ -13,6 +13,9 @@ typedef struct {
     std::set<std::string> lexed;        // 字句解析を始めたファイル
     std::set<std::string> in_progress;  // 字句解析中のファイル (取り込みの循環を検出する)
     std::set<std::string> once;         // #pragma onceが書かれたファイル
+    // 波括弧の入れ子の深さ (0ならグローバルスコープ直下)
+    // ファイルごとに数え直すと，取り込んだファイルが開いたまま終えた関数本体の中を直下と誤認するため，全ファイルで共有する
+    int brace_depth = 0;
 } include_state_t;
 
 // 前宣言 (ファイル内部でのみ使用)
@@ -23,7 +26,7 @@ static void read_source(const std::string &file_name, const loc_t *included_at,
 static int lex_source(const std::string &src, const std::string &file_name, const std::string &key,
                       include_state_t &state, std::vector<token_t> &tokens);
 // #で始まる指令を読み，#includeならファイルを展開し，#pragma onceなら記録する
-static void lex_directive(const std::string &src, int &i, const loc_t &loc, int depth,
+static void lex_directive(const std::string &src, int &i, const loc_t &loc,
                           const std::string &key, include_state_t &state, std::vector<token_t> &tokens);
 static std::string read_word(const std::string &src, int &i);  // 現在位置から識別子に使える文字の並びを読み進めて返す
 static token_kind_t get_keyword_kind(const std::string &word);  // 識別子がキーワードならその種別を，そうでなければ TK_IDENT を返す
@@ -106,7 +109,6 @@ static int lex_source(const std::string &src, const std::string &file_name, cons
                       include_state_t &state, std::vector<token_t> &tokens) {
     int i    = 0;   // 現在の読み取り位置
     int line = 1;   // 現在の行番号
-    int depth = 0;  // 波括弧の入れ子の深さ (0ならグローバルスコープ直下)
     int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
 
     // 取り込みの重複・循環を検出できるよう，字句解析を始めたことを記録する
@@ -142,7 +144,7 @@ static int lex_source(const std::string &src, const std::string &file_name, cons
 
         // 指令: # で始まる (指令の後ろの同じ行の残りは，通常どおり字句解析を続ける)
         if (c == '#') {
-            lex_directive(src, i, {file_name, line}, depth, key, state, tokens);
+            lex_directive(src, i, {file_name, line}, key, state, tokens);
             continue;
         }
 
@@ -236,8 +238,8 @@ static int lex_source(const std::string &src, const std::string &file_name, cons
             const auto it = g_operators.find(token);
             if (it != g_operators.end()) {
                 // 指令をグローバルスコープ直下に限定するため，波括弧の入れ子の深さを数える
-                if (it->second == TK_LBRACE) depth++;
-                if (it->second == TK_RBRACE) depth--;
+                if (it->second == TK_LBRACE) state.brace_depth++;
+                if (it->second == TK_RBRACE) state.brace_depth--;
                 tokens.push_back({it->second, token, {file_name, line}});
                 i += len;
                 matched = true;
@@ -256,7 +258,7 @@ static int lex_source(const std::string &src, const std::string &file_name, cons
 
 // #で始まる指令を読み，#includeならファイルを展開し，#pragma onceなら記録する
 // iは#の位置で呼び出し，指令の直後まで進める
-static void lex_directive(const std::string &src, int &i, const loc_t &loc, int depth,
+static void lex_directive(const std::string &src, int &i, const loc_t &loc,
                           const std::string &key, include_state_t &state, std::vector<token_t> &tokens) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
 
@@ -267,10 +269,13 @@ static void lex_directive(const std::string &src, int &i, const loc_t &loc, int 
         throw std::string("compiler error: unknown directive '#") + name + "' at " + loc_to_string(loc);
     }
     // 取り込んだ内容はグローバル宣言として扱い，重複や循環の判定もグローバル宣言が順序によらず参照できることを前提にしているため，
-    // 関数本体や構造体定義の中には書けない
-    if (depth != 0) {
-        throw std::string("compiler error: '#") + name + "' is only allowed at global scope at "
-              + loc_to_string(loc);
+    // グローバルスコープの宣言と宣言の間(プログラムの先頭，またはグローバルスコープ直下の;か}の直後)にのみ書ける
+    const bool at_decl_boundary =
+        state.brace_depth == 0
+        && (tokens.empty() || tokens.back().kind == TK_SEMICOLON || tokens.back().kind == TK_RBRACE);
+    if (!at_decl_boundary) {
+        throw std::string("compiler error: '#") + name
+              + "' is only allowed between global declarations at " + loc_to_string(loc);
     }
 
     // 指令名と引数の間の空白を読み飛ばす
