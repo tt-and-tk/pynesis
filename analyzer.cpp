@@ -342,8 +342,8 @@ long long Analyzer::eval_const_expr(const node_t *expr, bool allow_sizeof_var) {
     }
 
     // const変数の参照は確定済みの値を返す
-    // (見つからない名前は後続のパスで登録されるグローバル変数の場合もあるため未宣言とは断定せず，
-    //  通常の変数と同じく末尾の「定数式でない」エラーに落とす)
+    // (見つからない名前は定数式の評価より後に登録されるグローバル変数の場合もあるため未宣言とは断定せず，
+    //  通常の変数と同じく「定数式でない」エラーとして扱う)
     if (expr->kind == ND_VAR) {
         const symbol_t *sym = this->lookup_symbol(expr->sval);
         if (sym != nullptr && sym->location == LOC_CONST) {
