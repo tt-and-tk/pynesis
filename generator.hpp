@@ -51,7 +51,8 @@ private:
     void gen_binop_instr(const std::string &op, int dst, int lhs, int rhs);  // r{dst}=r{lhs} op r{rhs}を出力
     void gen_load(int reg, const symbol_t *sym);   // 変数をr{reg}へ読み込む (レジスタ直結ならmov・メモリならrm)
     void gen_store(int reg, const symbol_t *sym);  // r{reg}を変数へ書き込む (レジスタ直結ならmov・メモリならwm)
-    void gen_sign_extend(int reg, int bits);       // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用)
+    // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用．r{work_reg}を作業用に使う)
+    void gen_sign_extend(int reg, int bits, int work_reg);
     void gen_array_load(node_t *expr, int reg);    // 配列要素をr{reg}へ読み込む
     void gen_array_store(node_t *expr, int val_reg, int work_reg);  // r{val_reg}を配列要素へ書き込む
     void gen_array_base_addr(int reg, const symbol_t *sym);  // 配列の先頭アドレスをr{reg}に載せる (直接配列は即値，配列パラメータは間接読み出し)
@@ -64,8 +65,9 @@ private:
     // 構造体配列要素のメンバ配列は実行時アドレス計算(gen_struct_array_member_addr)に振り分ける
     void gen_member_array_base(node_t *expr, int addr_reg, int protect_reg = -1);
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
-    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う
-    void gen_load_indirect(int reg, const type_t &type);
+    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う．
+    // char/shortの符号拡張ではr{work_reg}を作業用に使う
+    void gen_load_indirect(int reg, const type_t &type, int work_reg);
     // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
     void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);
     void gen_string_init(int base_addr, const std::string &str);  // 文字列をchar配列に書き込む初期化コードを生成する

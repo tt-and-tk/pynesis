@@ -832,11 +832,11 @@ void Generator::gen_load(int reg, const symbol_t *sym) {
     switch (sym->type.base) {
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 8);
+            this->gen_sign_extend(reg, 8, reg + 1);
             break;
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 16);
+            this->gen_sign_extend(reg, 16, reg + 1);
             break;
         case BASE_INT:
             // rm: メモリ絶対番地からr{reg}へ読み込む (即値アドレス指定のためrs1のr0は無視される)
@@ -875,16 +875,17 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
 }
 
 // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング，結果は同じレジスタに上書き)
-// gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する
-void Generator::gen_load_indirect(int reg, const type_t &type) {
+// gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
+// 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
+void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg) {
     switch (type.base) {
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 8);
+            this->gen_sign_extend(reg, 8, work_reg);
             break;
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 16);
+            this->gen_sign_extend(reg, 16, work_reg);
             break;
         case BASE_INT:
             this->asm_file_ << "    rm fh r" << reg << " r" << reg << "\n";
@@ -907,15 +908,15 @@ void Generator::gen_store_indirect(int addr_reg, int val_reg, const type_t &type
     this->asm_file_ << "    wm " << mask << " r" << addr_reg << " r" << val_reg << "\n";
 }
 
-// r{reg}の下位bitsビットを符号として32ビットへ符号拡張する
-void Generator::gen_sign_extend(int reg, int bits) {
+// r{reg}の下位bitsビットを符号として32ビットへ符号拡張する(シフト量の保持にr{work_reg}を使う)
+void Generator::gen_sign_extend(int reg, int bits, int work_reg) {
     const int shift = 32 - bits;
     // シフト量を保存しておく
-    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << shift << "\n";
+    this->asm_file_ << "    mov fh r0 r" << work_reg << " " << shift << "\n";
     // 最上位ビットをMSBにシフトする
-    this->asm_file_ << "    sll r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
+    this->asm_file_ << "    sll r" << reg << " r" << work_reg << " r" << reg << "\n";
     // 算術シフトして，実際の値が入っているよりも上位のビットを符号ビットで埋める
-    this->asm_file_ << "    sra r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
+    this->asm_file_ << "    sra r" << reg << " r" << work_reg << " r" << reg << "\n";
 }
 
 // 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しを含む場合，
@@ -969,7 +970,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
         case ND_MEMBER_ACCESS:
             if (expr->children[0]->kind == ND_ARRAY_ACCESS) {
                 this->gen_struct_array_member_addr(expr, reg);
-                this->gen_load_indirect(reg, expr->type);
+                this->gen_load_indirect(reg, expr->type, reg + 1);
             } else {
                 this->gen_load(reg, expr->sym);
             }
@@ -1077,14 +1078,15 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     this->gen_expr(expr->children[1], reg);
                     this->gen_struct_array_member_addr(lhs, reg + 1, reg);
                 } else {
-                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む．
+                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む
+                    // (char/shortの符号拡張は，r{reg+1}のアドレスを壊さないようr{reg+2}を作業用に使う)．
                     // 右辺の評価が関数呼び出しを含む場合，呼び出し先はr0から使い直すため
                     // r{reg}(現在値)・r{reg+1}(アドレス)の両方が破壊されうる．
                     // gen_expr_protectingは1本のレジスタしか保護できないため，
                     // 2本とも退避してから評価し，あとで復元する
                     this->gen_struct_array_member_addr(lhs, reg + 1);
                     this->asm_file_ << "    mov fh r" << (reg + 1) << " r" << reg << "\n";  // r{reg} = アドレス
-                    this->gen_load_indirect(reg, lhs->type);                                // r{reg} = 現在値
+                    this->gen_load_indirect(reg, lhs->type, reg + 2);                       // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
                     if (contains_call(expr->children[1])) {
                         const int addr0 = this->scratch_base_ + reg * 4;
@@ -1233,9 +1235,9 @@ void Generator::gen_array_load(node_t *expr, int reg) {
 
     // char/shortはゼロ拡張されたままなので，スカラー変数の読み込み(gen_load)と同様に符号拡張する
     if (elem_base == BASE_CHAR) {
-        this->gen_sign_extend(reg, 8);
+        this->gen_sign_extend(reg, 8, reg + 1);
     } else if (elem_base == BASE_SHORT) {
-        this->gen_sign_extend(reg, 16);
+        this->gen_sign_extend(reg, 16, reg + 1);
     }
 }
 
