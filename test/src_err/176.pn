@@ -1,0 +1,5 @@
+// 字句解析エラー: #includeは宣言の途中に書けない (取り込む内容をつなげると宣言として正しくてもエラー) (異常系)
+int g =
+#include "include/176_value.pn"
+void main(void) {
+}

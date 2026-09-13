@@ -1,5 +1,4 @@
-// 字句解析エラー: #pragma onceを取り込み指令より後ろに書いたファイルが，循環して取り込まれる (異常系)
-#include "include/158_lib.pn"
-#pragma once
+// 字句解析エラー: 取り込むファイルが存在しない (異常系)
+#include "include/158_missing.pn"
 void main(void) {
 }

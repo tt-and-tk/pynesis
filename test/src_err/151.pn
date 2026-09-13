@@ -1,4 +1,0 @@
-// 字句解析エラー: #includeは関数本体の中に書けない (取り込む内容が文として正しくてもエラー) (異常系)
-void main(void) {
-#include "include/151_body.pn"
-}

@@ -1,4 +1,4 @@
-// 字句解析エラー: #と指令名の間に空白を書けない (異常系)
-# include "include/162_lib.pn"
+// 字句解析エラー: #includeは関数本体の中に書けない (取り込む内容が文として正しくてもエラー) (異常系)
 void main(void) {
+#include "include/162_body.pn"
 }

@@ -1,0 +1,4 @@
+// 字句解析エラー: #pragma onceは関数本体の中に書けない (異常系)
+void main(void) {
+#pragma once
+}

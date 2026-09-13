@@ -1,4 +1,0 @@
-// 字句解析エラー: 取り込むファイルのパスを閉じる"が行内に無い (異常系)
-#include "include/150_lib.pn
-void main(void) {
-}

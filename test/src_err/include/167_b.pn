@@ -1,0 +1,2 @@
+// 167.pnから取り込まれ，167_a.pnが取り込み済みの167_common.pnを取り込む
+#include "167_common.pn"

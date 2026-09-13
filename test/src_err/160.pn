@@ -1,4 +1,4 @@
-// 字句解析エラー: #pragma onceは関数本体の中に書けない (異常系)
+// 字句解析エラー: 取り込むファイルのパスは<>で囲めない (異常系)
+#include <include/160_lib.pn>
 void main(void) {
-#pragma once
 }

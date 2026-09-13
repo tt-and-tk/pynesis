@@ -1,0 +1,4 @@
+// 字句解析エラー: #pragmaにはonce以外を書けない (異常系)
+#pragma pack
+void main(void) {
+}

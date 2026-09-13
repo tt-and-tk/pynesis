@@ -1,0 +1,5 @@
+// 字句解析エラー: #pragma onceを取り込み指令より後ろに書いたファイルが，循環して取り込まれる (異常系)
+#include "include/169_lib.pn"
+#pragma once
+void main(void) {
+}

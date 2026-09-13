@@ -1,4 +1,4 @@
-// 字句解析エラー: #pragmaにはonce以外を書けない (異常系)
-#pragma pack
+// 字句解析エラー: #includeと#pragma以外の指令は書けない (異常系)
+#define N 1
 void main(void) {
 }
