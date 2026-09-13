@@ -795,8 +795,8 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
 // 読み書きするコードになる(構造体は内部エラーになる)ため，意味解析の段階でエラーにする
 void Analyzer::check_scalar_operand(const node_t *target, const std::string &operation) {
     if (target->type.is_array || target->type.base == BASE_STRUCT) {
-        throw std::string("compiler error: ") + operation + " is not supported for array or struct at line "
-              + std::to_string(target->line);
+        throw std::string("compiler error: ") + operation + " is not supported for array or struct at "
+              + loc_to_string(target->loc);
     }
 }
 
