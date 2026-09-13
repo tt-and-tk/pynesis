@@ -110,8 +110,13 @@ void lex(const std::string &src, std::vector<token_t> &tokens) {
         if (c == '\'') {
             int start = i;
             i++;  // 開き ' をスキップする
-            // エスケープシーケンスの場合，バックスラッシュの次の文字もスキップする
+            // エスケープシーケンスの場合，バックスラッシュの次の文字を文字本体として扱う
             if (i < src_size && src[i] == '\\') i++;
+            // 文字本体が改行なら，エスケープの有無に関わらずエラーにする
+            if (i < src_size && src[i] == '\n') {
+                throw std::string("compiler error: newline in char literal at line ")
+                      + std::to_string(line);
+            }
             i++;  // 文字本体をスキップする
             // 閉じ ' を確認する
             if (i >= src_size || src[i] != '\'') {
@@ -129,11 +134,12 @@ void lex(const std::string &src, std::vector<token_t> &tokens) {
             i++;  // 開き " をスキップする
             // 閉じ " が来るまで読み進める (エスケープシーケンスを考慮する)
             while (i < src_size && src[i] != '"') {
-                if (src[i] == '\n') {
+                if (src[i] == '\\') i++;  // エスケープ対象の文字は閉じ " として扱わない
+                // 改行は，エスケープの有無に関わらずエラーにする
+                if (i < src_size && src[i] == '\n') {
                     throw std::string("compiler error: newline in string literal at line ")
                           + std::to_string(line);
                 }
-                if (src[i] == '\\') i++;  // エスケープ文字の次をスキップする
                 i++;
             }
             if (i >= src_size) {
