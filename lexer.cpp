@@ -415,9 +415,12 @@ static void check_directive_line_end(const std::string &src, int pos, const loc_
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     while (true) {
         // 空白を読み飛ばす
-        while (pos < src_size && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r')) pos++;
-        // 行末・ファイル末尾・行コメントに達したら，同じ行の残りに記述は無い
-        if (pos >= src_size || src[pos] == '\n' || src.compare(pos, 2, "//") == 0) return;
+        while (pos < src_size && (src[pos] == ' ' || src[pos] == '\t')) pos++;
+        // 行末(LFかCRLF)・ファイル末尾・行コメントに達したら，同じ行の残りに記述は無い
+        if (pos >= src_size || src[pos] == '\n' || src.compare(pos, 2, "\r\n") == 0
+            || src.compare(pos, 2, "//") == 0) {
+            return;
+        }
         // コメント以外が書かれている場合
         if (src.compare(pos, 2, "/*") != 0) {
             throw std::string("compiler error: unexpected text after directive at ") + loc_to_string(loc);
