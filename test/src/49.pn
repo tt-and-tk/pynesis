@@ -1,0 +1,17 @@
+// 構造体配列要素のメンバ配列要素への単純代入: 構造体配列の添字に関数呼び出しを含んでも，
+// 先に求めたメンバ配列の添字のオフセットと右辺の値が破壊されない
+struct Buf {
+    int head;
+    int data[2];
+};
+
+struct Buf bufs[2];
+
+int one(void) {
+    return 1;
+}
+
+void main(void) {
+    int j = 1;
+    bufs[one()].data[j] = 9;
+}

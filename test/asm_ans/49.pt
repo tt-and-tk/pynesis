@@ -1,0 +1,28 @@
+.global one, main
+
+main:
+    mov fh r0 r0 1
+    wm fh r0 r0 24
+    mov fh r0 r0 9
+    rm fh r0 r1 24
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    wm fh r0 r0 28
+    wm fh r0 r1 32
+    call one
+    mov fh r30 r2
+    rm fh r0 r0 28
+    rm fh r0 r1 32
+    mov fh r0 r3 12
+    mul r2 r3 r2
+    mov fh r0 r3 4
+    add r2 r3 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    ret
+
+one:
+    mov fh r0 r0 1
+    mov fh r0 r30
+    ret
+    ret

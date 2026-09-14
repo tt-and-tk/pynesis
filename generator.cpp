@@ -58,6 +58,13 @@ static bool contains_call(const node_t *expr) {
     return false;
 }
 
+// 代入先の番地が実行時に決まる(配列要素または構造体配列要素のメンバである)かどうかを返す
+static bool has_runtime_addr(const node_t *target) {
+    // 配列要素そのもの，または基底が配列要素であるメンバアクセスなら実行時に番地が決まる
+    return target->kind == ND_ARRAY_ACCESS
+        || (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS);
+}
+
 // コンストラクタ: AST・シンボルテーブル・パラメータシンボル表・構造体定義表・
 // レジスタ退避領域の先頭番地・出力先を受け取る
 Generator::Generator(node_t *root, const std::map<std::string, const symbol_t *> &symbols,
@@ -496,7 +503,7 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
     // 比較条件: 否定したF系で「偽のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
-        this->gen_expr_protecting(cond->children[1], reg + 1, reg);   // 右 → r{reg+1}
+        this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
         this->asm_file_ << "    " << negated_branch(cond->sval)
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
@@ -519,7 +526,7 @@ void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int r
     // 比較条件: そのままのF系で「真のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
-        this->gen_expr_protecting(cond->children[1], reg + 1, reg);   // 右 → r{reg+1}
+        this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
         this->asm_file_ << "    " << comparison_branch(cond->sval)
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
@@ -537,7 +544,7 @@ void Generator::gen_compare(node_t *expr, int reg) {
     const std::string t = this->new_label();      // 真の場合の飛び先
     const std::string end = this->new_label();
     this->gen_expr(expr->children[0], reg);        // 左 → r{reg}
-    this->gen_expr_protecting(expr->children[1], reg + 1, reg);    // 右 → r{reg+1}
+    this->gen_expr_protecting(expr->children[1], reg + 1, {reg});    // 右 → r{reg+1}
     // 比較が真なら .Lt へ
     this->asm_file_ << "    " << comparison_branch(expr->sval)
                     << " r" << reg << " r" << (reg + 1) << " " << t << "\n";
@@ -832,11 +839,11 @@ void Generator::gen_load(int reg, const symbol_t *sym) {
     switch (sym->type.base) {
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 8);
+            this->gen_sign_extend(reg, 8, reg + 1);
             break;
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 16);
+            this->gen_sign_extend(reg, 16, reg + 1);
             break;
         case BASE_INT:
             // rm: メモリ絶対番地からr{reg}へ読み込む (即値アドレス指定のためrs1のr0は無視される)
@@ -875,17 +882,21 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
 }
 
 // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング，結果は同じレジスタに上書き)
-// gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する
-void Generator::gen_load_indirect(int reg, const type_t &type) {
+// gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
+// 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
+void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg) {
     switch (type.base) {
+        // char: 下位1バイトを読み込み，8ビット値として符号拡張する
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 8);
+            this->gen_sign_extend(reg, 8, work_reg);
             break;
+        // short: 下位2バイトを読み込み，16ビット値として符号拡張する
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 16);
+            this->gen_sign_extend(reg, 16, work_reg);
             break;
+        // int: 4バイトすべてを読み込む (符号拡張は不要)
         case BASE_INT:
             this->asm_file_ << "    rm fh r" << reg << " r" << reg << "\n";
             break;
@@ -907,28 +918,42 @@ void Generator::gen_store_indirect(int addr_reg, int val_reg, const type_t &type
     this->asm_file_ << "    wm " << mask << " r" << addr_reg << " r" << val_reg << "\n";
 }
 
-// r{reg}の下位bitsビットを符号として32ビットへ符号拡張する
-void Generator::gen_sign_extend(int reg, int bits) {
-    const int shift = 32 - bits;
+// r{reg}の下位bitsビットを符号として32ビットへ符号拡張する(シフト量の保持にr{work_reg}を使う)
+void Generator::gen_sign_extend(int reg, int bits, int work_reg) {
+    // 作業用レジスタが上限(r15)を超えないことを確認する (r16以降はSP等の汎用でないレジスタのため)
+    if (work_reg >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers)");
+    }
+    const int shift = 32 - bits;   // 値の最上位ビットをレジスタのMSBへ運ぶシフト量
     // シフト量を保存しておく
-    this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << shift << "\n";
+    this->asm_file_ << "    mov fh r0 r" << work_reg << " " << shift << "\n";
     // 最上位ビットをMSBにシフトする
-    this->asm_file_ << "    sll r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
+    this->asm_file_ << "    sll r" << reg << " r" << work_reg << " r" << reg << "\n";
     // 算術シフトして，実際の値が入っているよりも上位のビットを符号ビットで埋める
-    this->asm_file_ << "    sra r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
+    this->asm_file_ << "    sra r" << reg << " r" << work_reg << " r" << reg << "\n";
 }
 
 // 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しを含む場合，
-// 呼び出し先はr0から使い直すため，別に指定したレジスタの値を一時メモリへ退避してから評価し，評価後に復元する
-void Generator::gen_expr_protecting(node_t *expr, int reg, int protect_reg) {
+// 呼び出し先はr0から使い直すため，別に指定したレジスタ(複数可)の値を一時メモリへ退避してから評価し，評価後に復元する
+// (呼び出し元が評価済みの値(二項演算の左辺・代入先のアドレス等)をレジスタに置いたまま，後続の式で関数を呼ぶ場面で使う)
+void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs) {
+    // 関数呼び出しを含まない式はreg以上のレジスタしか使わず保護対象を壊さないため，退避せずに評価する
     if (!contains_call(expr)) {
         this->gen_expr(expr, reg);
         return;
     }
-    const int addr = this->scratch_base_ + protect_reg * 4;
-    this->asm_file_ << "    wm fh r0 r" << protect_reg << " " << addr << "\n";   // 退避
+    // 保護するレジスタの値を，レジスタ番号ごとに決まった退避領域の番地へ書き出す
+    for (const int protect_reg : protect_regs) {
+        const int addr = this->scratch_base_ + protect_reg * 4;   // r{protect_reg}の退避先番地
+        this->asm_file_ << "    wm fh r0 r" << protect_reg << " " << addr << "\n";   // 退避
+    }
+    // 式を評価する (呼び出し先がレジスタを使い直すため，保護するレジスタの値はここで壊れうる)
     this->gen_expr(expr, reg);
-    this->asm_file_ << "    rm fh r0 r" << protect_reg << " " << addr << "\n";   // 復元
+    // 退避領域から値を読み戻し，保護するレジスタを評価前の値に戻す
+    for (const int protect_reg : protect_regs) {
+        const int addr = this->scratch_base_ + protect_reg * 4;   // r{protect_reg}の退避先番地
+        this->asm_file_ << "    rm fh r0 r" << protect_reg << " " << addr << "\n";   // 復元
+    }
 }
 
 // 式を評価し，結果をr{reg}に残す
@@ -968,8 +993,10 @@ void Generator::gen_expr(node_t *expr, int reg) {
         // アドレスを計算してからレジスタ間接で読み込む
         case ND_MEMBER_ACCESS:
             if (expr->children[0]->kind == ND_ARRAY_ACCESS) {
+                // メンバの実アドレスをr{reg}に求める
                 this->gen_struct_array_member_addr(expr, reg);
-                this->gen_load_indirect(reg, expr->type);
+                // そのアドレスからメンバの値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
+                this->gen_load_indirect(reg, expr->type, reg + 1);
             } else {
                 this->gen_load(reg, expr->sym);
             }
@@ -983,8 +1010,11 @@ void Generator::gen_expr(node_t *expr, int reg) {
             } else if (expr->sval == "&&" || expr->sval == "||") {
                 this->gen_logical(expr, reg);
             } else {
+                // 左辺をr{reg}に評価する
                 this->gen_expr(expr->children[0], reg);
-                this->gen_expr_protecting(expr->children[1], reg + 1, reg);
+                // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の左辺の値を保護する)
+                this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
+                // 左辺と右辺を演算子で畳み，結果をr{reg}に置く
                 this->gen_binop_instr(expr->sval, reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
             }
             break;
@@ -1056,49 +1086,44 @@ void Generator::gen_expr(node_t *expr, int reg) {
 
         // 代入: 右辺(複合代入は左辺の現在値と右辺の演算結果)をr{reg}に求め，変数へ書き込む
         case ND_ASSIGN: {
-            node_t *lhs = expr->children[0];
-            if (lhs->kind == ND_ARRAY_ACCESS) {
-                // 配列要素への代入
-                this->gen_expr(expr->children[1], reg);         // 右辺 → r{reg}
-                this->gen_array_store(lhs, reg, reg + 1);       // 配列要素へ書き込む
-            } else if (lhs->kind == ND_MEMBER_ACCESS && lhs->children[0]->kind == ND_ARRAY_ACCESS) {
-                // 構造体配列要素のメンバへの代入: 番地が実行時計算のため，アドレスを求めてから読み書きする．
+            node_t *lhs = expr->children[0];   // 代入先(左辺)
+            // 番地が実行時に決まる代入先の場合
+            if (has_runtime_addr(lhs)) {
+                // 配列要素・構造体配列要素のメンバへの代入: 番地が実行時計算のため，アドレスを求めてから読み書きする．
                 // 式の評価はreg以上のレジスタしか使わない規約(レジスタスタック方式)のため，
                 // アドレスは右辺(または現在値の読み出し)より後ろのレジスタ(r{reg+1})に置く
                 // (先にr{reg+1}へアドレスを置いてしまうと，reg起点で評価する式が
                 //  自身の作業用としてr{reg+1}を使い，アドレスを上書きしてしまう)．
-                // レジスタ使用: r{reg}=右辺値/現在値，r{reg+1}=アドレス(作業用にr{reg+2}も使う)
+                // レジスタ使用: r{reg}=右辺値/現在値，r{reg+1}=アドレス(アドレス計算・右辺の評価にr{reg+2}以降も使う)
+                // 作業用のr{reg+2}が上限(r15)を超えないことを確認する
                 if (reg + 2 >= MAX_REG) {
                     throw std::string("compiler error: expression too complex (out of registers) at line ")
                           + std::to_string(expr->line);
                 }
                 if (expr->sval == "=") {
                     // 単純代入: 右辺を先にr{reg}へ評価してから，アドレスをr{reg+1}へ求める(r{reg}を保護)
+                    // 右辺の値をr{reg}に求める
                     this->gen_expr(expr->children[1], reg);
-                    this->gen_struct_array_member_addr(lhs, reg + 1, reg);
+                    // 代入先のアドレスをr{reg+1}に求める (添字の関数呼び出しからr{reg}の右辺の値を保護する)
+                    this->gen_runtime_addr(lhs, reg + 1, {reg});
                 } else {
-                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む．
+                    // 複合代入 x op= e : アドレスをr{reg+1}へ求め，現在値をr{reg}へ読む
+                    // (char/shortの符号拡張は，r{reg+1}のアドレスを壊さないようr{reg+2}を作業用に使う)．
                     // 右辺の評価が関数呼び出しを含む場合，呼び出し先はr0から使い直すため
-                    // r{reg}(現在値)・r{reg+1}(アドレス)の両方が破壊されうる．
-                    // gen_expr_protectingは1本のレジスタしか保護できないため，
-                    // 2本とも退避してから評価し，あとで復元する
-                    this->gen_struct_array_member_addr(lhs, reg + 1);
+                    // r{reg}(現在値)・r{reg+1}(アドレス)の両方を保護して評価する
+                    // 代入先のアドレスをr{reg+1}に求める
+                    this->gen_runtime_addr(lhs, reg + 1);
+                    // アドレスをr{reg}へ複製する (読み込みは結果を読み込み元と同じレジスタに上書きするため)
                     this->asm_file_ << "    mov fh r" << (reg + 1) << " r" << reg << "\n";  // r{reg} = アドレス
-                    this->gen_load_indirect(reg, lhs->type);                                // r{reg} = 現在値
+                    // 代入先の現在値をr{reg}へ読み込む
+                    this->gen_load_indirect(reg, lhs->type, reg + 2);                       // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
-                    if (contains_call(expr->children[1])) {
-                        const int addr0 = this->scratch_base_ + reg * 4;
-                        const int addr1 = this->scratch_base_ + (reg + 1) * 4;
-                        this->asm_file_ << "    wm fh r0 r" << reg << " " << addr0 << "\n";        // 退避
-                        this->asm_file_ << "    wm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 退避
-                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
-                        this->asm_file_ << "    rm fh r0 r" << reg << " " << addr0 << "\n";        // 復元
-                        this->asm_file_ << "    rm fh r0 r" << (reg + 1) << " " << addr1 << "\n";  // 復元
-                    } else {
-                        this->gen_expr(expr->children[1], reg + 2);                                // 右辺 → r{reg+2}
-                    }
+                    // 右辺をr{reg+2}に評価する
+                    this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
+                    // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
                     this->gen_binop_instr(op, reg, reg, reg + 2);
                 }
+                // r{reg}の値を，r{reg+1}のアドレスへ型に応じたマスクで書き込む (代入式の値もr{reg}に残る)
                 this->gen_store_indirect(reg + 1, reg, lhs->type);
             } else {
                 // スカラー変数への代入
@@ -1107,9 +1132,12 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     this->gen_expr(expr->children[1], reg);
                 } else {
                     // 複合代入 x op= e : 左辺の現在値をr{reg}・右辺をr{reg+1}に評価し，opで畳む
+                    // 左辺の現在値をr{reg}に読み込む
                     this->gen_load(reg, lhs->sym);
-                    this->gen_expr_protecting(expr->children[1], reg + 1, reg);
+                    // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の現在値を保護する)
+                    this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
+                    // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
                     this->gen_binop_instr(op, reg, reg, reg + 1);
                 }
                 // 変数へ書き込む (代入式の値もr{reg}に残る)
@@ -1118,9 +1146,12 @@ void Generator::gen_expr(node_t *expr, int reg) {
             break;
         }
 
-        // 配列要素アクセス(読み出し): インデックスからメモリアドレスを計算して読み込む
+        // 配列要素アクセス(読み出し): インデックスからメモリアドレスを計算し，レジスタ間接で読み込む
         case ND_ARRAY_ACCESS:
-            this->gen_array_load(expr, reg);
+            // 要素の実アドレスをr{reg}に求める
+            this->gen_array_elem_addr(expr, reg);
+            // そのアドレスから要素の値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
+            this->gen_load_indirect(reg, expr->type, reg + 1);
             break;
 
         default:
@@ -1144,7 +1175,7 @@ void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
 // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にexpr->ivalへ保存済み)
 //          + インデックス(実行時，member_access->children[0]->children[0]) × 構造体1要素分のバイト数
 // レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(要素間隔・ベース，作業用)
-void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg) {
+void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
     if (reg + 1 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at line ")
               + std::to_string(member_access->line);
@@ -1154,12 +1185,8 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int
     const int stride_bytes = this->struct_defs_.at(arr_sym->type.struct_name).total_words * 4;
     const int base_const = arr_sym->address + static_cast<int>(member_access->ival) * 4;  // 配列先頭+メンバオフセット
 
-    // r{reg} = インデックス式 (protect_regが指定されていれば，その値を評価中も保護する)
-    if (protect_reg >= 0) {
-        this->gen_expr_protecting(array_access->children[0], reg, protect_reg);
-    } else {
-        this->gen_expr(array_access->children[0], reg);
-    }
+    // r{reg} = インデックス式 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
+    this->gen_expr_protecting(array_access->children[0], reg, protect_regs);
     // r{reg+1} = 要素間隔(構造体1要素分のバイト数．2の冪とは限らないためmulで乗算する)
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << stride_bytes << "\n";
     this->asm_file_ << "    mul r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
@@ -1172,44 +1199,42 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, int
 // 構造体メンバ配列アクセス(children.size()==2のND_ARRAY_ACCESS)の配列先頭アドレスをr{addr_reg}に載せる
 // 通常の単一構造体変数のメンバ配列(entry.name[i])はコンパイル時アドレス確定，
 // 構造体配列要素のメンバ配列(arr[i].name[j])は実行時アドレス計算になるため分岐する
-void Generator::gen_member_array_base(node_t *expr, int addr_reg, int protect_reg) {
+void Generator::gen_member_array_base(node_t *expr, int addr_reg, const std::vector<int> &protect_regs) {
     node_t *designator = expr->children[1];   // ND_MEMBER_ACCESS
     if (designator->children[0]->kind == ND_ARRAY_ACCESS) {
-        this->gen_struct_array_member_addr(designator, addr_reg, protect_reg);
+        this->gen_struct_array_member_addr(designator, addr_reg, protect_regs);
     } else {
         this->gen_array_base_addr(addr_reg, designator->sym);
     }
 }
 
-// 配列要素をr{reg}へ読み込む
-// アドレス = base + index * サイズ(バイト単位)をr{reg}に作り，型に応じたmaskで1回のrmで読み込む
-// (maskの最下位ビットに合わせて自動的にレジスタLSB側へゼロ拡張格納されるため，シフトは不要)
-// レジスタ使用: r{reg}=index→アドレス→結果, r{reg+1}=定数・base (2本．構造体配列要素のメンバ配列の場合，
-// ベースアドレス計算(gen_struct_array_member_addr)がさらにr{reg+2}を使うため3本必要，reg<=13)
-void Generator::gen_array_load(node_t *expr, int reg) {
+// 配列要素の実アドレスをr{reg}に計算する
+// アドレス = 配列先頭番地 + index * 要素サイズ(バイト単位)．配列先頭番地は配列の種類に応じて，
+// コンパイル時定数・メモリからの読み出し・実行時計算のいずれかで求める
+// レジスタ使用: r{reg}=index→アドレス, r{reg+1}=シフト量・配列先頭番地 (2本．構造体配列要素のメンバ配列の場合，
+// 先頭番地の計算(gen_struct_array_member_addr)がさらにr{reg+2}を使うため3本必要)
+// 読み書きの際の型に応じたマスクはここでは扱わない．求めたアドレスを使うレジスタ間接の読み込み・
+// 書き込みの側が型から選ぶ(読み出しと書き込みでアドレス計算を共有するため)
+void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs) {
+    // 作業用のr{reg+2}が上限(r15)を超えないことを確認する
     if (reg + 2 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at line ")
               + std::to_string(expr->line);
     }
 
-    // 要素型は，通常配列ならexpr->symの型，構造体メンバ配列ならメンバ自身の型(children[1]->type)
-    const base_type_t elem_base =
-        (expr->children.size() == 2) ? expr->children[1]->type.base : expr->sym->type.base;
-
-    // r{reg} = index (r{reg+1}はまだ未使用)
-    this->gen_expr(expr->children[0], reg);
-
-    // 型ごとの要素サイズ(2^shift バイト)とmask(バイト位置)を決定する
-    const char *mask;
-    int shift;
-    switch (elem_base) {
-        case BASE_CHAR:  mask = "1h"; shift = 0; break;
-        case BASE_SHORT: mask = "3h"; shift = 1; break;
-        case BASE_INT:   mask = "fh"; shift = 2; break;
+    // 要素型(意味解析が配列のbase型を注釈済み)ごとの要素サイズ(2^shift バイト)を決定する
+    int shift;   // 要素サイズ(バイト)の2を底とする対数
+    switch (expr->type.base) {
+        case BASE_CHAR:  shift = 0; break;
+        case BASE_SHORT: shift = 1; break;
+        case BASE_INT:   shift = 2; break;
         default:
             throw std::string("compiler error: unsupported array element type at line ")
                   + std::to_string(expr->line);
     }
+
+    // r{reg} = index (r{reg+1}はまだ未使用)
+    this->gen_expr_protecting(expr->children[0], reg, protect_regs);
 
     // オフセット = index * サイズ (サイズ1のcharはシフト不要)
     // 実行後: r{reg} = index * サイズ(バイトオフセット), r{reg+1} = シフト量(破棄可)
@@ -1217,73 +1242,32 @@ void Generator::gen_array_load(node_t *expr, int reg) {
         this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " " << shift << "\n";
         this->asm_file_ << "    sll r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
     }
-    // アドレス = base + オフセット
-    // 実行後: r{reg+1} = base番地 (通常配列・単一構造体メンバ配列はコンパイル時定数，
-    //         構造体配列要素のメンバ配列は実行時計算．r{reg}を保護しつつr{reg+2}を作業用に使う)
+    // 実行後: r{reg+1} = 配列先頭番地 (実行時計算の場合は，求めたオフセットのr{reg}も保護する)
+    // 構造体のメンバ配列の場合
     if (expr->children.size() == 2) {
-        this->gen_member_array_base(expr, reg + 1, reg);
-    } else {
+        std::vector<int> base_protect_regs = protect_regs;   // 先頭番地の計算中に保護するレジスタ
+        // 求めたオフセットを持つr{reg}も保護対象に加える
+        base_protect_regs.push_back(reg);
+        // メンバ配列の先頭番地をr{reg+1}に求める
+        this->gen_member_array_base(expr, reg + 1, base_protect_regs);
+    }
+    // 通常の配列・配列パラメータの場合
+    else {
+        // 配列の先頭番地をr{reg+1}に求める
         this->gen_array_base_addr(reg + 1, expr->sym);
     }
-    // 実行後: r{reg} = base + オフセット = 読み込み先の実アドレス
+    // 実行後: r{reg} = 配列先頭番地 + オフセット = 実アドレス
     this->asm_file_ << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
-    // maskに従って読み込む (該当バイトのみ自動抽出・ゼロ拡張)
-    // 実行後: r{reg} = 配列要素の値 (式全体の結果)
-    this->asm_file_ << "    rm " << mask << " r" << reg << " r" << reg << "\n";
-
-    // char/shortはゼロ拡張されたままなので，スカラー変数の読み込み(gen_load)と同様に符号拡張する
-    if (elem_base == BASE_CHAR) {
-        this->gen_sign_extend(reg, 8);
-    } else if (elem_base == BASE_SHORT) {
-        this->gen_sign_extend(reg, 16);
-    }
 }
 
-// r{val_reg}の値を配列要素へ書き込む (work_reg以降を作業用に使う)
-// アドレス = base + index * サイズ(バイト単位)をr{work_reg}に作り，型に応じたmaskで1回のwmで書き込む
-// (該当バイト以外はハードウェアが元の値を保持するread-modify-writeを内部で行うため，ソフト側での読み出しは不要)
-// レジスタ使用: r{val_reg}=値, r{work_reg}=index→アドレス, r{work_reg+1}=定数・base (2本．構造体配列要素の
-// メンバ配列の場合，ベースアドレス計算がさらにr{work_reg+2}を使うため3本必要，work_reg+2<=15)
-void Generator::gen_array_store(node_t *expr, int val_reg, int work_reg) {
-    if (work_reg + 2 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+// 番地が実行時に決まる代入先(配列要素または構造体配列要素のメンバ)の実アドレスをr{reg}に計算する
+void Generator::gen_runtime_addr(node_t *target, int reg, const std::vector<int> &protect_regs) {
+    // 配列要素の場合
+    if (target->kind == ND_ARRAY_ACCESS) {
+        this->gen_array_elem_addr(target, reg, protect_regs);
     }
-
-    // 要素型は，通常配列ならexpr->symの型，構造体メンバ配列ならメンバ自身の型(children[1]->type)
-    const base_type_t elem_base =
-        (expr->children.size() == 2) ? expr->children[1]->type.base : expr->sym->type.base;
-
-    // r{work_reg} = index (r{work_reg+1}はまだ未使用)
-    this->gen_expr_protecting(expr->children[0], work_reg, val_reg);
-
-    // 型ごとの要素サイズ(2^shift バイト)とmask(バイト位置)を決定する
-    const char *mask;
-    int shift;
-    switch (elem_base) {
-        case BASE_CHAR:  mask = "1h"; shift = 0; break;
-        case BASE_SHORT: mask = "3h"; shift = 1; break;
-        case BASE_INT:   mask = "fh"; shift = 2; break;
-        default:
-            throw std::string("compiler error: unsupported array element type at line ")
-                  + std::to_string(expr->line);
+    // 構造体配列要素のメンバの場合
+    else {
+        this->gen_struct_array_member_addr(target, reg, protect_regs);
     }
-
-    // オフセット = index * サイズ (サイズ1のcharはシフト不要)
-    // 実行後: r{work_reg} = index * サイズ(バイトオフセット), r{work_reg+1} = シフト量(破棄可)
-    if (shift > 0) {
-        this->asm_file_ << "    mov fh r0 r" << (work_reg + 1) << " " << shift << "\n";
-        this->asm_file_ << "    sll r" << work_reg << " r" << (work_reg + 1) << " r" << work_reg << "\n";
-    }
-    // アドレス = base + オフセット
-    // 実行後: r{work_reg+1} = base番地 (val_reg・work_regを保護しつつr{work_reg+2}を作業用に使う)
-    if (expr->children.size() == 2) {
-        this->gen_member_array_base(expr, work_reg + 1, val_reg);
-    } else {
-        this->gen_array_base_addr(work_reg + 1, expr->sym);
-    }
-    // 実行後: r{work_reg} = base + オフセット = 書き込み先の実アドレス
-    this->asm_file_ << "    add r" << work_reg << " r" << (work_reg + 1) << " r" << work_reg << "\n";
-    // maskに従って書き込む (該当バイトのみ更新，他バイトはハードウェアが保持)
-    this->asm_file_ << "    wm " << mask << " r" << work_reg << " r" << val_reg << "\n";
 }
