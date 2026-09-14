@@ -1,4 +1,4 @@
-// 字句解析エラー: #pragma onceの後ろの同じ行にはコメントのみ書ける (宣言は書けない) (異常系)
-#pragma once int g;
+// 字句解析エラー: #includeの後ろの同じ行にはコメントのみ書ける (宣言は書けない) (異常系)
+#include "include/179_lib.pn" int g;
 void main(void) {
 }

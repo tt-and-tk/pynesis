@@ -1,8 +1,4 @@
-// 字句解析エラー: #includeは構造体定義を閉じる}と;の間に書けない (取り込む内容をつなげると宣言として正しくてもエラー) (異常系)
-struct S {
-    int x;
-}
-#include "include/180_lib.pn"
-;
+// 字句解析エラー: #pragma onceの後ろの同じ行にはコメントのみ書ける (宣言は書けない) (異常系)
+#pragma once int g;
 void main(void) {
 }

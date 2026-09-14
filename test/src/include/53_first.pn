@@ -1,0 +1,6 @@
+// 53.pnから取り込まれ，53_second.pnと互いに取り込み合う
+#pragma once
+#include "53_second.pn"
+int first(void) {
+    return second();
+}

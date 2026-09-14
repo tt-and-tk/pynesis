@@ -1,4 +1,4 @@
-// 字句解析エラー: #と指令名の間に空白を書けない (異常系)
-# include "include/173_lib.pn"
+// 字句解析エラー: #includeに取り込むファイルのパスが無い (異常系)
+#include
 void main(void) {
 }

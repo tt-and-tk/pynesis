@@ -1,5 +1,0 @@
-// 49.pnから取り込まれ，49.pnが取り込み済みの49_common.pnを取り込む
-#include "49_common.pn"
-int step(void) {
-    return count;
-}

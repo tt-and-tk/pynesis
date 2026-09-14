@@ -1,6 +1,0 @@
-// 50.pnから取り込まれ，50_second.pnと互いに取り込み合う
-#pragma once
-#include "50_second.pn"
-int first(void) {
-    return second();
-}

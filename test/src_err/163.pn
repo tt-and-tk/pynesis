@@ -1,7 +1,4 @@
-// 意味解析エラー: 取り込んだファイルで定義した関数と同名の関数を定義する (異常系)
-#include "include/163_lib.pn"
-int f(void) {
-    return 2;
-}
+// 字句解析エラー: #includeは関数本体の中に書けない (取り込む内容が文として正しくてもエラー) (異常系)
 void main(void) {
+#include "include/163_body.pn"
 }

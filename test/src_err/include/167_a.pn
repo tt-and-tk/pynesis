@@ -1,2 +1,0 @@
-// 167.pnから取り込まれ，167_common.pnを取り込む
-#include "167_common.pn"

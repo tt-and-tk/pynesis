@@ -1,6 +1,4 @@
-// 字句解析エラー: #includeは構造体定義の中に書けない (異常系)
-struct S {
-#include "include/174_member.pn"
-};
+// 字句解析エラー: #と指令名の間に空白を書けない (異常系)
+# include "include/174_lib.pn"
 void main(void) {
 }

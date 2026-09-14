@@ -1,4 +1,4 @@
-// 字句解析エラー: #pragma onceは関数本体の中に書けない (異常系)
+// 字句解析エラー: #pragmaにはonce以外を書けない (異常系)
+#pragma pack
 void main(void) {
-#pragma once
 }

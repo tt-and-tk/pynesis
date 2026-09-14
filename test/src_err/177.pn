@@ -1,4 +1,5 @@
-// 字句解析エラー: 指令は行頭に書く (宣言の後ろの同じ行には書けない) (異常系)
-int g; #include "include/177_lib.pn"
+// 字句解析エラー: #includeは宣言の途中に書けない (取り込む内容をつなげると宣言として正しくてもエラー) (異常系)
+int g =
+#include "include/177_value.pn"
 void main(void) {
 }

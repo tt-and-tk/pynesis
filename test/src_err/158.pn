@@ -1,4 +1,0 @@
-// 字句解析エラー: 取り込むファイルが存在しない (異常系)
-#include "include/158_missing.pn"
-void main(void) {
-}

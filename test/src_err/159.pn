@@ -1,4 +1,4 @@
-// 字句解析エラー: #includeと#pragma以外の指令は書けない (異常系)
-#define N 1
+// 字句解析エラー: 取り込むファイルが存在しない (異常系)
+#include "include/159_missing.pn"
 void main(void) {
 }

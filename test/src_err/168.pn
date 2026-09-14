@@ -1,4 +1,5 @@
-// 字句解析エラー: #pragma onceが無いファイルどうしで循環して取り込む (異常系)
-#include "include/168_lib.pn"
+// 字句解析エラー: #pragma onceが無いファイルを，別々のファイルを経由して間接的に2回取り込む (異常系)
+#include "include/168_a.pn"
+#include "include/168_b.pn"
 void main(void) {
 }

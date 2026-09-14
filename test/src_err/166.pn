@@ -1,5 +1,4 @@
-// 字句解析エラー: #pragma onceが無いファイルを同じファイルから2回取り込む (重複定義が起きない内容でもエラー) (異常系)
-#include "include/166_lib.pn"
-#include "include/166_lib.pn"
+// 字句解析エラー: 取り込むファイルの拡張子が.pnではない (ファイルが存在し内容が正しくてもエラー) (異常系)
+#include "include/166_lib.txt"
 void main(void) {
 }

@@ -1,3 +1,6 @@
-// 字句解析エラー: 取り込むファイルは関数本体を開いたまま終われない (取り込み元で閉じて内容をつなげると関数定義として正しくてもエラー) (異常系)
-#include "include/175_open.pn"
+// 字句解析エラー: #includeは構造体定義の中に書けない (異常系)
+struct S {
+#include "include/175_member.pn"
+};
+void main(void) {
 }

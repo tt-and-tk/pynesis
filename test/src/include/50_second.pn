@@ -1,7 +1,0 @@
-// 50_first.pnから取り込まれ，字句解析中の50_first.pnと50.pnを取り込み返す
-#pragma once
-#include "50_first.pn"
-#include "../50.pn"
-int second(void) {
-    return 7;
-}

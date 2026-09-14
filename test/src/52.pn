@@ -1,9 +1,9 @@
 // #pragma onceを書いたファイルは，同じファイルから重複して取り込んでも，別のファイルを経由して間接的に重複して取り込んでも1度だけ取り込まれる
-#include "include/49_common.pn"
-#include "include/49_common.pn"
-#include "include/49_user.pn"
+#include "include/52_common.pn"
+#include "include/52_common.pn"
+#include "include/52_user.pn"
 void main(void) {
     count = count + step();     // 1 + 1 = 2
 }
 // 関数本体を閉じる}の直後にも取り込み指令を書ける
-#include "include/49_common.pn"
+#include "include/52_common.pn"

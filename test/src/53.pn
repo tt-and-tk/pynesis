@@ -1,7 +1,7 @@
 // 取り込み指令より前に#pragma onceを書いたファイルは，循環して取り込まれても2回目以降は無視される
 // 取り込むファイルのパスは，取り込み指令を書いたファイルがあるディレクトリから解決する
 #pragma once
-#include "include/50_first.pn"
+#include "include/53_first.pn"
 int g;
 void main(void) {
     g = first();                // 7

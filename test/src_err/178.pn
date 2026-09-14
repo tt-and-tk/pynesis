@@ -1,4 +1,4 @@
-// 字句解析エラー: #includeの後ろの同じ行にはコメントのみ書ける (宣言は書けない) (異常系)
-#include "include/178_lib.pn" int g;
+// 字句解析エラー: 指令は行頭に書く (宣言の後ろの同じ行には書けない) (異常系)
+int g; #include "include/178_lib.pn"
 void main(void) {
 }
