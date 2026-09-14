@@ -23,7 +23,7 @@ typedef struct {
     std::set<std::string> once_paths;         // #pragma onceが書かれたファイルの正規化した絶対パス
 } lex_state_t;
 
-// 指令ごとの処理 (ソース中の読み取り位置posは，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
+// 指令ごとの処理 (ソース中の読み取り位置は，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
 typedef void (*directive_handler_t)(const source_t &source, int &pos, const loc_t &loc,
                                     lex_state_t &state, std::vector<token_t> &tokens);
 
@@ -293,8 +293,8 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
 }
 
 // #で始まる指令を1つ読み，指令名に対応する処理を呼び出す
-// ソース中の読み取り位置posは#の位置で受け取り，指令の直後まで読み進める
-// brace_depthは指令を書いたファイル内の波括弧の入れ子の深さ
+// ソース中の読み取り位置は#の位置で受け取り，指令の直後まで読み進める
+// 波括弧の入れ子の深さは，指令を書いたファイルの中で数えた値を受け取る
 static void lex_directive(const source_t &source, int &pos, int line, int brace_depth, lex_state_t &state, std::vector<token_t> &tokens) {
     const std::string &src = source.text;               // ソース全体
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
@@ -410,7 +410,7 @@ static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_de
 }
 
 // 指令の後ろの同じ行に，空白とコメント以外が書かれていないことを確認する
-// (ソース中の読み取り位置posは読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
+// (ソース中の読み取り位置は読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
 static void check_directive_line_end(const std::string &src, int pos, const loc_t &loc) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     while (true) {
