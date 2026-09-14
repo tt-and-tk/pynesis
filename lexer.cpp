@@ -25,8 +25,8 @@ typedef struct {
     int brace_depth = 0;                      // 波括弧の入れ子の深さ (0ならグローバルスコープ直下)
 } lex_state_t;
 
-// 指令ごとの処理 (位置iは指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
-typedef void (*directive_handler_t)(const source_t &source, int &i, const loc_t &loc,
+// 指令ごとの処理 (ソース中の読み取り位置posは，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
+typedef void (*directive_handler_t)(const source_t &source, int &pos, const loc_t &loc,
                                     lex_state_t &state, std::vector<token_t> &tokens);
 
 // 前宣言 (ファイル内部でのみ使用)
@@ -34,14 +34,14 @@ static source_t read_source(const std::string &path, const loc_t *included_at); 
 // ファイル1つを字句解析してトークン列の末尾へ追加する
 static void lex_file(const source_t &source, lex_state_t &state, std::vector<token_t> &tokens);
 // #で始まる指令を1つ読み，指令名に対応する処理を呼び出す
-static void lex_directive(const source_t &source, int &i, int line, lex_state_t &state, std::vector<token_t> &tokens);
+static void lex_directive(const source_t &source, int &pos, int line, lex_state_t &state, std::vector<token_t> &tokens);
 // #includeで指定されたファイルを字句解析してトークン列に展開する
-static void lex_include(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
+static void lex_include(const source_t &source, int &pos, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
 // #pragmaを処理する
-static void lex_pragma(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
+static void lex_pragma(const source_t &source, int &pos, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
 static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_depth);  // トークン列がグローバルスコープの宣言と宣言の間で終わっているかを返す
-static void check_directive_line_end(const std::string &src, int i, const loc_t &loc);  // 指令の後ろの同じ行に空白とコメント以外が無いことを確認する
-static std::string read_word(const std::string &src, int &i);  // 現在位置から識別子に使える文字の並びを読み進めて返す
+static void check_directive_line_end(const std::string &src, int pos, const loc_t &loc);  // 指令の後ろの同じ行に空白とコメント以外が無いことを確認する
+static std::string read_word(const std::string &src, int &pos);  // 現在位置から識別子に使える文字の並びを読み進めて返す
 static token_kind_t get_keyword_kind(const std::string &word);  // 識別子がキーワードならその種別を，そうでなければ TK_IDENT を返す
 
 // キーワード文字列からトークン種別への変換表
@@ -132,7 +132,7 @@ static source_t read_source(const std::string &path, const loc_t *included_at) {
 // ファイル1つを字句解析してトークン列の末尾へ追加する (#includeで取り込むファイルはその位置に展開する)
 static void lex_file(const source_t &source, lex_state_t &state, std::vector<token_t> &tokens) {
     const std::string &src = source.text;  // ソース全体
-    int i    = 0;   // 現在の読み取り位置
+    int pos  = 0;   // 現在の読み取り位置
     int line = 1;   // 現在の行番号
     int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
 
@@ -140,43 +140,43 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
     state.lexed_paths.insert(source.canonical_path);
     state.in_progress_paths.insert(source.canonical_path);
 
-    while (i < src_size) {
-        const char c = src[i];  // 現在の文字
+    while (pos < src_size) {
+        const char c = src[pos];  // 現在の文字
 
         // 改行: 行番号をインクリメントする
-        if (c == '\n') { line++; i++; continue; }
+        if (c == '\n') { line++; pos++; continue; }
 
         // 空白文字: スキップする
-        if (c == ' ' || c == '\t' || c == '\r') { i++; continue; }
+        if (c == ' ' || c == '\t' || c == '\r') { pos++; continue; }
 
         // 行コメント (//): 行末までスキップする
-        if (c == '/' && i + 1 < src_size && src[i + 1] == '/') {
-            while (i < src_size && src[i] != '\n') i++;
+        if (c == '/' && pos + 1 < src_size && src[pos + 1] == '/') {
+            while (pos < src_size && src[pos] != '\n') pos++;
             // lineのインクリメントは外部whileループの次のループで行う
             continue;
         }
 
         // ブロックコメント (/* */): 閉じるまでスキップする
-        if (c == '/' && i + 1 < src_size && src[i + 1] == '*') {
-            i += 2;
-            while (i + 1 < src_size) {
-                if (src[i] == '\n') line++;
-                if (src[i] == '*' && src[i + 1] == '/') { i += 2; break; }
-                i++;
+        if (c == '/' && pos + 1 < src_size && src[pos + 1] == '*') {
+            pos += 2;
+            while (pos + 1 < src_size) {
+                if (src[pos] == '\n') line++;
+                if (src[pos] == '*' && src[pos + 1] == '/') { pos += 2; break; }
+                pos++;
             }
             continue;
         }
 
         // 指令: # で始まる
         if (c == '#') {
-            lex_directive(source, i, line, state, tokens);
+            lex_directive(source, pos, line, state, tokens);
             continue;
         }
 
         // 識別子または予約語: アルファベットか _ で始まる
         if (isalpha(static_cast<unsigned char>(c)) || c == '_') {
             // 識別子に使える文字の並びを読む
-            const std::string word = read_word(src, i);  // 識別子または予約語の文字列
+            const std::string word = read_word(src, pos);  // 識別子または予約語の文字列
             // 予約語ならその種別で，そうでなければ識別子としてトークンを追加する
             tokens.push_back({get_keyword_kind(word), word, {source.name, line}});
             continue;
@@ -184,72 +184,72 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
 
         // 整数リテラル: 数字で始まる
         if (isdigit(static_cast<unsigned char>(c))) {
-            int start = i;  // リテラルの先頭位置
+            int start = pos;  // リテラルの先頭位置
             // 16進数 (0x...) の場合
-            if (c == '0' && i + 1 < src_size
-                && (src[i + 1] == 'x' || src[i + 1] == 'X')) {
-                i += 2;
-                while (i < src_size
-                       && isxdigit(static_cast<unsigned char>(src[i]))) {
-                    i++;
+            if (c == '0' && pos + 1 < src_size
+                && (src[pos + 1] == 'x' || src[pos + 1] == 'X')) {
+                pos += 2;
+                while (pos < src_size
+                       && isxdigit(static_cast<unsigned char>(src[pos]))) {
+                    pos++;
                 }
             }
             // 10進数の場合
             else {
-                while (i < src_size
-                       && isdigit(static_cast<unsigned char>(src[i]))) {
-                    i++;
+                while (pos < src_size
+                       && isdigit(static_cast<unsigned char>(src[pos]))) {
+                    pos++;
                 }
             }
             // 読み進めた範囲をトークンとして追加する
-            tokens.push_back({TK_INT_LIT, src.substr(start, i - start), {source.name, line}});
+            tokens.push_back({TK_INT_LIT, src.substr(start, pos - start), {source.name, line}});
             continue;
         }
 
         // 文字リテラル: ' で始まる
         if (c == '\'') {
-            int start = i;  // リテラルの先頭位置
-            i++;  // 開き ' をスキップする
+            int start = pos;  // リテラルの先頭位置
+            pos++;  // 開き ' をスキップする
             // エスケープシーケンスの場合，バックスラッシュの次の文字を文字本体として扱う
-            if (i < src_size && src[i] == '\\') i++;
+            if (pos < src_size && src[pos] == '\\') pos++;
             // 改行は，エスケープの有無に関わらずエラーにする
-            if (i < src_size && src[i] == '\n') {
+            if (pos < src_size && src[pos] == '\n') {
                 throw std::string("compiler error: newline in char literal at ")
                       + loc_to_string({source.name, line});
             }
-            i++;  // 文字本体をスキップする
+            pos++;  // 文字本体をスキップする
             // 閉じ ' を確認する
-            if (i >= src_size || src[i] != '\'') {
+            if (pos >= src_size || src[pos] != '\'') {
                 throw std::string("compiler error: unterminated char literal at ")
                       + loc_to_string({source.name, line});
             }
-            i++;  // 閉じ ' をスキップする
+            pos++;  // 閉じ ' をスキップする
             // 引用符を含めた範囲をトークンとして追加する
-            tokens.push_back({TK_CHAR_LIT, src.substr(start, i - start), {source.name, line}});
+            tokens.push_back({TK_CHAR_LIT, src.substr(start, pos - start), {source.name, line}});
             continue;
         }
 
         // 文字列リテラル: " で始まる
         if (c == '"') {
-            int start = i;  // リテラルの先頭位置
-            i++;  // 開き " をスキップする
+            int start = pos;  // リテラルの先頭位置
+            pos++;  // 開き " をスキップする
             // 閉じ " が来るまで読み進める (エスケープシーケンスを考慮する)
-            while (i < src_size && src[i] != '"') {
-                if (src[i] == '\\') i++;  // エスケープ対象の文字は閉じ " として扱わない
+            while (pos < src_size && src[pos] != '"') {
+                if (src[pos] == '\\') pos++;  // エスケープ対象の文字は閉じ " として扱わない
                 // 改行は，エスケープの有無に関わらずエラーにする
-                if (i < src_size && src[i] == '\n') {
+                if (pos < src_size && src[pos] == '\n') {
                     throw std::string("compiler error: newline in string literal at ")
                           + loc_to_string({source.name, line});
                 }
-                i++;
+                pos++;
             }
-            if (i >= src_size) {
+            if (pos >= src_size) {
                 throw std::string("compiler error: unterminated string literal at ")
                       + loc_to_string({source.name, line});
             }
-            i++;  // 閉じ " をスキップする
+            pos++;  // 閉じ " をスキップする
             // 引用符を除いた中身を取得する (エスケープシーケンスはパーサーで解釈する)
-            const std::string content = src.substr(start + 1, i - start - 2);  // 文字列リテラルの中身
+            const std::string content = src.substr(start + 1, pos - start - 2);  // 文字列リテラルの中身
             // 隣接する文字列リテラルを連結する ("hello" " world" → hello world)
             if (!tokens.empty() && tokens.back().kind == TK_STRING_LIT) {
                 tokens.back().value += content;
@@ -263,8 +263,8 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
         bool matched = false;  // 演算子・区切り文字に一致したか
         for (int len = 3; len >= 1; len--) {
             // ソースの末尾を越える長さは試さない
-            if (i + len > src_size) continue;
-            const std::string token = src.substr(i, len);  // 一致を試す文字列
+            if (pos + len > src_size) continue;
+            const std::string token = src.substr(pos, len);  // 一致を試す文字列
             const auto it = g_operators.find(token);        // 一致した演算子・区切り文字
             if (it != g_operators.end()) {
                 // 指令を書ける位置の判定に使うため，波括弧の入れ子の深さを数える
@@ -272,7 +272,7 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
                 if (it->second == TK_RBRACE) state.brace_depth--;
                 // 一致した演算子・区切り文字をトークンとして追加する
                 tokens.push_back({it->second, token, {source.name, line}});
-                i += len;
+                pos += len;
                 matched = true;
                 break;
             }
@@ -288,22 +288,22 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
 }
 
 // #で始まる指令を1つ読み，指令名に対応する処理を呼び出す
-// 位置iは#の位置で受け取り，指令の直後まで読み進める
-static void lex_directive(const source_t &source, int &i, int line, lex_state_t &state, std::vector<token_t> &tokens) {
+// ソース中の読み取り位置posは#の位置で受け取り，指令の直後まで読み進める
+static void lex_directive(const source_t &source, int &pos, int line, lex_state_t &state, std::vector<token_t> &tokens) {
     const std::string &src = source.text;               // ソース全体
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     const loc_t loc = {source.name, line};              // 指令の位置
 
     // 指令は行頭に書く (#の前の同じ行には空白だけを置ける)
-    int before = i - 1;  // #の前の同じ行を後ろから調べる位置
+    int before = pos - 1;  // #の前の同じ行を後ろから調べる位置
     while (before >= 0 && (src[before] == ' ' || src[before] == '\t')) before--;
     if (before >= 0 && src[before] != '\n') {
         throw std::string("compiler error: directive must be at the beginning of a line at ") + loc_to_string(loc);
     }
 
     // #の直後に続けて書かれた指令名を読み，対応する処理を探す
-    i++;
-    const std::string name = read_word(src, i);         // 指令名
+    pos++;
+    const std::string name = read_word(src, pos);         // 指令名
     const auto directive = g_directives.find(name);     // 指令名に対応する処理
     if (directive == g_directives.end()) {
         throw std::string("compiler error: unknown directive '#") + name + "' at " + loc_to_string(loc);
@@ -316,30 +316,30 @@ static void lex_directive(const source_t &source, int &i, int line, lex_state_t 
     }
 
     // 指令名と引数の間の空白を読み飛ばす
-    while (i < src_size && (src[i] == ' ' || src[i] == '\t')) i++;
+    while (pos < src_size && (src[pos] == ' ' || src[pos] == '\t')) pos++;
     // 指令ごとの処理を呼び出す
-    directive->second(source, i, loc, state, tokens);
+    directive->second(source, pos, loc, state, tokens);
 }
 
 // #includeの引数からパスを読み，そのファイルを字句解析してトークン列に展開する
-static void lex_include(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens) {
+static void lex_include(const source_t &source, int &pos, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens) {
     const std::string &src = source.text;               // ソース全体
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
 
     // 取り込むファイルのパスを"で囲んで読む (パスは行をまたげない)
-    if (i >= src_size || src[i] != '"') {
+    if (pos >= src_size || src[pos] != '"') {
         throw std::string("compiler error: expected \"file name\" after '#include' at ") + loc_to_string(loc);
     }
-    const int start = ++i;  // パスの先頭位置
+    const int start = ++pos;  // パスの先頭位置
     // 閉じ"か行末まで読み進める
-    while (i < src_size && src[i] != '"' && src[i] != '\n') i++;
-    if (i >= src_size || src[i] != '"') {
+    while (pos < src_size && src[pos] != '"' && src[pos] != '\n') pos++;
+    if (pos >= src_size || src[pos] != '"') {
         throw std::string("compiler error: unterminated file name in '#include' at ") + loc_to_string(loc);
     }
-    const std::string written = src.substr(start, i - start);  // 取り込み指令に書かれたパス
-    i++;  // 閉じ " をスキップする
+    const std::string written = src.substr(start, pos - start);  // 取り込み指令に書かれたパス
+    pos++;  // 閉じ " をスキップする
     // 指令の後ろに余分な記述が無いことを確認する
-    check_directive_line_end(src, i, loc);
+    check_directive_line_end(src, pos, loc);
 
     // 取り込むファイルもPynesisソースに限る
     if (written.length() < 3 || written.substr(written.length() - 3) != ".pn") {
@@ -369,25 +369,25 @@ static void lex_include(const source_t &source, int &i, const loc_t &loc, lex_st
 }
 
 // #pragmaの引数を読み，onceならそのファイルの2回目以降の取り込みを無視するよう記録する
-static void lex_pragma(const source_t &source, int &i, const loc_t &loc, lex_state_t &state, std::vector<token_t> &) {
+static void lex_pragma(const source_t &source, int &pos, const loc_t &loc, lex_state_t &state, std::vector<token_t> &) {
     // pragmaの種類を読む (onceのみ対応する)
-    const std::string pragma = read_word(source.text, i);  // pragmaの種類
+    const std::string pragma = read_word(source.text, pos);  // pragmaの種類
     if (pragma != "once") {
         throw std::string("compiler error: unknown pragma '") + pragma + "' at " + loc_to_string(loc);
     }
     // 指令の後ろに余分な記述が無いことを確認する
-    check_directive_line_end(source.text, i, loc);
+    check_directive_line_end(source.text, pos, loc);
     // このファイルに#pragma onceが書かれたことを記録する
     state.once_paths.insert(source.canonical_path);
 }
 
 // ここまでのトークン列が，グローバルスコープの宣言と宣言の間で終わっているかを返す
-// (プログラムの先頭，グローバルスコープ直下の;の直後，または関数本体を閉じる}の直後)
+// (まだトークンが1つも無い最初の宣言の前，グローバルスコープ直下の;の直後，または関数本体を閉じる}の直後)
 // 構造体定義の}は後ろに;が続き宣言の途中にあたるため，}は対応する{の直前が)である関数本体の場合に限る
 static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_depth) {
     // 波括弧の中なら宣言の途中
     if (brace_depth != 0) return false;
-    // プログラムの先頭，または;の直後なら宣言の間
+    // まだトークンが1つも無い(コメントや指令だけが先にある)か，;の直後なら宣言の間
     if (tokens.empty() || tokens.back().kind == TK_SEMICOLON) return true;
     // ;と}以外の直後なら宣言の途中
     if (tokens.back().kind != TK_RBRACE) return false;
@@ -406,37 +406,37 @@ static bool is_at_decl_boundary(const std::vector<token_t> &tokens, int brace_de
 }
 
 // 指令の後ろの同じ行に，空白とコメント以外が書かれていないことを確認する
-// (位置iは読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
-static void check_directive_line_end(const std::string &src, int i, const loc_t &loc) {
+// (ソース中の読み取り位置posは読み進めず，コメントは呼び出し元の字句解析で読み飛ばす)
+static void check_directive_line_end(const std::string &src, int pos, const loc_t &loc) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     while (true) {
         // 空白を読み飛ばす
-        while (i < src_size && (src[i] == ' ' || src[i] == '\t' || src[i] == '\r')) i++;
+        while (pos < src_size && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r')) pos++;
         // 行末・ファイル末尾・行コメントに達したら，同じ行の残りに記述は無い
-        if (i >= src_size || src[i] == '\n' || src.compare(i, 2, "//") == 0) return;
+        if (pos >= src_size || src[pos] == '\n' || src.compare(pos, 2, "//") == 0) return;
         // コメント以外が書かれている場合
-        if (src.compare(i, 2, "/*") != 0) {
+        if (src.compare(pos, 2, "/*") != 0) {
             throw std::string("compiler error: unexpected text after directive at ") + loc_to_string(loc);
         }
         // ブロックコメントの終わりを探す
-        const size_t end = src.find("*/", i + 2);   // ブロックコメントを閉じる*/の位置
+        const size_t end = src.find("*/", pos + 2);   // ブロックコメントを閉じる*/の位置
         // 閉じずにファイルが終わるか，途中で改行して行をまたぐなら，同じ行の残りに記述は無い
-        if (end == std::string::npos || src.find('\n', i) < end) return;
+        if (end == std::string::npos || src.find('\n', pos) < end) return;
         // 同じ行で閉じたブロックコメントの後ろも続けて調べる
-        i = static_cast<int>(end) + 2;
+        pos = static_cast<int>(end) + 2;
     }
 }
 
 // 現在位置から識別子に使える文字(英数字と_)の並びを読み進めて返す
-static std::string read_word(const std::string &src, int &i) {
+static std::string read_word(const std::string &src, int &pos) {
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
-    const int start = i;                                // 読み始めの位置
+    const int start = pos;                                // 読み始めの位置
     // 英数字と_が続く限り読み進める
-    while (i < src_size
-           && (isalnum(static_cast<unsigned char>(src[i])) || src[i] == '_')) {
-        i++;
+    while (pos < src_size
+           && (isalnum(static_cast<unsigned char>(src[pos])) || src[pos] == '_')) {
+        pos++;
     }
-    return src.substr(start, i - start);
+    return src.substr(start, pos - start);
 }
 
 // 識別子がキーワードならその種別を，そうでなければ TK_IDENT を返す
