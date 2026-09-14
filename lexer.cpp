@@ -21,8 +21,6 @@ typedef struct {
     std::set<std::string> lexed_paths;        // 字句解析を始めたファイルの正規化した絶対パス
     std::set<std::string> in_progress_paths;  // 字句解析中のファイルの正規化した絶対パス
     std::set<std::string> once_paths;         // #pragma onceが書かれたファイルの正規化した絶対パス
-    // 取り込んだファイルが関数本体を開いたまま終わる場合も正しく数えられるよう，ファイルごとではなく全ファイルを通して数える
-    int brace_depth = 0;                      // 波括弧の入れ子の深さ (0ならグローバルスコープ直下)
 } lex_state_t;
 
 // 指令ごとの処理 (ソース中の読み取り位置posは，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
@@ -34,7 +32,7 @@ static source_t read_source(const std::string &path, const loc_t *included_at); 
 // ファイル1つを字句解析してトークン列の末尾へ追加する
 static void lex_file(const source_t &source, lex_state_t &state, std::vector<token_t> &tokens);
 // #で始まる指令を1つ読み，指令名に対応する処理を呼び出す
-static void lex_directive(const source_t &source, int &pos, int line, lex_state_t &state, std::vector<token_t> &tokens);
+static void lex_directive(const source_t &source, int &pos, int line, int brace_depth, lex_state_t &state, std::vector<token_t> &tokens);
 // #includeで指定されたファイルを字句解析してトークン列に展開する
 static void lex_include(const source_t &source, int &pos, const loc_t &loc, lex_state_t &state, std::vector<token_t> &tokens);
 // #pragmaを処理する
@@ -135,6 +133,7 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
     int pos  = 0;   // 現在の読み取り位置
     int line = 1;   // 現在の行番号
     int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
+    int brace_depth = 0;  // このファイル内の波括弧の入れ子の深さ (0ならグローバルスコープ直下)
 
     // 取り込みの重複・循環を検出できるよう，字句解析を始めたことを記録する
     state.lexed_paths.insert(source.canonical_path);
@@ -169,7 +168,7 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
 
         // 指令: # で始まる
         if (c == '#') {
-            lex_directive(source, pos, line, state, tokens);
+            lex_directive(source, pos, line, brace_depth, state, tokens);
             continue;
         }
 
@@ -268,8 +267,8 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
             const auto it = g_operators.find(token);        // 一致した演算子・区切り文字
             if (it != g_operators.end()) {
                 // 指令を書ける位置の判定に使うため，波括弧の入れ子の深さを数える
-                if (it->second == TK_LBRACE) state.brace_depth++;
-                if (it->second == TK_RBRACE) state.brace_depth--;
+                if (it->second == TK_LBRACE) brace_depth++;
+                if (it->second == TK_RBRACE) brace_depth--;
                 // 一致した演算子・区切り文字をトークンとして追加する
                 tokens.push_back({it->second, token, {source.name, line}});
                 pos += len;
@@ -283,13 +282,20 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
         }
     }
 
+    // ファイルの中で宣言が完結していることを確認する (取り込んだ先で別のファイルと宣言がつながらないようにする)
+    if (!is_at_decl_boundary(tokens, brace_depth)) {
+        throw std::string("compiler error: file ends in the middle of a declaration at ")
+              + loc_to_string({source.name, line});
+    }
+
     // 字句解析を終えたことを記録する
     state.in_progress_paths.erase(source.canonical_path);
 }
 
 // #で始まる指令を1つ読み，指令名に対応する処理を呼び出す
 // ソース中の読み取り位置posは#の位置で受け取り，指令の直後まで読み進める
-static void lex_directive(const source_t &source, int &pos, int line, lex_state_t &state, std::vector<token_t> &tokens) {
+// brace_depthは指令を書いたファイル内の波括弧の入れ子の深さ
+static void lex_directive(const source_t &source, int &pos, int line, int brace_depth, lex_state_t &state, std::vector<token_t> &tokens) {
     const std::string &src = source.text;               // ソース全体
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     const loc_t loc = {source.name, line};              // 指令の位置
@@ -310,7 +316,7 @@ static void lex_directive(const source_t &source, int &pos, int line, lex_state_
     }
 
     // 指令はグローバルスコープの宣言と宣言の間にのみ書ける
-    if (!is_at_decl_boundary(tokens, state.brace_depth)) {
+    if (!is_at_decl_boundary(tokens, brace_depth)) {
         throw std::string("compiler error: '#") + name
               + "' is only allowed between global declarations at " + loc_to_string(loc);
     }
