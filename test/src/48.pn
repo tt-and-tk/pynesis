@@ -1,0 +1,13 @@
+// 構造体配列要素のchar/shortメンバへの複合代入: 現在値の符号拡張を経ても書き込み先の番地が保たれる
+struct Rec {
+    char c;
+    short s;
+};
+
+struct Rec recs[2];
+
+void main(void) {
+    int i = 1;
+    recs[i].c += 1;
+    recs[i].s -= 2;
+}

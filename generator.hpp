@@ -46,26 +46,30 @@ private:
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
-    // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタの値をメモリへ退避・復元する
-    void gen_expr_protecting(node_t *expr, int reg, int protect_reg);
+    // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
+    void gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs);
     void gen_binop_instr(const std::string &op, int dst, int lhs, int rhs);  // r{dst}=r{lhs} op r{rhs}を出力
     void gen_load(int reg, const symbol_t *sym);   // 変数をr{reg}へ読み込む (レジスタ直結ならmov・メモリならrm)
     void gen_store(int reg, const symbol_t *sym);  // r{reg}を変数へ書き込む (レジスタ直結ならmov・メモリならwm)
-    void gen_sign_extend(int reg, int bits);       // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用)
-    void gen_array_load(node_t *expr, int reg);    // 配列要素をr{reg}へ読み込む
-    void gen_array_store(node_t *expr, int val_reg, int work_reg);  // r{val_reg}を配列要素へ書き込む
+    // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用．r{work_reg}を作業用に使う)
+    void gen_sign_extend(int reg, int bits, int work_reg);
+    // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
+    void gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs = {});
+    // 番地が実行時に決まる代入先(配列要素または構造体配列要素のメンバ)の実アドレスをr{reg}に計算する
+    void gen_runtime_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
     void gen_array_base_addr(int reg, const symbol_t *sym);  // 配列の先頭アドレスをr{reg}に載せる (直接配列は即値，配列パラメータは間接読み出し)
     // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する．
     // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数) + インデックス(実行時)×構造体1要素分のバイト数．
-    // protect_regを指定すると，インデックス式の評価中もそのレジスタの値を保護する(既に確定した値を持つとき使う)
-    void gen_struct_array_member_addr(node_t *member_access, int reg, int protect_reg = -1);
+    // 保護するレジスタを指定すると，インデックス式の評価中もそれらの値を保護する(既に確定した値を持つとき使う)
+    void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // 構造体メンバ配列アクセス(children.size()==2のND_ARRAY_ACCESS)の配列先頭アドレスをr{addr_reg}に載せる．
     // 通常の単一構造体変数のメンバ配列はコンパイル時アドレス確定(gen_array_base_addr)，
     // 構造体配列要素のメンバ配列は実行時アドレス計算(gen_struct_array_member_addr)に振り分ける
-    void gen_member_array_base(node_t *expr, int addr_reg, int protect_reg = -1);
+    void gen_member_array_base(node_t *expr, int addr_reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
-    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う
-    void gen_load_indirect(int reg, const type_t &type);
+    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う．
+    // char/shortの符号拡張ではr{work_reg}を作業用に使う
+    void gen_load_indirect(int reg, const type_t &type, int work_reg);
     // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
     void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);
     void gen_string_init(int base_addr, const std::string &str);  // 文字列をchar配列に書き込む初期化コードを生成する
