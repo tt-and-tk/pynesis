@@ -1,0 +1,4 @@
+// 字句解析エラー: 指令の#は行の1文字目に書く (前に空白を置けない) (異常系)
+    #include "include/184_lib.pn"
+void main(void) {
+}

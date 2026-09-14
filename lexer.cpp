@@ -300,10 +300,8 @@ static void lex_directive(const source_t &source, int &pos, int line, int brace_
     const int src_size = static_cast<int>(src.size());  // ソース全体のサイズ
     const loc_t loc = {source.name, line};              // 指令の位置
 
-    // 指令は行頭に書く (#の前の同じ行には空白だけを置ける)
-    int before = pos - 1;  // #の前の同じ行を後ろから調べる位置
-    while (before >= 0 && (src[before] == ' ' || src[before] == '\t')) before--;
-    if (before >= 0 && src[before] != '\n') {
+    // 指令の#は行の1文字目に書く
+    if (pos > 0 && src[pos - 1] != '\n') {
         throw std::string("compiler error: directive must be at the beginning of a line at ") + loc_to_string(loc);
     }
 
