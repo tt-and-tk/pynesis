@@ -1,0 +1,7 @@
+// 53_first.pnから取り込まれ，字句解析中の53_first.pnと53.pnを取り込み返す
+#pragma once
+#include "53_first.pn"
+#include "../53.pn"
+int second(void) {
+    return 7;
+}

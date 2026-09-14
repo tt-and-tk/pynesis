@@ -1,0 +1,5 @@
+// 52.pnから取り込まれ，52.pnが取り込み済みの52_common.pnを取り込む
+#include "52_common.pn"
+int step(void) {
+    return count;
+}

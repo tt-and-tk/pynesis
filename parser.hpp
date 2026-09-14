@@ -78,7 +78,7 @@ struct node_t {
     std::string sval;               // 文字列値 (識別子名・演算子文字列)
     long long ival;                 // 整数値 (リテラル)
     type_t type;                    // 型情報 (意味解析後に確定)
-    int line;                       // 行番号 (エラー報告用)
+    loc_t loc;                      // ソース上の位置 (エラー報告用)
     const symbol_t *sym = nullptr;  // 名前解決の結果 (ND_VAR等がどの宣言を指すか，意味解析後に確定)
 };
 
@@ -104,11 +104,11 @@ private:
     bool token_kind_is(token_kind_t kind) const;           // 現在のトークンの種別が一致するか調べる (消費しない)
     token_t get_token();                                   // トークンを取得して進める (検証なし)
     token_t get_token(token_kind_t kind);                  // 指定種別のトークンを取得して進める，違えばエラー
-    node_t *new_node(node_kind_t kind);                    // 現在のトークンの行番号でASTノードを生成する
+    node_t *new_node(node_kind_t kind);                    // 現在のトークンの位置でASTノードを生成する
     static bool is_type_start(token_kind_t kind);          // 型の先頭になりうるトークン種別かどうか返す
     static bool is_assign_op(token_kind_t kind);           // 代入演算子のトークン種別かどうか返す
     static std::string token_kind_name(token_kind_t kind); // トークン種別をエラーメッセージ用の文字列に変換する
-    static long long parse_int_literal(const std::string &text);   // 整数リテラル文字列を数値に変換する
+    static long long parse_int_literal(const token_t &token);      // 整数リテラルのトークンを数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
     // const修飾子・signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)を読み，型情報を返す

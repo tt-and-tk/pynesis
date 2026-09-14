@@ -1,0 +1,6 @@
+// 51.pnから取り込まれる定数・グローバル変数・関数
+const int LIB_BASE = 2;
+int lib_total = 3;
+int add_base(int x) {
+    return x + lib_total;
+}

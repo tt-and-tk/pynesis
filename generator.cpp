@@ -497,8 +497,8 @@ std::string Generator::new_label() {
 void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(cond->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(cond->loc);
     }
     // 比較条件: 否定したF系で「偽のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
@@ -520,8 +520,8 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
 void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(cond->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(cond->loc);
     }
     // 比較条件: そのままのF系で「真のとき飛ぶ」を1命令で表現する
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
@@ -560,8 +560,8 @@ void Generator::gen_compare(node_t *expr, int reg) {
 void Generator::gen_logical(node_t *expr, int reg) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
     const bool is_and = (expr->sval == "&&");
     const std::string shortcut = this->new_label();   // 短絡時の飛び先
@@ -603,14 +603,14 @@ void Generator::gen_ternary(node_t *expr, int reg) {
 void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     // r{reg+1}を使うため，上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
     node_t *var = expr->children[0];                          // 対象変数 (ND_VAR)
     const std::string op = (expr->sval == "++") ? "+" : "-";  // ++→加算, --→減算
 
     // 現在値を読み，1を載せる
-    this->gen_load(reg, var->sym);                                        // r{reg} = x
+    this->gen_load(reg, var->sym, var->loc);                              // r{reg} = x
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 1\n";         // r{reg+1} = 1
 
     if (is_prefix) {
@@ -637,8 +637,8 @@ void Generator::gen_unary(node_t *expr, int reg) {
     else if (op == "-") {
         // 単項- : 0 - x で符号反転する (r{reg+1}を使うため上限(r15)を超えないことを確認する)
         if (reg + 1 >= MAX_REG) {
-            throw std::string("compiler error: expression too complex (out of registers) at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: expression too complex (out of registers) at ")
+                  + loc_to_string(expr->loc);
         }
         this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 0\n";                          // r{reg+1} = 0
         this->asm_file_ << "    sub r" << (reg + 1) << " r" << reg << " r" << reg << "\n";    // r{reg} = 0 - x
@@ -648,8 +648,8 @@ void Generator::gen_unary(node_t *expr, int reg) {
     } else if (op == "!") {
         // 論理否定 : x==0 なら1，それ以外は0 (比較と同じ0/1生成パターン，r{reg+1}を使うため上限(r15)を超えないことを確認する)
         if (reg + 1 >= MAX_REG) {
-            throw std::string("compiler error: expression too complex (out of registers) at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: expression too complex (out of registers) at ")
+                  + loc_to_string(expr->loc);
         }
         const std::string t = this->new_label();      // 真(x==0)の飛び先
         const std::string end = this->new_label();
@@ -662,7 +662,7 @@ void Generator::gen_unary(node_t *expr, int reg) {
         this->asm_file_ << end << ":\n";
     } else {
         throw std::string("compiler error: unsupported unary operator '") + op
-              + "' at line " + std::to_string(expr->line);
+              + "' at " + loc_to_string(expr->loc);
     }
 }
 
@@ -824,7 +824,7 @@ void Generator::gen_binop_instr(const std::string &op, int dst, int lhs, int rhs
 // 置き場所がレジスタ直結(LED等のI/Oレジスタ)ならmovのレジスタ間コピー，メモリ変数ならrm
 // メモリ変数はchar/shortの型幅でmaskし(他バイトのゴミを混入させない)，符号付きなので読み込み後に符号拡張する
 // (レジスタ上の演算は型に関係なく常に32ビットで行うため，char/shortはintに昇格した状態で保持する)
-void Generator::gen_load(int reg, const symbol_t *sym) {
+void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
     if (sym->location == LOC_REGISTER) {
         // mov rs1=番地, rd=r{reg} : r{reg} = register[番地] (即値を付けないとレジスタ間コピーになる)
         this->asm_file_ << "    mov fh r" << sym->address << " r" << reg << "\n";
@@ -839,11 +839,11 @@ void Generator::gen_load(int reg, const symbol_t *sym) {
     switch (sym->type.base) {
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 8, reg + 1);
+            this->gen_sign_extend(reg, 8, reg + 1, loc);
             break;
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 16, reg + 1);
+            this->gen_sign_extend(reg, 16, reg + 1, loc);
             break;
         case BASE_INT:
             // rm: メモリ絶対番地からr{reg}へ読み込む (即値アドレス指定のためrs1のr0は無視される)
@@ -884,17 +884,17 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
 // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング，結果は同じレジスタに上書き)
 // gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
 // 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
-void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg) {
+void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc) {
     switch (type.base) {
         // char: 下位1バイトを読み込み，8ビット値として符号拡張する
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 8, work_reg);
+            this->gen_sign_extend(reg, 8, work_reg, loc);
             break;
         // short: 下位2バイトを読み込み，16ビット値として符号拡張する
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 16, work_reg);
+            this->gen_sign_extend(reg, 16, work_reg, loc);
             break;
         // int: 4バイトすべてを読み込む (符号拡張は不要)
         case BASE_INT:
@@ -919,10 +919,11 @@ void Generator::gen_store_indirect(int addr_reg, int val_reg, const type_t &type
 }
 
 // r{reg}の下位bitsビットを符号として32ビットへ符号拡張する(シフト量の保持にr{work_reg}を使う)
-void Generator::gen_sign_extend(int reg, int bits, int work_reg) {
+void Generator::gen_sign_extend(int reg, int bits, int work_reg, const loc_t &loc) {
     // 作業用レジスタが上限(r15)を超えないことを確認する (r16以降はSP等の汎用でないレジスタのため)
     if (work_reg >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers)");
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(loc);
     }
     const int shift = 32 - bits;   // 値の最上位ビットをレジスタのMSBへ運ぶシフト量
     // シフト量を保存しておく
@@ -961,8 +962,8 @@ void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int
 void Generator::gen_expr(node_t *expr, int reg) {
     // レジスタは16本(r0〜r15)．深い式で枯渇したらエラーにする
     if (reg >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
 
     switch (expr->kind) {
@@ -983,7 +984,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
 
         // 変数参照: 変数の値をr{reg}へ読み込む
         case ND_VAR:
-            this->gen_load(reg, expr->sym);
+            this->gen_load(reg, expr->sym, expr->loc);
             break;
 
         // 構造体メンバ参照:
@@ -996,9 +997,9 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 // メンバの実アドレスをr{reg}に求める
                 this->gen_struct_array_member_addr(expr, reg);
                 // そのアドレスからメンバの値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
-                this->gen_load_indirect(reg, expr->type, reg + 1);
+                this->gen_load_indirect(reg, expr->type, reg + 1, expr->loc);
             } else {
-                this->gen_load(reg, expr->sym);
+                this->gen_load(reg, expr->sym, expr->loc);
             }
             break;
 
@@ -1097,8 +1098,8 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 // レジスタ使用: r{reg}=右辺値/現在値，r{reg+1}=アドレス(アドレス計算・右辺の評価にr{reg+2}以降も使う)
                 // 作業用のr{reg+2}が上限(r15)を超えないことを確認する
                 if (reg + 2 >= MAX_REG) {
-                    throw std::string("compiler error: expression too complex (out of registers) at line ")
-                          + std::to_string(expr->line);
+                    throw std::string("compiler error: expression too complex (out of registers) at ")
+                          + loc_to_string(expr->loc);
                 }
                 if (expr->sval == "=") {
                     // 単純代入: 右辺を先にr{reg}へ評価してから，アドレスをr{reg+1}へ求める(r{reg}を保護)
@@ -1116,7 +1117,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // アドレスをr{reg}へ複製する (読み込みは結果を読み込み元と同じレジスタに上書きするため)
                     this->asm_file_ << "    mov fh r" << (reg + 1) << " r" << reg << "\n";  // r{reg} = アドレス
                     // 代入先の現在値をr{reg}へ読み込む
-                    this->gen_load_indirect(reg, lhs->type, reg + 2);                       // r{reg} = 現在値
+                    this->gen_load_indirect(reg, lhs->type, reg + 2, lhs->loc);             // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
                     // 右辺をr{reg+2}に評価する
                     this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
@@ -1133,7 +1134,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 } else {
                     // 複合代入 x op= e : 左辺の現在値をr{reg}・右辺をr{reg+1}に評価し，opで畳む
                     // 左辺の現在値をr{reg}に読み込む
-                    this->gen_load(reg, lhs->sym);
+                    this->gen_load(reg, lhs->sym, lhs->loc);
                     // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の現在値を保護する)
                     this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
@@ -1151,12 +1152,12 @@ void Generator::gen_expr(node_t *expr, int reg) {
             // 要素の実アドレスをr{reg}に求める
             this->gen_array_elem_addr(expr, reg);
             // そのアドレスから要素の値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
-            this->gen_load_indirect(reg, expr->type, reg + 1);
+            this->gen_load_indirect(reg, expr->type, reg + 1, expr->loc);
             break;
 
         default:
-            throw std::string("compiler error: unsupported expression in code generation at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported expression in code generation at ")
+                  + loc_to_string(expr->loc);
     }
 }
 
@@ -1177,8 +1178,8 @@ void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
 // レジスタ使用: r{reg}=インデックス→アドレス, r{reg+1}=定数(要素間隔・ベース，作業用)
 void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
     if (reg + 1 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(member_access->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(member_access->loc);
     }
     const symbol_t *arr_sym = member_access->sym;          // 配列全体のシンボル(先頭番地・構造体名)
     node_t *array_access = member_access->children[0];     // arr[i] (children[0]=インデックス式)
@@ -1218,8 +1219,8 @@ void Generator::gen_member_array_base(node_t *expr, int addr_reg, const std::vec
 void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs) {
     // 作業用のr{reg+2}が上限(r15)を超えないことを確認する
     if (reg + 2 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers) at line ")
-              + std::to_string(expr->line);
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
     }
 
     // 要素型(意味解析が配列のbase型を注釈済み)ごとの要素サイズ(2^shift バイト)を決定する
@@ -1229,8 +1230,8 @@ void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int
         case BASE_SHORT: shift = 1; break;
         case BASE_INT:   shift = 2; break;
         default:
-            throw std::string("compiler error: unsupported array element type at line ")
-                  + std::to_string(expr->line);
+            throw std::string("compiler error: unsupported array element type at ")
+                  + loc_to_string(expr->loc);
     }
 
     // r{reg} = index (r{reg+1}はまだ未使用)

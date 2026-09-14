@@ -1,7 +1,6 @@
 #include <fstream>
 #include <iostream>
 #include <map>
-#include <sstream>
 
 #include "pn2asm.hpp"
 #include "lexer.hpp"
@@ -40,27 +39,11 @@ int compile_pn_to_asm(int argc, char **argv) {
         return 1;
     }
 
-    // Pynesisソースファイルをまとめて読み込む
-    std::ifstream pn_file(args.pn_file_name);
-    if (!pn_file) {
-        std::cout << "cannot open pn file: " << args.pn_file_name << std::endl;
-        return 1;
-    }
-    std::ostringstream ss;
-    ss << pn_file.rdbuf();
-    const std::string src = ss.str();
-    pn_file.close();
-
-    // 出力アセンブリファイルを開く
-    std::ofstream asm_file(args.pt_file_name);
-    if (!asm_file) {
-        std::cout << "cannot open asm file: " << args.pt_file_name << std::endl;
-        return 1;
-    }
+    std::ofstream asm_file;                     // 出力アセンブリファイル
 
     try {
-        // 字句解析を行い，トークン列を生成する (Lexer)
-        lex(src, tokens);
+        // Pynesisソースファイル(取り込むファイルを含む)を読み込んで字句解析を行い，トークン列を生成する (Lexer)
+        lex(args.pn_file_name, tokens);
 
         // 構文解析を行い，ASTを生成する (Parser)
         Parser parser(tokens);
@@ -69,6 +52,13 @@ int compile_pn_to_asm(int argc, char **argv) {
         // 意味解析を行い，シンボルテーブルを構築する (Semantic Analyzer)
         Analyzer analyzer(ast);
         symbols = analyzer();
+
+        // 出力アセンブリファイルを開く
+        // (字句解析〜意味解析でエラーになった場合に空のファイルを残さないよう，コード生成の直前に開く)
+        asm_file.open(args.pt_file_name);
+        if (!asm_file) {
+            throw std::string("compiler error: cannot open file '") + args.pt_file_name + "'";
+        }
 
         // アセンブリコードを生成する (Code Generator)
         Generator generator(ast, symbols, analyzer.func_params(), analyzer.struct_defs(),

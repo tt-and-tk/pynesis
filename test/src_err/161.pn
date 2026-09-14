@@ -1,0 +1,4 @@
+// 字句解析エラー: 取り込むファイルのパスは<>で囲めない (異常系)
+#include <include/161_lib.pn>
+void main(void) {
+}

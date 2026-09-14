@@ -1,0 +1,4 @@
+// 字句解析エラー: #includeの後ろの同じ行に，ブロックコメントを挟んでも宣言は書けない (異常系)
+#include "include/182_lib.pn" /* コメント */ int g;
+void main(void) {
+}

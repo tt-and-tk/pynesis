@@ -1,0 +1,4 @@
+// 字句解析エラー: #pragma onceの後ろの同じ行に，ブロックコメントを挟んでも宣言は書けない (異常系)
+#pragma once /* コメント */ int g;
+void main(void) {
+}

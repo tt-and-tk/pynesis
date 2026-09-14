@@ -1,0 +1,20 @@
+.global second, first, main
+
+main:
+    call first
+    mov fh r30 r0
+    wm fh r0 r0 0
+    ret
+
+second:
+    mov fh r0 r0 7
+    mov fh r0 r30
+    ret
+    ret
+
+first:
+    call second
+    mov fh r30 r0
+    mov fh r0 r30
+    ret
+    ret
