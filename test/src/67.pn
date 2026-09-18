@@ -1,0 +1,13 @@
+// 符号なし型のconst変数は，0から型の最大値までの値を受理する
+const unsigned char UC_MAX = 255;
+const unsigned short US_MAX = 65535;
+const unsigned int UI_MAX = 0xFFFFFFFF;
+const unsigned int UI_MIN = 0;
+unsigned int g;
+
+void main(void) {
+    g = UC_MAX;
+    g = US_MAX;
+    g = UI_MAX;
+    g = UI_MIN;
+}
