@@ -40,11 +40,16 @@ bool is_promoted_unsigned(const type_t &type) {
     return type.base == BASE_INT && !type.is_signed && !type.is_array;
 }
 
+// 二項演算を符号なしで行うかどうかを，各オペランドの昇格後の型がunsigned intかどうかから返す
+static bool is_unsigned_operation(const std::string &op, bool is_lhs_unsigned, bool is_rhs_unsigned) {
+    // シフトは左オペランドの型に従う (シフト量の型は結果に影響しない)
+    if (op == "<<" || op == ">>") return is_lhs_unsigned;
+    return is_lhs_unsigned || is_rhs_unsigned;
+}
+
 // 二項演算を符号なしで行うかどうかを返す
 bool is_unsigned_operation(const std::string &op, const type_t &lhs, const type_t &rhs) {
-    // シフトは左オペランドの型に従う (シフト量の型は結果に影響しない)
-    if (op == "<<" || op == ">>") return is_promoted_unsigned(lhs);
-    return is_promoted_unsigned(lhs) || is_promoted_unsigned(rhs);
+    return is_unsigned_operation(op, is_promoted_unsigned(lhs), is_promoted_unsigned(rhs));
 }
 
 // コンストラクタ: ASTを受け取る
@@ -518,8 +523,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
 // 符号なしの演算では，両辺を符号なし32ビットの値として解釈し直してから計算する
 const_value_t Analyzer::eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r) {
     const std::string &op = expr->sval;   // 演算子
-    // 符号なしで演算するか
-    const bool is_unsigned = is_unsigned_operation(op, type_t{BASE_INT, !l.is_unsigned}, type_t{BASE_INT, !r.is_unsigned});
+    const bool is_unsigned = is_unsigned_operation(op, l.is_unsigned, r.is_unsigned);   // 符号なしで演算するか
     const long long lv = wrap32(l.value, is_unsigned);   // 演算の符号で解釈した左辺
     const long long rv = wrap32(r.value, is_unsigned);   // 演算の符号で解釈した右辺
 
