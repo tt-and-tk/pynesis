@@ -419,9 +419,9 @@ void Analyzer::collect_globals() {
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
 // (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
 const_value_t Analyzer::eval_const_expr(const node_t *expr) {
-    // 整数リテラル: 0x80000000以上の値，または符号なしの型が注釈済みの場合は符号なし
+    // 整数リテラル: intで表せない0x80000000以上の値は符号なし
     if (expr->kind == ND_INT_LIT) {
-        return {expr->ival, !expr->type.is_signed || expr->ival > 0x7FFFFFFFLL};
+        return {expr->ival, expr->ival > 0x7FFFFFFFLL};
     }
     // 文字リテラルはintへ昇格した値
     if (expr->kind == ND_CHAR_LIT) {
