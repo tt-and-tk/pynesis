@@ -1,0 +1,12 @@
+// 符号なしの大小比較の命令: 偽で分岐する側の<はegtu，値としての<=・>=はeltu・egtuになる
+unsigned int n = 5;
+int s = -1;
+int r;
+
+void main(void) {
+    if (n < 1) {       // 否定: egtu
+        r = 1;
+    }
+    r = n <= s;        // eltu
+    r = n >= s;        // egtu
+}
