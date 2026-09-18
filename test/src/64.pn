@@ -1,0 +1,11 @@
+// unsigned intを返す関数の戻り値は，演算のオペランドとしてunsigned intで扱う
+int r;
+
+unsigned int big(void) {
+    return 0xFFFFFFFE;
+}
+
+void main(void) {
+    r = big() / 2;     // divu
+    r = big() > 1;     // gtu
+}
