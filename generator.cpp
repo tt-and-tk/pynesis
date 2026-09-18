@@ -633,6 +633,7 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     this->gen_load(reg, var->sym, var->loc);                              // r{reg} = x
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 1\n";         // r{reg+1} = 1
 
+    // 加減算は符号によって命令が変わらないため，符号なしかどうかは常に偽として渡す
     if (is_prefix) {
         // 前置 ++x/--x : r{reg}を増減して書き戻す (新値がそのまま式の値として残る)
         this->gen_binop_instr(op, false, reg, reg, reg + 1);                // r{reg} = x ± 1
