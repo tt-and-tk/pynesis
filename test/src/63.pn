@@ -1,0 +1,9 @@
+// 単項演算の結果の型: ~はオペランドの昇格後の型(unsigned int)を保ち，!は0/1のintになる
+unsigned int u = 1;
+int s = -1;
+int r;
+
+void main(void) {
+    r = ~u > 1;        // gtu
+    r = !u < s;        // lt
+}
