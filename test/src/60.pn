@@ -1,0 +1,8 @@
+// 左辺がunsigned intの右シフトの複合代入は，スカラー変数・配列要素とも論理シフト(srl)になる
+unsigned int u = 0x80000000;
+unsigned int arr[2];
+
+void main(void) {
+    u >>= 4;
+    arr[1] >>= 4;
+}
