@@ -1,0 +1,10 @@
+// 代入式・後置++・複合代入式の値は，左辺・オペランドの型(unsigned int)のまま演算のオペランドになる
+unsigned int u;
+int s = -1;
+int r;
+
+void main(void) {
+    r = (u = 5) < s;     // ltu
+    r = u++ < s;         // ltu
+    r = (u += 1) / 2;    // divu
+}
