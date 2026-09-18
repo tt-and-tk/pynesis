@@ -1,0 +1,10 @@
+// sizeofの結果はintのため，intとの比較は符号付き，unsigned intとの比較は符号なしになる
+char buf[4];
+int s = -1;
+unsigned int u = 1;
+int r;
+
+void main(void) {
+    r = s < sizeof(buf);    // lt
+    r = u < sizeof(buf);    // ltu
+}
