@@ -114,14 +114,16 @@ type_t Parser::parse_type(bool allow_void) {
         this->get_token();
     }
 
-    // signed/unsigned修飾子 (デフォルトはsigned)
-    // unsignedは予約語として受理するが当面未対応 (将来対応予定．is_signed等の符号情報の機構は残してある)
-    bool is_signed = true;
-    if (this->token_kind_is(TK_SIGNED)) {
-        this->get_token();
-    } else if (this->token_kind_is(TK_UNSIGNED)) {
-        throw std::string("compiler error: 'unsigned' is not supported yet at ")
-              + loc_to_string(this->peek_token().loc);
+    // signed/unsigned修飾子 (省略時はsigned．整数型キーワードの直前にのみ書ける)
+    const bool has_sign = this->token_kind_is(TK_SIGNED) || this->token_kind_is(TK_UNSIGNED);   // 符号修飾子が付いているか
+    const bool is_signed = !this->token_kind_is(TK_UNSIGNED);                                    // 符号なしでないか
+    // 符号修飾子が付いている場合は読み進め，直後が整数型キーワードであることを確認する
+    if (has_sign) {
+        const token_t sign = this->get_token();   // 符号修飾子
+        if (!this->token_kind_is(TK_INT) && !this->token_kind_is(TK_CHAR) && !this->token_kind_is(TK_SHORT)) {
+            throw std::string("compiler error: expected 'int', 'char' or 'short' after '") + sign.value
+                  + "' at " + loc_to_string(sign.loc);
+        }
     }
 
     type_t type;
@@ -579,17 +581,18 @@ node_t *Parser::parse_strcopy() {
 
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
-// 型名の場合はnode->typeに型を格納し(children空)，変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
+// 型名は整数型(符号修飾子付きを含む)のみ．型名の場合はnode->typeに型を格納し(children空)，
+// 変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
 node_t *Parser::parse_sizeof() {
     node_t *node = this->new_node(ND_SIZEOF);
     this->get_token(TK_SIZEOF);                      // sizeof
     this->get_token(TK_LPAREN);                      // (
 
     const token_kind_t kind = this->peek_token().kind;
-    if      (kind == TK_INT)   { node->type = {BASE_INT, true};   this->get_token(); }
-    else if (kind == TK_CHAR)  { node->type = {BASE_CHAR, true};  this->get_token(); }
-    else if (kind == TK_SHORT) { node->type = {BASE_SHORT, true}; this->get_token(); }
-    else {
+    // 整数型キーワード(符号修飾子付きを含む)なら型名として読む
+    if (kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_SIGNED || kind == TK_UNSIGNED) {
+        node->type = this->parse_type(false);
+    } else {
         // 型名でなければ変数名として解析する (意味解析で型を確定する)
         node_t *var = this->new_node(ND_VAR);
         var->sval = this->get_token(TK_IDENT).value;
@@ -1045,16 +1048,18 @@ node_t *Parser::parse_primary() {
 }
 
 // 整数リテラルのトークンを数値に変換する (0x/0X接頭辞があれば16進数，無ければ10進数)
+// 16進は最上位ビットが立つ値(0x80000000以上)も書け，その型は意味解析でunsigned intになる
 // long long(64bit)の範囲を超えるリテラルはstd::stollがstd::out_of_rangeを投げるため，ここで捕捉してコンパイルエラーに変換する
 long long Parser::parse_int_literal(const token_t &token) {
     const std::string &text = token.value;   // リテラルの文字列
+    // リテラルは32ビットに収まる値に限る．10進はint型の範囲(0〜2147483647)，16進は0xFFFFFFFFまで
+    // (単項マイナスは別トークンとして扱われここでは付与されていないため，C言語同様リテラル自体の絶対値だけで判定する．
+    //  そのため-2147483648(intの最小値)は10進では表現できない)
+    const bool is_hex = text.size() >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X');   // 16進表記か
+    const long long max_value = is_hex ? 0xFFFFFFFFLL : 2147483647LL;                                 // 書ける最大値
     long long value;
     try {
-        if (text.size() >= 2 && text[0] == '0' && (text[1] == 'x' || text[1] == 'X')) {
-            value = std::stoll(text.substr(2), nullptr, 16);
-        } else {
-            value = std::stoll(text, nullptr, 10);
-        }
+        value = std::stoll(is_hex ? text.substr(2) : text, nullptr, is_hex ? 16 : 10);
     } catch (const std::out_of_range &) {
         throw std::string("compiler error: integer literal out of range: ") + text
               + " at " + loc_to_string(token.loc);
@@ -1062,10 +1067,7 @@ long long Parser::parse_int_literal(const token_t &token) {
         throw std::string("compiler error: invalid integer literal: ") + text
               + " at " + loc_to_string(token.loc);
     }
-    // intは32ビットなので，リテラル自体はint型の範囲(0〜2147483647)に収まっているか検査する
-    // (単項マイナスは別トークンとして扱われここでは付与されていないため，C言語同様リテラル自体の絶対値だけで判定する．
-    //  そのため-2147483648(intの最小値)はこの言語では表現できない)
-    if (value < 0 || value > 2147483647LL) {
+    if (value < 0 || value > max_value) {
         throw std::string("compiler error: integer literal out of range: ") + text
               + " at " + loc_to_string(token.loc);
     }

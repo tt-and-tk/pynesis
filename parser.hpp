@@ -12,7 +12,7 @@ typedef enum {
 // 型情報
 typedef struct {
     base_type_t base = BASE_INT;  // 基本型
-    bool is_signed = true;        // signed/unsigned (unsignedは未対応のため常にtrue)
+    bool is_signed = true;        // signed(true)/unsigned(false)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
     // 構造体名 (base==BASE_STRUCTのときのみ有効)

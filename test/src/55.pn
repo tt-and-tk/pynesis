@@ -1,0 +1,21 @@
+// 右シフト・除算・剰余・大小比較の命令は，オペランドを整数昇格した型が符号なし(unsigned int)かどうかで選ぶ
+unsigned int u = 0x80000000;
+int s = -8;
+unsigned char uc = 255;
+int r;
+unsigned int arr[2];
+
+void main(void) {
+    unsigned int lu = 10;
+    r = u >> 4;          // unsigned intの右シフト: srl
+    r = uc >> 1;         // unsigned charはintへ昇格するため: sra
+    r = s >> lu;         // シフトは左オペランドの型で決まる: sra
+    r = u / lu;          // divu
+    r = s % lu;          // 片方がunsigned intなら符号なし: divu(剰余)
+    lu /= 3;             // 複合代入: divu
+    s >>= lu;            // 左辺がint: sra
+    s /= lu;             // 右辺だけがunsigned intでも符号なし: divu
+    arr[1] %= 7;         // 配列要素への複合代入: divu(剰余)
+    r = u < s;           // 値としての比較: ltu
+    r = uc < -1;         // unsigned charとintの比較はint同士: lt
+}

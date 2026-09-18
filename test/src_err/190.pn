@@ -1,0 +1,4 @@
+// 意味解析エラー: unsigned int型のconst変数に負の値は書けない (異常系)
+const unsigned int ALL = -1;
+void main(void) {
+}

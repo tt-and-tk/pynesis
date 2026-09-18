@@ -1,0 +1,4 @@
+// 構文解析エラー: constは符号修飾子より前にのみ書ける (異常系)
+void main(void) {
+    unsigned const int x = 1;
+}

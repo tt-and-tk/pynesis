@@ -48,11 +48,12 @@ private:
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
     // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
     void gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs);
-    void gen_binop_instr(const std::string &op, int dst, int lhs, int rhs);  // r{dst}=r{lhs} op r{rhs}を出力
+    // r{dst}=r{lhs} op r{rhs}を出力 (is_unsignedは符号なしで演算するか)
+    void gen_binop_instr(const std::string &op, bool is_unsigned, int dst, int lhs, int rhs);
     // 変数をr{reg}へ読み込む (レジスタ直結ならmov・メモリならrm．エラーは読み出す式の位置で報告する)
     void gen_load(int reg, const symbol_t *sym, const loc_t &loc);
     void gen_store(int reg, const symbol_t *sym);  // r{reg}を変数へ書き込む (レジスタ直結ならmov・メモリならwm)
-    // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (char/shortロード後に使用．r{work_reg}を作業用に使う)
+    // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (符号付きchar/shortロード後に使用．r{work_reg}を作業用に使う)
     // 作業用レジスタが足りないエラーは，読み出す式の位置で報告する
     void gen_sign_extend(int reg, int bits, int work_reg, const loc_t &loc);
     // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
@@ -70,7 +71,7 @@ private:
     void gen_member_array_base(node_t *expr, int addr_reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
     // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う．
-    // char/shortの符号拡張ではr{work_reg}を作業用に使い，エラーは読み出す式の位置で報告する
+    // 符号付きchar/shortの符号拡張ではr{work_reg}を作業用に使い，エラーは読み出す式の位置で報告する
     void gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc);
     // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
     void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);

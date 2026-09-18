@@ -1,0 +1,74 @@
+.global main
+
+main:
+    mov fh r0 r0 80000000h
+    wm fh r0 r0 0
+    mov fh r0 r0 -8
+    wm fh r0 r0 4
+    mov fh r0 r0 255
+    wm 1h r0 r0 8
+    mov fh r0 r0 10
+    wm fh r0 r0 24
+    rm fh r0 r0 0
+    mov fh r0 r1 4
+    srl r0 r1 r0
+    wm fh r0 r0 12
+    rm 1h r0 r0 8
+    mov fh r0 r1 1
+    sra r0 r1 r0
+    wm fh r0 r0 12
+    rm fh r0 r0 4
+    rm fh r0 r1 24
+    sra r0 r1 r0
+    wm fh r0 r0 12
+    rm fh r0 r0 0
+    rm fh r0 r1 24
+    divu r0 r1 r0
+    wm fh r0 r0 12
+    rm fh r0 r0 4
+    rm fh r0 r1 24
+    divu r0 r1 r1 0
+    wm fh r0 r0 12
+    rm fh r0 r0 24
+    mov fh r0 r1 3
+    divu r0 r1 r0
+    wm fh r0 r0 24
+    rm fh r0 r0 4
+    rm fh r0 r1 24
+    sra r0 r1 r0
+    wm fh r0 r0 4
+    rm fh r0 r0 4
+    rm fh r0 r1 24
+    divu r0 r1 r0
+    wm fh r0 r0 4
+    mov fh r0 r1 1
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 16
+    add r1 r2 r1
+    mov fh r1 r0
+    rm fh r0 r0
+    mov fh r0 r2 7
+    divu r0 r2 r2 0
+    wm fh r1 r0
+    rm fh r0 r0 0
+    rm fh r0 r1 4
+    ltu r0 r1 .L0
+    mov fh r0 r0 0
+    jmp .L1
+.L0:
+    mov fh r0 r0 1
+.L1:
+    wm fh r0 r0 12
+    rm 1h r0 r0 8
+    mov fh r0 r1 1
+    mov fh r0 r2 0
+    sub r2 r1 r1
+    lt r0 r1 .L2
+    mov fh r0 r0 0
+    jmp .L3
+.L2:
+    mov fh r0 r0 1
+.L3:
+    wm fh r0 r0 12
+    ret

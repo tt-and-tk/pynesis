@@ -1,0 +1,7 @@
+// 意味解析エラー: 配列パラメータへ符号の異なる要素型の配列(unsigned char → char)は渡せない (異常系)
+unsigned char buf[4];
+void f(char s[]) {
+}
+void main(void) {
+    f(buf);
+}
