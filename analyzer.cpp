@@ -35,6 +35,11 @@ static long long wrap32(long long value, bool is_unsigned) {
     return bits;
 }
 
+// 整数リテラルの値がunsigned int型になるかを返す (intで表せない0x80000000以上の値は16進でのみ書け，unsigned intになる)
+static bool is_unsigned_literal(long long value) {
+    return value > 0x7FFFFFFFLL;
+}
+
 // 整数昇格後の型がunsigned intかどうかを返す
 bool is_promoted_unsigned(const type_t &type) {
     return type.base == BASE_INT && !type.is_signed && !type.is_array;
@@ -424,9 +429,9 @@ void Analyzer::collect_globals() {
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
 // (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
 const_value_t Analyzer::eval_const_expr(const node_t *expr) {
-    // 整数リテラル: intで表せない0x80000000以上の値は符号なし
+    // 整数リテラル
     if (expr->kind == ND_INT_LIT) {
-        return {expr->ival, expr->ival > 0x7FFFFFFFLL};
+        return {expr->ival, is_unsigned_literal(expr->ival)};
     }
     // 文字リテラルはintへ昇格した値
     if (expr->kind == ND_CHAR_LIT) {
@@ -899,8 +904,8 @@ void Analyzer::analyze_expr(node_t *expr) {
     switch (expr->kind) {
         // リテラル: 検査は不要だが，後段のコード生成のため型を注釈する
         case ND_INT_LIT:
-            // 整数リテラルはint．intで表せない0x80000000以上の値(16進でのみ書ける)はunsigned int
-            expr->type = type_t{BASE_INT, expr->ival <= 0x7FFFFFFFLL};
+            // 整数リテラルはintまたはunsigned int
+            expr->type = type_t{BASE_INT, !is_unsigned_literal(expr->ival)};
             return;
         case ND_CHAR_LIT:
             expr->type = type_t{BASE_CHAR, true};   // 文字リテラルはchar(符号付き)
