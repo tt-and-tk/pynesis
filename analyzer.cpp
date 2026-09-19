@@ -312,7 +312,7 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
             throw std::string("compiler error: unsupported const variable type at ")
                   + loc_to_string(decl->loc);
     }
-    // 符号なし型の場合は，0から同じビット幅で表せる最大値までの範囲にする
+    // 符号なし型の場合は，0〜(2^ビット幅-1)の範囲にする (符号付きの最大値の2倍+1が2^ビット幅-1になる)
     if (!decl->type.is_signed) {
         max_value = max_value * 2 + 1;
         min_value = 0;
