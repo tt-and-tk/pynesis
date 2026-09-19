@@ -48,8 +48,8 @@ private:
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
     // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
     void gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs);
-    // r{dst}=r{lhs} op r{rhs}を出力 (is_unsignedは符号なしで演算するか)
-    void gen_binop_instr(const std::string &op, bool is_unsigned, int dst, int lhs, int rhs);
+    // r{dst}=r{lhs} op r{rhs}を出力 (is_signedは符号付きで演算するか)
+    void gen_binop_instr(const std::string &op, bool is_signed, int dst, int lhs, int rhs);
     // 変数をr{reg}へ読み込む (レジスタ直結ならmov・メモリならrm．エラーは読み出す式の位置で報告する)
     void gen_load(int reg, const symbol_t *sym, const loc_t &loc);
     void gen_store(int reg, const symbol_t *sym);  // r{reg}を変数へ書き込む (レジスタ直結ならmov・メモリならwm)

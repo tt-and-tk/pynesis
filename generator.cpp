@@ -14,17 +14,17 @@ static std::string imm_literal(long long value) {
     return ss.str();
 }
 
-// 二項演算子の文字列を対応するアセンブリ命令に変換する (is_unsignedは符号なしで演算するか)
-static std::string binop_mnemonic(const std::string &op, bool is_unsigned) {
+// 二項演算子の文字列を対応するアセンブリ命令に変換する (is_signedは符号付きで演算するか)
+static std::string binop_mnemonic(const std::string &op, bool is_signed) {
     if (op == "+") return "add";
     if (op == "-") return "sub";
     if (op == "*") return "mul";
     if (op == "&") return "and";
     if (op == "|") return "or";
     if (op == "^") return "xor";
-    if (op == "/") return is_unsigned ? "divu" : "div";   // 商 (余りは捨てる)
+    if (op == "/") return is_signed ? "div" : "divu";     // 商 (余りは捨てる)
     if (op == "<<") return "sll";                          // 左シフト (空いたビットは符号によらず0で埋まる)
-    if (op == ">>") return is_unsigned ? "srl" : "sra";    // 右シフト: 符号なしは論理シフト，符号付きは算術シフト
+    if (op == ">>") return is_signed ? "sra" : "srl";      // 右シフト: 符号付きは算術シフト，符号なしは論理シフト
     // % は div/divu の4引数形式で別途生成する．比較・論理演算子は分岐の段階で対応する
     throw std::string("compiler error: unsupported binary operator '") + op + "'";
 }
@@ -34,10 +34,10 @@ static bool is_comparison(const std::string &op) {
     return op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=";
 }
 
-// 比較演算子の「否定」に対応するF系命令を返す (偽のとき分岐させるのに使う．is_unsignedは符号なしで比較するか)
+// 比較演算子の「否定」に対応するF系命令を返す (偽のとき分岐させるのに使う．is_signedは符号付きで比較するか)
 // 大小比較の符号なし版は末尾にuを付けた命令になる (一致判定は符号によらないため同じ命令)
-static std::string negated_branch(const std::string &op, bool is_unsigned) {
-    const std::string u = is_unsigned ? "u" : "";   // 符号なしの大小比較に付ける接尾辞
+static std::string negated_branch(const std::string &op, bool is_signed) {
+    const std::string u = is_signed ? "" : "u";     // 符号なしの大小比較に付ける接尾辞
     if (op == "==") return "ne";        // ==の否定は!=
     if (op == "!=") return "eq";        // !=の否定は==
     if (op == "<")  return "egt" + u;   // <の否定は>=
@@ -47,9 +47,9 @@ static std::string negated_branch(const std::string &op, bool is_unsigned) {
     throw std::string("compiler error: not a comparison operator '") + op + "'";
 }
 
-// 比較演算子に「そのまま」対応するF系命令を返す (真のとき分岐させるのに使う．is_unsignedは符号なしで比較するか)
-static std::string comparison_branch(const std::string &op, bool is_unsigned) {
-    const std::string u = is_unsigned ? "u" : "";   // 符号なしの大小比較に付ける接尾辞
+// 比較演算子に「そのまま」対応するF系命令を返す (真のとき分岐させるのに使う．is_signedは符号付きで比較するか)
+static std::string comparison_branch(const std::string &op, bool is_signed) {
+    const std::string u = is_signed ? "" : "u";     // 符号なしの大小比較に付ける接尾辞
     if (op == "==") return "eq";
     if (op == "!=") return "ne";
     if (op == "<")  return "lt" + u;
@@ -59,9 +59,9 @@ static std::string comparison_branch(const std::string &op, bool is_unsigned) {
     throw std::string("compiler error: not a comparison operator '") + op + "'";
 }
 
-// 比較・二項演算の式を符号なしで行うかを，両オペランドの型から返す
-static bool is_unsigned_binop(const node_t *expr) {
-    return is_unsigned_operation(expr->sval, expr->children[0]->type, expr->children[1]->type);
+// 比較・二項演算の式を符号付きで行うかを，両オペランドの型から返す
+static bool is_signed_binop(const node_t *expr) {
+    return is_signed_operation(expr->sval, expr->children[0]->type, expr->children[1]->type);
 }
 
 // 命令出力の慣例:
@@ -524,7 +524,7 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
         this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
-        this->asm_file_ << "    " << negated_branch(cond->sval, is_unsigned_binop(cond))
+        this->asm_file_ << "    " << negated_branch(cond->sval, is_signed_binop(cond))
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
     // 一般条件: 値を評価し，0(偽)なら飛ぶ
@@ -547,7 +547,7 @@ void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int r
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
         this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
-        this->asm_file_ << "    " << comparison_branch(cond->sval, is_unsigned_binop(cond))
+        this->asm_file_ << "    " << comparison_branch(cond->sval, is_signed_binop(cond))
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
     // 一般条件: 値を評価し，0でない(真)なら飛ぶ
@@ -566,7 +566,7 @@ void Generator::gen_compare(node_t *expr, int reg) {
     this->gen_expr(expr->children[0], reg);        // 左 → r{reg}
     this->gen_expr_protecting(expr->children[1], reg + 1, {reg});    // 右 → r{reg+1}
     // 比較が真なら .Lt へ
-    this->asm_file_ << "    " << comparison_branch(expr->sval, is_unsigned_binop(expr))
+    this->asm_file_ << "    " << comparison_branch(expr->sval, is_signed_binop(expr))
                     << " r" << reg << " r" << (reg + 1) << " " << t << "\n";
     this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";   // 偽: r{reg} = 0
     this->asm_file_ << "    jmp " << end << "\n";
@@ -633,14 +633,14 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     this->gen_load(reg, var->sym, var->loc);                              // r{reg} = x
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 1\n";         // r{reg+1} = 1
 
-    // 加減算は符号によって命令が変わらないため，符号なしかどうかは常に偽として渡す
+    // 加減算は符号によって命令が変わらないため，符号付きかどうかは常に真として渡す
     if (is_prefix) {
         // 前置 ++x/--x : r{reg}を増減して書き戻す (新値がそのまま式の値として残る)
-        this->gen_binop_instr(op, false, reg, reg, reg + 1);                // r{reg} = x ± 1
+        this->gen_binop_instr(op, true, reg, reg, reg + 1);                 // r{reg} = x ± 1
         this->gen_store(reg, var->sym);                                     // x = r{reg}
     } else {
         // 後置 x++/x-- : 旧値をr{reg}に残したまま，新値をr{reg+1}で計算して書き戻す
-        this->gen_binop_instr(op, false, reg + 1, reg, reg + 1);            // r{reg+1} = x ± 1
+        this->gen_binop_instr(op, true, reg + 1, reg, reg + 1);             // r{reg+1} = x ± 1
         this->gen_store(reg + 1, var->sym);                                 // x = r{reg+1}
     }
 }
@@ -825,17 +825,17 @@ void Generator::gen_switch(node_t *stmt) {
     this->break_labels_.pop_back();
 }
 
-// r{dst} = r{lhs} op r{rhs} となる演算命令を出力する (is_unsignedは符号なしで演算するか)
+// r{dst} = r{lhs} op r{rhs} となる演算命令を出力する (is_signedは符号付きで演算するか)
 // 二項演算と複合代入で共用する (剰余だけはdiv/divuの4引数形式)
-void Generator::gen_binop_instr(const std::string &op, bool is_unsigned, int dst, int lhs, int rhs) {
+void Generator::gen_binop_instr(const std::string &op, bool is_signed, int dst, int lhs, int rhs) {
     // 剰余: div/divuは商をrdへ・余りをimmが指すレジスタ番地へ格納する
     // 商をr{rhs}に捨て，余りをr{dst}(番地dst)へ得る
     if (op == "%") {
-        this->asm_file_ << "    " << (is_unsigned ? "divu" : "div") << " r" << lhs << " r" << rhs
+        this->asm_file_ << "    " << (is_signed ? "div" : "divu") << " r" << lhs << " r" << rhs
                         << " r" << rhs << " " << dst << "\n";
     } else {
         // それ以外は単一命令
-        const std::string mn = binop_mnemonic(op, is_unsigned);   // 演算子→命令
+        const std::string mn = binop_mnemonic(op, is_signed);     // 演算子→命令
         this->asm_file_ << "    " << mn
                         << " r" << lhs << " r" << rhs << " r" << dst << "\n";
     }
@@ -1038,7 +1038,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の左辺の値を保護する)
                 this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                 // 左辺と右辺を演算子で畳み，結果をr{reg}に置く
-                this->gen_binop_instr(expr->sval, is_unsigned_binop(expr), reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
+                this->gen_binop_instr(expr->sval, is_signed_binop(expr), reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
             }
             break;
 
@@ -1141,11 +1141,11 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // 代入先の現在値をr{reg}へ読み込む
                     this->gen_load_indirect(reg, lhs->type, reg + 2, lhs->loc);             // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
-                    const bool is_unsigned = is_unsigned_operation(op, lhs->type, expr->children[1]->type);   // 符号なしで演算するか
+                    const bool is_signed = is_signed_operation(op, lhs->type, expr->children[1]->type);   // 符号付きで演算するか
                     // 右辺をr{reg+2}に評価する
                     this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
-                    this->gen_binop_instr(op, is_unsigned, reg, reg, reg + 2);
+                    this->gen_binop_instr(op, is_signed, reg, reg, reg + 2);
                 }
                 // r{reg}の値を，r{reg+1}のアドレスへ型に応じたマスクで書き込む (代入式の値もr{reg}に残る)
                 this->gen_store_indirect(reg + 1, reg, lhs->type);
@@ -1161,9 +1161,9 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の現在値を保護する)
                     this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
-                    const bool is_unsigned = is_unsigned_operation(op, lhs->type, expr->children[1]->type);   // 符号なしで演算するか
+                    const bool is_signed = is_signed_operation(op, lhs->type, expr->children[1]->type);   // 符号付きで演算するか
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
-                    this->gen_binop_instr(op, is_unsigned, reg, reg, reg + 1);
+                    this->gen_binop_instr(op, is_signed, reg, reg, reg + 1);
                 }
                 // 変数へ書き込む (代入式の値もr{reg}に残る)
                 this->gen_store(reg, lhs->sym);

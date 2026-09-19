@@ -16,17 +16,17 @@ const int MAX_INSTRUCTION_COUNT = 4096;
 // ハードウェア制約: 汎用レジスタの本数 (r0〜r15の16本)
 const int MAX_REG = 16;
 
-// 整数昇格後の型がunsigned intかどうかを返す
-// (char/shortは符号の有無によらずintへ昇格するため，符号なしのまま演算されるのはunsigned intのみ)
-bool is_promoted_unsigned(const type_t &type);
-// 二項演算を符号なしで行うかどうかを返す
-// (シフトは左オペランドの型だけで決まり，それ以外はどちらかのオペランドが昇格後unsigned intなら符号なし)
-bool is_unsigned_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
+// 整数昇格後の型が符号付き(int)かどうかを返す
+// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのみ)
+bool is_promoted_signed(const type_t &type);
+// 二項演算を符号付きで行うかどうかを返す
+// (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
+bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
 
 // 定数式の値
 struct const_value_t {
     long long value;    // 値 (符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に折り返し済み)
-    bool is_unsigned;   // 昇格後の型がunsigned intか
+    bool is_signed;     // 昇格後の型が符号付き(int)か (falseならunsigned int)
 };
 
 // 変数の置き場所の種別
