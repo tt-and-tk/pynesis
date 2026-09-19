@@ -31,6 +31,7 @@ static const std::vector<symbol_t> g_hw_vars = {
 static long long wrap32(long long value, bool is_signed) {
     const long long bits = value & 0xFFFFFFFFLL;   // 下位32ビット
     // 符号付きで最上位ビットが立っている場合は負の値として解釈する
+    // (2の補数では，ビット列を符号なしで読んだ値から2^32を引いた値になる．0xFFFFFFFFは-1で，-bitsの-4294967295ではない)
     if (is_signed && bits > 0x7FFFFFFFLL) return bits - 0x100000000LL;
     return bits;
 }
