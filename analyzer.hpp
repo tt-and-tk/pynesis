@@ -17,7 +17,7 @@ const int MAX_INSTRUCTION_COUNT = 4096;
 const int MAX_REG = 16;
 
 // 整数昇格後の型が符号付き(int)かどうかを返す
-// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのみ)
+// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーのみ)
 bool is_promoted_signed(const type_t &type);
 // 二項演算を符号付きで行うかどうかを返す
 // (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)

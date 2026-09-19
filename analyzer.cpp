@@ -42,6 +42,7 @@ static bool is_signed_literal(long long value) {
 }
 
 // 整数昇格後の型が符号付き(int)かどうかを返す
+// 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
 bool is_promoted_signed(const type_t &type) {
     return type.is_signed || type.base != BASE_INT || type.is_array;
 }
