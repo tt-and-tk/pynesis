@@ -1,0 +1,8 @@
+// 真で分岐する側(do-while)の条件に符号なしの大小比較を直接書くと，そのままの命令(ltu)で分岐する
+unsigned int i = 10;
+
+void main(void) {
+    do {
+        i--;
+    } while (i < 5);     // ltu
+}

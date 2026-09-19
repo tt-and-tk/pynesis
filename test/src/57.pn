@@ -1,0 +1,25 @@
+// 定数式: 実行時と同じく32ビットで折り返し，整数昇格と符号の規則に従って計算する
+const unsigned int BIG = 0xFFFFFFF0;
+const unsigned char UC = 200;
+int wrap = 2147483647 + 1;           // 符号付きの桁あふれは折り返す: -2147483648
+unsigned int half = BIG / 2;         // 符号なしの除算: 2147483640
+int cmp = BIG > -1;                  // unsigned intとintの比較は符号なし(-1は0xFFFFFFFF): 0
+int cmp2 = UC > -1;                  // unsigned charはintへ昇格: 1
+int shr = BIG >> 28;                 // 符号なしの右シフトは論理シフト: 15
+int sar = -16 >> 2;                  // 符号付きの右シフトは算術シフト: -4
+int shl = 1 << 33;                   // シフト量は下位5ビットのみ使う(1 << 1): 2
+int limit = 0x7FFFFFFF;              // intで表せる最大の16進リテラルはint: 2147483647
+int neg = -0x80000000;               // unsigned intの単項マイナスもunsigned int: 0x80000000
+unsigned int size = sizeof(unsigned int) + sizeof(unsigned short) + sizeof(signed char);   // 4+2+1: 7
+unsigned int x;
+
+void main(void) {
+    x = BIG + UC;                    // const変数は宣言した型のまま式に埋め込む
+    switch (x) {
+        case 0xFFFFFFFF:             // 0x80000000以上のcase値
+            x = 1;
+            break;
+        case UC:
+            x = 2;
+    }
+}

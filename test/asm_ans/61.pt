@@ -1,0 +1,32 @@
+.global main
+
+main:
+    mov fh r0 r0 5
+    wm fh r0 r0 0
+    mov fh r0 r0 -1
+    wm fh r0 r0 4
+    rm fh r0 r0 0
+    mov fh r0 r1 1
+    egtu r0 r1 .L0
+    mov fh r0 r0 1
+    wm fh r0 r0 8
+.L0:
+    rm fh r0 r0 0
+    rm fh r0 r1 4
+    eltu r0 r1 .L1
+    mov fh r0 r0 0
+    jmp .L2
+.L1:
+    mov fh r0 r0 1
+.L2:
+    wm fh r0 r0 8
+    rm fh r0 r0 0
+    rm fh r0 r1 4
+    egtu r0 r1 .L3
+    mov fh r0 r0 0
+    jmp .L4
+.L3:
+    mov fh r0 r0 1
+.L4:
+    wm fh r0 r0 8
+    ret

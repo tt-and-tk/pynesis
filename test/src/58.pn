@@ -1,0 +1,14 @@
+// unsigned char配列: 文字列リテラルによる初期化と組み込み関数はchar配列と同様に使え，配列パラメータへは同じ要素型の配列を渡せる
+unsigned char name[] = "ab";
+unsigned char copy[4];
+int g;
+
+unsigned char first(unsigned char s[]) {
+    return s[0];
+}
+
+void main(void) {
+    strcopy(copy, name);
+    print(copy);
+    g = first(name);
+}

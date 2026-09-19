@@ -1,0 +1,9 @@
+// 構造体配列要素の符号なしメンバへの代入・複合代入: 型の幅のマスクで格納し，複合代入の現在値は符号拡張せずに読み出す
+struct Rec { unsigned short w; };
+struct Rec recs[2];
+
+void main(void) {
+    int i = 1;
+    recs[i].w = 65535;
+    recs[i].w += 1;
+}

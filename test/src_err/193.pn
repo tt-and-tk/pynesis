@@ -1,0 +1,4 @@
+// 意味解析エラー: 0xFFFFFFFFはunsigned int型のため，int型のconst変数の範囲外になる (異常系)
+const int X = 0xFFFFFFFF;
+void main(void) {
+}

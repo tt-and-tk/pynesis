@@ -16,6 +16,19 @@ const int MAX_INSTRUCTION_COUNT = 4096;
 // ハードウェア制約: 汎用レジスタの本数 (r0〜r15の16本)
 const int MAX_REG = 16;
 
+// 整数昇格後の型が符号付き(int)かどうかを返す
+// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーのみ)
+bool is_promoted_signed(const type_t &type);
+// 二項演算を符号付きで行うかどうかを返す
+// (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
+bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
+
+// 定数式の値
+struct const_value_t {
+    long long value;    // 値 (符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に折り返し済み)
+    bool is_signed;     // 昇格後の型が符号付き(int)か (falseならunsigned int)
+};
+
 // 変数の置き場所の種別
 typedef enum {
     LOC_REGISTER,   // レジスタ直結 (LED等のハードウェア変数)
@@ -29,7 +42,7 @@ struct symbol_t {
     std::string name;       // 変数名
     type_t type;            // 型情報
     location_t location;    // 置き場所の種別
-    int address;            // レジスタ番地 / メモリ絶対番地 / SPオフセット / 定数値 (locationに応じて解釈)
+    int address;            // レジスタ番地 / メモリ絶対番地 / SPオフセット / 定数値の32ビットのビット列 (locationに応じて解釈)
     bool readable;          // 読み込み可能かどうか (falseの参照はコンパイルエラー)
     bool writable;          // 書き込み可能かどうか (falseへの代入はコンパイルエラー)
 };
@@ -85,8 +98,12 @@ private:
     void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査
     void collect_globals();                                 // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
+    // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
-    long long eval_const_expr(const node_t *expr);
+    const_value_t eval_const_expr(const node_t *expr);
+    // 二項演算の定数式を計算する (両辺は計算済み)
+    static const_value_t eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r);
+    static long long const_symbol_value(const symbol_t *sym);   // const変数のシンボルが保持する値を型に応じて解釈して返す
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
     // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
     int type_size_bytes(const type_t &type) const;

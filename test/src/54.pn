@@ -1,0 +1,26 @@
+// 符号なし型の変数・配列要素・構造体メンバ・パラメータ・戻り値は，読み出し時に符号拡張しない(ゼロ拡張)
+unsigned char gc = 200;
+unsigned short gs;
+unsigned int gi;
+unsigned char buf[4];
+struct Rec { unsigned short w; unsigned char b[2]; } rec;
+struct Rec recs[2];
+
+unsigned char low(unsigned int v) {
+    return v;
+}
+
+void main(void) {
+    unsigned short ls = 60000;
+    int i = 1;
+    gs = gc;                 // グローバル変数
+    gi = ls;                 // ローカル変数
+    buf[i] = gc;
+    gi = buf[i];             // 配列要素
+    buf[i] += 1;             // 配列要素への複合代入(現在値の読み出し)
+    rec.w = ls;
+    gi = rec.w;              // 構造体メンバ
+    gi = rec.b[i];           // 構造体のメンバ配列の要素
+    gi = recs[i].w;          // 構造体配列要素のメンバ
+    gi = low(0xFFFFFFFF);    // パラメータ・戻り値
+}

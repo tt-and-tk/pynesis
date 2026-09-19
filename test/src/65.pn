@@ -1,0 +1,13 @@
+// 定数式の符号なしの演算: 加算・乗算・左シフトの折り返し，単項~，三項演算子の結果の型，ローカルのconst変数
+const unsigned int BIG = 0xFFFFFFF0;
+unsigned int sum = 0xFFFFFFFF + 1;           // 折り返して0
+unsigned int product = 0x80000000 * 2;       // 折り返して0
+unsigned int shifted = BIG << 4;             // 上位へあふれたビットを捨てて0xFFFFFF00
+unsigned int inverted = ~BIG;                // 0xF
+unsigned int picked = 1 ? -1 : 0x80000000;   // 結果はunsigned intのため0xFFFFFFFF
+int compared = (1 ? -1 : 0x80000000) < 0;    // unsigned intと0の比較は符号なし: 0
+
+void main(void) {
+    const unsigned int LOCAL = BIG - 0x10;   // 0xFFFFFFE0
+    sum = LOCAL;
+}

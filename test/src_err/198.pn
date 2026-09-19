@@ -1,0 +1,7 @@
+// 意味解析エラー: 配列パラメータへ要素型の異なる配列(char → int)は渡せない (異常系)
+char buf[4];
+void f(int a[]) {
+}
+void main(void) {
+    f(buf);
+}

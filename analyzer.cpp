@@ -7,7 +7,7 @@
 static const int g_global_base_addr = 0x0000000;
 
 // ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
-// 読み書き可否はハードウェア実装(mypc/alu.svh)に従う．型は全てunsigned int扱い
+// 読み書き可否はハードウェア実装(mypc/alu.svh)に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
@@ -26,6 +26,37 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, true,  true},   // GPIO16～23
     {"GPIO24_27", {BASE_INT, false}, LOC_REGISTER, 0x30, true,  true},   // GPIO24～27
 };
+
+// 値を32ビットで折り返し，符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に正規化する
+static long long wrap32(long long value, bool is_signed) {
+    const long long bits = value & 0xFFFFFFFFLL;   // 下位32ビット
+    // 符号付きで最上位ビットが立っている場合は負の値として解釈する
+    if (is_signed && bits > 0x7FFFFFFFLL) return bits - 0x100000000LL;
+    return bits;
+}
+
+// 整数リテラルの値がint型になるかを返す (intで表せない0x80000000以上の値は16進でのみ書け，unsigned intになる)
+static bool is_signed_literal(long long value) {
+    return value <= 0x7FFFFFFFLL;
+}
+
+// 整数昇格後の型が符号付き(int)かどうかを返す
+// 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
+bool is_promoted_signed(const type_t &type) {
+    return type.is_signed || type.base != BASE_INT || type.is_array;
+}
+
+// 二項演算を符号付きで行うかどうかを，各オペランドの昇格後の型が符号付きかどうかから返す
+static bool is_signed_operation_by_signs(const std::string &op, bool is_lhs_signed, bool is_rhs_signed) {
+    // シフトは左オペランドの型に従う (シフト量の型は結果に影響しない)
+    if (op == "<<" || op == ">>") return is_lhs_signed;
+    return is_lhs_signed && is_rhs_signed;
+}
+
+// 二項演算を符号付きで行うかどうかを返す
+bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs) {
+    return is_signed_operation_by_signs(op, is_promoted_signed(lhs), is_promoted_signed(rhs));
+}
 
 // コンストラクタ: ASTを受け取る
 Analyzer::Analyzer(node_t *root) : root_(root), next_addr_(g_global_base_addr) {}
@@ -147,10 +178,15 @@ void Analyzer::resolve_decl_type(node_t *decl) {
 
     // サイズ明示の配列宣言: int table[10];
     this->begin_resolving(decl);
-    const long long size = this->eval_const_expr(decl->children[0]);   // 配列の要素数
+    const long long size = this->eval_const_expr(decl->children[0]).value;   // 配列の要素数
     // 要素数が正でない場合
     if (size <= 0) {
         throw std::string("compiler error: array size must be positive at ")
+              + loc_to_string(decl->children[0]->loc);
+    }
+    // 要素数がintで表せない場合 (0x80000000以上の符号なしの値)
+    if (size > 0x7FFFFFFFLL) {
+        throw std::string("compiler error: array size is too large at ")
               + loc_to_string(decl->children[0]->loc);
     }
     decl->type.array_size = static_cast<int>(size);
@@ -262,8 +298,8 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
 // const変数の初期化子を定数式として計算し，値を持つシンボルを生成して返す
 // メモリ番地は割り当てず，値は参照箇所(analyze_exprのND_VAR)で整数リテラルとして埋め込まれる
 symbol_t *Analyzer::register_const_var(const node_t *decl) {
-    const node_t *init = decl->children[0];                       // 初期化子の式
-    const long long value = this->eval_const_expr(init);          // 初期化子を計算した値
+    const node_t *init = decl->children[0];                          // 初期化子の式
+    const long long value = this->eval_const_expr(init).value;       // 初期化子を計算した値
 
     // 値を宣言した型の範囲に収める (範囲外の値を黙って切り詰めると，同じ型の通常の変数と値が食い違うため)
     long long min_value;   // 宣言した型で表せる最小値
@@ -276,14 +312,30 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
             throw std::string("compiler error: unsupported const variable type at ")
                   + loc_to_string(decl->loc);
     }
+    // 符号なし型の場合は，0〜(2^ビット幅-1)の範囲にする (符号付きの最大値の2倍+1が2^ビット幅-1になる)
+    if (!decl->type.is_signed) {
+        max_value = max_value * 2 + 1;
+        min_value = 0;
+    }
     // 値が型の範囲外の場合
     if (value < min_value || value > max_value) {
         throw std::string("compiler error: value of const variable '") + decl->sval
               + "' is out of range for its type at " + loc_to_string(init->loc);
     }
 
+    // 値は32ビットのビット列としてintに保持し，読み出す際に型に応じて解釈する(const_symbol_value)
     // 読み取り専用のシンボルにすることで，代入・++/--・scan等の書き込みを既存の検査でエラーにする
-    return new symbol_t{decl->sval, decl->type, LOC_CONST, static_cast<int>(value), true, false};
+    const int bits = static_cast<int>(static_cast<unsigned int>(value));   // 値の32ビットのビット列
+    return new symbol_t{decl->sval, decl->type, LOC_CONST, bits, true, false};
+}
+
+// const変数のシンボルが保持する32ビットのビット列を，型に応じた値として返す
+long long Analyzer::const_symbol_value(const symbol_t *sym) {
+    // unsigned intは最上位ビットが立っていても正の値として解釈する (unsigned char/shortは常にintの正の範囲に収まる)
+    if (!is_promoted_signed(sym->type)) {
+        return static_cast<unsigned int>(sym->address);
+    }
+    return sym->address;
 }
 
 // 2パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
@@ -318,9 +370,11 @@ void Analyzer::collect_globals() {
             } else {
                 // スカラー変数: 初期化子があればコンパイル時に計算し，リテラルに置き換える(定数畳み込み)
                 if (!child->children.empty()) {
+                    const const_value_t init = this->eval_const_expr(child->children[0]);   // 初期化子を計算した値
                     node_t *folded = new node_t;
                     folded->kind = ND_INT_LIT;
-                    folded->ival = Analyzer::eval_const_expr(child->children[0]);
+                    folded->ival = init.value;
+                    folded->type = type_t{BASE_INT, init.is_signed};
                     folded->loc = child->children[0]->loc;
                     // 差し替え前の旧部分木はあえて解放しない
                     // (ASTは全ノードをdeleteせず，プロセス終了時のOS回収に任せる方針のため)
@@ -369,15 +423,20 @@ void Analyzer::collect_globals() {
 
 // コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
 // 呼び出し元は定数式が要求される文脈 (配列サイズ・初期化子・case値等．一覧は../specification/compiler.mdの「定数式」節を参照)
+// 実行時の演算と結果が一致するよう，整数昇格と符号の規則に従い，32ビットで折り返して計算する．
 // 通常の変数の参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
 // const変数の参照は，その値として計算する．
 // また sizeof(変数名) も例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
 // (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
-long long Analyzer::eval_const_expr(const node_t *expr) {
-    // リテラルはそのまま値を返す
-    if (expr->kind == ND_INT_LIT || expr->kind == ND_CHAR_LIT) {
-        return expr->ival;
+const_value_t Analyzer::eval_const_expr(const node_t *expr) {
+    // 整数リテラル
+    if (expr->kind == ND_INT_LIT) {
+        return {expr->ival, is_signed_literal(expr->ival)};
+    }
+    // 文字リテラルはintへ昇格した値
+    if (expr->kind == ND_CHAR_LIT) {
+        return {expr->ival, true};
     }
 
     // const変数の参照は値を返す
@@ -394,16 +453,16 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
         }
         // const変数の場合
         if (sym != nullptr && sym->location == LOC_CONST) {
-            return sym->address;
+            return {Analyzer::const_symbol_value(sym), is_promoted_signed(sym->type)};
         }
         // 通常の変数は値がコンパイル時に確定しないので，「定数式でない」エラーとして扱う
     }
 
-    // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない)
+    // sizeof: 型名，または変数名の型サイズをコンパイル時に返す (式自体は評価しない．結果はint)
     if (expr->kind == ND_SIZEOF) {
         if (expr->children.empty()) {
             // sizeof(型名)
-            return this->type_size_bytes(expr->type);
+            return {this->type_size_bytes(expr->type), true};
         }
         // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
         const node_t *inner = expr->children[0];
@@ -420,7 +479,7 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
                 throw std::string("compiler error: sizeof of an array parameter (size unknown) at ")
                       + loc_to_string(inner->loc);
             }
-            return this->type_size_bytes(sym->type);
+            return {this->type_size_bytes(sym->type), true};
         }
         // まだ登録されていないグローバルの宣言は，宣言ノードから型を確定させてサイズを求める
         const auto it = this->global_var_decls_.find(inner->sval);
@@ -430,58 +489,92 @@ long long Analyzer::eval_const_expr(const node_t *expr) {
                   + "' at " + loc_to_string(inner->loc);
         }
         this->resolve_decl_type(it->second);
-        return this->type_size_bytes(it->second->type);
+        return {this->type_size_bytes(it->second->type), true};
     }
 
     // 前置単項演算
     if (expr->kind == ND_UNOP) {
-        const long long v = this->eval_const_expr(expr->children[0]);
-        if      (expr->sval == "-") return -v;
+        const const_value_t v = this->eval_const_expr(expr->children[0]);
+        // -・+・~ の結果はオペランドの昇格後の型，! の結果はint
+        if      (expr->sval == "-") return {wrap32(-v.value, v.is_signed), v.is_signed};
         else if (expr->sval == "+") return v;
-        else if (expr->sval == "~") return ~v;
-        else if (expr->sval == "!") return (v == 0) ? 1 : 0;
+        else if (expr->sval == "~") return {wrap32(~v.value, v.is_signed), v.is_signed};
+        else if (expr->sval == "!") return {(v.value == 0) ? 1 : 0, true};
         // ++/-- は変数にしか使えないので定数式では不可 (下のエラーに落ちる)
     }
 
     // 二項演算
     if (expr->kind == ND_BINOP) {
-        const long long l = this->eval_const_expr(expr->children[0]);
-        const long long r = this->eval_const_expr(expr->children[1]);
-        // ゼロ除算はコンパイル時に検出する
-        if ((expr->sval == "/" || expr->sval == "%") && r == 0) {
-            throw std::string("compiler error: division by zero at ")
-                  + loc_to_string(expr->loc);
-        }
-        if      (expr->sval == "+")  return l + r;
-        else if (expr->sval == "-")  return l - r;
-        else if (expr->sval == "*")  return l * r;
-        else if (expr->sval == "/")  return l / r;
-        else if (expr->sval == "%")  return l % r;
-        else if (expr->sval == "&")  return l & r;
-        else if (expr->sval == "|")  return l | r;
-        else if (expr->sval == "^")  return l ^ r;
-        else if (expr->sval == "<<") return l << r;
-        else if (expr->sval == ">>") return l >> r;
-        else if (expr->sval == "&&") return (l != 0 && r != 0) ? 1 : 0;
-        else if (expr->sval == "||") return (l != 0 || r != 0) ? 1 : 0;
-        else if (expr->sval == "==") return (l == r) ? 1 : 0;
-        else if (expr->sval == "!=") return (l != r) ? 1 : 0;
-        else if (expr->sval == "<")  return (l < r) ? 1 : 0;
-        else if (expr->sval == ">")  return (l > r) ? 1 : 0;
-        else if (expr->sval == "<=") return (l <= r) ? 1 : 0;
-        else if (expr->sval == ">=") return (l >= r) ? 1 : 0;
+        const const_value_t l = this->eval_const_expr(expr->children[0]);
+        const const_value_t r = this->eval_const_expr(expr->children[1]);
+        return Analyzer::eval_const_binop(expr, l, r);
     }
 
-    // 三項演算
+    // 三項演算: 結果の型は両分岐の値の型から決まるため，選ばれない分岐も計算する
     if (expr->kind == ND_TERNARY) {
-        return Analyzer::eval_const_expr(expr->children[0])
-             ? Analyzer::eval_const_expr(expr->children[1])
-             : Analyzer::eval_const_expr(expr->children[2]);
+        const const_value_t cond = this->eval_const_expr(expr->children[0]);
+        const const_value_t then_value = this->eval_const_expr(expr->children[1]);
+        const const_value_t else_value = this->eval_const_expr(expr->children[2]);
+        const bool is_signed = then_value.is_signed && else_value.is_signed;                // 結果が符号付きか
+        const long long chosen = (cond.value != 0) ? then_value.value : else_value.value;   // 選ばれた分岐の値
+        return {wrap32(chosen, is_signed), is_signed};
     }
 
     // 通常の変数参照・関数呼び出し等はコンパイル時に値が確定しないのでエラー
     throw std::string("compiler error: expression must be a constant expression at ")
           + loc_to_string(expr->loc);
+}
+
+// 二項演算の定数式を，実行時の演算と同じ規則で計算する
+// 符号なしの演算では，両辺を符号なし32ビットの値として解釈し直してから計算する
+const_value_t Analyzer::eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r) {
+    const std::string &op = expr->sval;   // 演算子
+    const bool is_signed = is_signed_operation_by_signs(op, l.is_signed, r.is_signed);   // 符号付きで演算するか
+    const long long lv = wrap32(l.value, is_signed);   // 演算の符号で解釈した左辺
+    const long long rv = wrap32(r.value, is_signed);   // 演算の符号で解釈した右辺
+
+    // 論理演算・比較の結果は0/1のint
+    if (op == "&&") return {(lv != 0 && rv != 0) ? 1 : 0, true};
+    if (op == "||") return {(lv != 0 || rv != 0) ? 1 : 0, true};
+    if (op == "==") return {(lv == rv) ? 1 : 0, true};
+    if (op == "!=") return {(lv != rv) ? 1 : 0, true};
+    if (op == "<")  return {(lv < rv) ? 1 : 0, true};
+    if (op == ">")  return {(lv > rv) ? 1 : 0, true};
+    if (op == "<=") return {(lv <= rv) ? 1 : 0, true};
+    if (op == ">=") return {(lv >= rv) ? 1 : 0, true};
+
+    // 除算・剰余: 実行時にCPUが停止する，または結果が定まらない組み合わせはコンパイル時に検出する
+    if (op == "/" || op == "%") {
+        // ゼロ除算の場合
+        if (rv == 0) {
+            throw std::string("compiler error: division by zero at ") + loc_to_string(expr->loc);
+        }
+        // 符号付きの最小値を-1で割る場合 (商が32ビットで表せない)
+        if (is_signed && lv == -2147483648LL && rv == -1) {
+            throw std::string("compiler error: division overflow at ") + loc_to_string(expr->loc);
+        }
+    }
+
+    // 乗算・左シフトは64ビットの符号付き整数でも桁あふれしうるため，符号なし64ビットで計算して下位32ビットを得る
+    const unsigned long long ulv = static_cast<unsigned long long>(lv);   // 符号なし64ビットで扱う左辺
+    const unsigned long long urv = static_cast<unsigned long long>(rv);   // 符号なし64ビットで扱う右辺
+    long long result;   // 32ビットで折り返す前の結果
+    if      (op == "+")  result = lv + rv;
+    else if (op == "-")  result = lv - rv;
+    else if (op == "*")  result = static_cast<long long>((ulv * urv) & 0xFFFFFFFFULL);
+    else if (op == "/")  result = lv / rv;
+    else if (op == "%")  result = lv % rv;
+    else if (op == "&")  result = lv & rv;
+    else if (op == "|")  result = lv | rv;
+    else if (op == "^")  result = lv ^ rv;
+    // シフト量は実行時と同じく下位5ビット(0〜31)のみを使う．右シフトは符号付きなら算術，符号なしなら論理になる
+    else if (op == "<<") result = static_cast<long long>((ulv << (rv & 31)) & 0xFFFFFFFFULL);
+    else if (op == ">>") result = lv >> (rv & 31);
+    else {
+        throw std::string("compiler error: expression must be a constant expression at ")
+              + loc_to_string(expr->loc);
+    }
+    return {wrap32(result, is_signed), is_signed};
 }
 
 // 配列が占有するワード数を計算する (int=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
@@ -681,7 +774,7 @@ void Analyzer::analyze_switch(node_t *stmt) {
     this->switch_depth_++;            // switchの中ではbreakが許される
     this->scopes_.push_back({});      // switch本体のスコープ
 
-    std::set<long long> case_values;  // case値の重複検出用
+    std::set<long long> case_values;  // case値の32ビットのビット列 (重複検出用)
     bool has_default = false;         // defaultの重複検出用
 
     // 本体(children[1..])を順に検査する
@@ -689,12 +782,14 @@ void Analyzer::analyze_switch(node_t *stmt) {
         node_t *child = stmt->children[i];
         // case節: 値は定数式．畳み込んで重複チェックし，結果をivalに保存する
         if (child->kind == ND_CASE) {
-            const long long v = Analyzer::eval_const_expr(child->children[0]);
-            if (case_values.count(v)) {
+            const long long v = this->eval_const_expr(child->children[0]).value;
+            // 条件の値とはビット列の一致で比較するため，ビット列が同じcase値を重複とみなす(-1と0xFFFFFFFF等)
+            const long long bits = v & 0xFFFFFFFFLL;   // case値の32ビットのビット列
+            if (case_values.count(bits)) {
                 throw std::string("compiler error: duplicate case value at ")
                       + loc_to_string(child->loc);
             }
-            case_values.insert(v);
+            case_values.insert(bits);
             child->ival = v;   // コード生成器が参照できるよう畳み込み結果を保存する
         }
         // default節: 重複は不可
@@ -810,7 +905,8 @@ void Analyzer::analyze_expr(node_t *expr) {
     switch (expr->kind) {
         // リテラル: 検査は不要だが，後段のコード生成のため型を注釈する
         case ND_INT_LIT:
-            expr->type = type_t{BASE_INT, true};    // 整数リテラルはint(符号付き)
+            // 整数リテラルはintまたはunsigned int
+            expr->type = type_t{BASE_INT, is_signed_literal(expr->ival)};
             return;
         case ND_CHAR_LIT:
             expr->type = type_t{BASE_CHAR, true};   // 文字リテラルはchar(符号付き)
@@ -868,10 +964,12 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + "' is not readable at " + loc_to_string(expr->loc);
             }
             // const変数はメモリを持たないため，参照そのものを値の整数リテラルに置き換える
+            // (式の中での符号の扱いが変わらないよう，リテラルの型は宣言した型のままにする)
             if (sym->location == LOC_CONST) {
                 expr->kind = ND_INT_LIT;
-                expr->ival = sym->address;
-                expr->type = type_t{BASE_INT, true};
+                expr->ival = Analyzer::const_symbol_value(sym);
+                expr->type = sym->type;
+                expr->type.is_const = false;
                 return;
             }
             expr->sym  = sym;        // 名前解決の結果を結びつける
@@ -1052,7 +1150,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot use void value in expression at ")
                       + loc_to_string(expr->loc);
             }
-            expr->type = expr->children[0]->type;
+            // !の結果は0/1のint，それ以外はオペランドを整数昇格した型
+            expr->type = type_t{BASE_INT, expr->sval == "!" || is_promoted_signed(expr->children[0]->type)};
             return;
 
         // 関数呼び出し: 関数の定義確認・引数数の検証・各引数式の検査・戻り値型の設定
@@ -1105,12 +1204,11 @@ void Analyzer::analyze_expr(node_t *expr) {
                         throw std::string("compiler error: array member of a struct array element cannot be "
                                            "passed as a function argument at ") + loc_to_string(arg->loc);
                     }
-                    // TODO: スカラ変数の対応後にコメントアウトを外す
-                    // // 要素型の不一致チェック (char配列をint配列パラメータに渡す等を防ぐ)
-                    // if (arg->type.base != params[i]->type.base) {
-                    //     throw std::string("compiler error: array element type mismatch for parameter '")
-                    //           + params[i]->name + "' at " + loc_to_string(arg->loc);
-                    // }
+                    // 要素型(符号を含む)が異なる配列の場合 (呼び出し先は自身の要素型で読み書きするため，値を取り違える)
+                    if (arg->type.base != params[i]->type.base || arg->type.is_signed != params[i]->type.is_signed) {
+                        throw std::string("compiler error: array element type mismatch for parameter '")
+                              + params[i]->name + "' at " + loc_to_string(arg->loc);
+                    }
                 } else {
                     if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->type.is_array) {
                         // 構造体配列要素のメンバ配列(arr[i].name)はarg->symが配列全体("arr")を
@@ -1123,12 +1221,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                               + arg_name + "' to scalar parameter '"
                               + params[i]->name + "' at " + loc_to_string(arg->loc);
                     }
-                    // TODO: func(1 + 2) など計算式を引数に与えた場合に型を正確に推論する仕組みが出来たらコメントアウトを外す
-                    // // スカラー引数の型不一致チェック (charをintパラメータに渡す等を防ぐ)
-                    // if (arg->type.base != params[i]->type.base) {
-                    //     throw std::string("compiler error: argument type mismatch for parameter '")
-                    //           + params[i]->name + "' at " + loc_to_string(arg->loc);
-                    // }
+                    // スカラー引数は型が異なっても受け付け，パラメータの型で格納する
+                    // (値の変換規則が決まっているため，型の一致は検査しない)
                 }
             }
             expr->type = it->second;
@@ -1253,15 +1347,23 @@ void Analyzer::analyze_expr(node_t *expr) {
         }
 
         // 二項演算: 両辺を検査し，どちらかがvoid値(戻り値のない関数呼び出し)なら使用を禁止する
-        case ND_BINOP:
+        case ND_BINOP: {
             this->analyze_expr(expr->children[0]);
             this->analyze_expr(expr->children[1]);
             if (expr->children[0]->type.base == BASE_VOID || expr->children[1]->type.base == BASE_VOID) {
                 throw std::string("compiler error: cannot use void value in expression at ")
                       + loc_to_string(expr->loc);
             }
-            expr->type = expr->children[0]->type;
+            const std::string &op = expr->sval;   // 演算子
+            // 比較・論理演算の結果は0/1のint
+            const bool is_boolean = op == "==" || op == "!=" || op == "<" || op == ">"
+                                 || op == "<=" || op == ">=" || op == "&&" || op == "||";
+            // それ以外は，演算の符号(符号付きで演算するならint，符号なしならunsigned int)
+            const bool is_signed =
+                is_boolean || is_signed_operation(op, expr->children[0]->type, expr->children[1]->type);
+            expr->type = type_t{BASE_INT, is_signed};
             return;
+        }
 
         // 三項演算 a ? b : c: 条件・両分岐を検査し，いずれかがvoid値なら使用を禁止する
         case ND_TERNARY:
@@ -1274,7 +1376,9 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot use void value in expression at ")
                       + loc_to_string(expr->loc);
             }
-            expr->type = expr->children[1]->type;
+            // 結果は両方の分岐の値が昇格後intならint，そうでなければunsigned int
+            expr->type = type_t{BASE_INT, is_promoted_signed(expr->children[1]->type)
+                                          && is_promoted_signed(expr->children[2]->type)};
             return;
 
         // 到達しない (式ノードの全種類は上記いずれかのcaseで処理される)．

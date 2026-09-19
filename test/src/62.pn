@@ -1,0 +1,9 @@
+// 実行時の式で，0x80000000以上の整数リテラルはunsigned intとして演算の符号を切り替える
+int s = -1;
+int r;
+
+void main(void) {
+    r = s < 0x80000000;    // ltu
+    r = s / 0x80000000;    // divu
+    r = s < 0x7FFFFFFF;    // intどうし: lt
+}

@@ -1,0 +1,7 @@
+// ハードウェア変数はunsigned intのため，負の値との比較・右シフトは符号なしになる
+int r;
+
+void main(void) {
+    r = DIPSW < -1;      // ltu
+    r = DIPSW >> 1;      // srl
+}

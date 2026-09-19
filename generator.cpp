@@ -1,19 +1,31 @@
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 #include "generator.hpp"
 
-// 二項演算子の文字列を対応するアセンブリ命令に変換する
-static std::string binop_mnemonic(const std::string &op) {
+// 即値をアセンブリの表記にする
+// 0x80000000以上の値は，10進で書くとアセンブラが出力するVerilogの10進定数(32ビット符号付き)の範囲を超えるため，16進(末尾h)で書く
+static std::string imm_literal(long long value) {
+    // intの範囲に収まる値(負の値を含む)は10進で書く
+    if (value <= 0x7FFFFFFFLL) return std::to_string(value);
+    std::ostringstream ss;   // 16進表記を組み立てるバッファ
+    ss << std::uppercase << std::hex << (value & 0xFFFFFFFFLL) << 'h';
+    return ss.str();
+}
+
+// 二項演算子の文字列を対応するアセンブリ命令に変換する (is_signedは符号付きで演算するか)
+static std::string binop_mnemonic(const std::string &op, bool is_signed) {
     if (op == "+") return "add";
     if (op == "-") return "sub";
     if (op == "*") return "mul";
     if (op == "&") return "and";
     if (op == "|") return "or";
     if (op == "^") return "xor";
-    if (op == "/") return "div";    // 商 (符号付き除算．余りは捨てる)
-    if (op == "<<") return "sll";   // 左シフト
-    if (op == ">>") return "sra";   // 右シフト: unsigned非対応のため常に算術シフト(将来srlを符号で選択)
-    // % は div の4引数形式で別途生成する．比較・論理演算子は分岐の段階で対応する
+    if (op == "/") return is_signed ? "div" : "divu";     // 商 (余りは捨てる)
+    if (op == "<<") return "sll";                          // 左シフト (空いたビットは符号によらず0で埋まる)
+    if (op == ">>") return is_signed ? "sra" : "srl";      // 右シフト: 符号付きは算術シフト，符号なしは論理シフト
+    // % は div/divu の4引数形式で別途生成する．比較・論理演算子は分岐の段階で対応する
     throw std::string("compiler error: unsupported binary operator '") + op + "'";
 }
 
@@ -22,26 +34,34 @@ static bool is_comparison(const std::string &op) {
     return op == "==" || op == "!=" || op == "<" || op == ">" || op == "<=" || op == ">=";
 }
 
-// 比較演算子の「否定」に対応するF系命令を返す (偽のとき分岐させるのに使う)
-static std::string negated_branch(const std::string &op) {
-    if (op == "==") return "ne";    // ==の否定は!=
-    if (op == "!=") return "eq";    // !=の否定は==
-    if (op == "<")  return "egt";   // <の否定は>=
-    if (op == ">")  return "elt";   // >の否定は<=
-    if (op == "<=") return "gt";    // <=の否定は>
-    if (op == ">=") return "lt";    // >=の否定は<
+// 比較演算子の「否定」に対応するF系命令を返す (偽のとき分岐させるのに使う．is_signedは符号付きで比較するか)
+// 大小比較の符号なし版は末尾にuを付けた命令になる (一致判定は符号によらないため同じ命令)
+static std::string negated_branch(const std::string &op, bool is_signed) {
+    const std::string u = is_signed ? "" : "u";     // 符号なしの大小比較に付ける接尾辞
+    if (op == "==") return "ne";        // ==の否定は!=
+    if (op == "!=") return "eq";        // !=の否定は==
+    if (op == "<")  return "egt" + u;   // <の否定は>=
+    if (op == ">")  return "elt" + u;   // >の否定は<=
+    if (op == "<=") return "gt" + u;    // <=の否定は>
+    if (op == ">=") return "lt" + u;    // >=の否定は<
     throw std::string("compiler error: not a comparison operator '") + op + "'";
 }
 
-// 比較演算子に「そのまま」対応するF系命令を返す (真のとき分岐させるのに使う)
-static std::string comparison_branch(const std::string &op) {
+// 比較演算子に「そのまま」対応するF系命令を返す (真のとき分岐させるのに使う．is_signedは符号付きで比較するか)
+static std::string comparison_branch(const std::string &op, bool is_signed) {
+    const std::string u = is_signed ? "" : "u";     // 符号なしの大小比較に付ける接尾辞
     if (op == "==") return "eq";
     if (op == "!=") return "ne";
-    if (op == "<")  return "lt";
-    if (op == ">")  return "gt";
-    if (op == "<=") return "elt";
-    if (op == ">=") return "egt";
+    if (op == "<")  return "lt" + u;
+    if (op == ">")  return "gt" + u;
+    if (op == "<=") return "elt" + u;
+    if (op == ">=") return "egt" + u;
     throw std::string("compiler error: not a comparison operator '") + op + "'";
+}
+
+// 比較・二項演算の式を符号付きで行うかを，両オペランドの型から返す
+static bool is_signed_binop(const node_t *expr) {
+    return is_signed_operation(expr->sval, expr->children[0]->type, expr->children[1]->type);
 }
 
 // 命令出力の慣例:
@@ -269,7 +289,7 @@ void Generator::gen_string_init(int base_addr, const std::string &str) {
             }
         }
         // ワードをメモリに書き込む (wワード目は base_addr + w*4 番地から4バイト)
-        this->asm_file_ << "    mov fh r0 r0 " << word << "\n";
+        this->asm_file_ << "    mov fh r0 r0 " << imm_literal(word) << "\n";
         this->asm_file_ << "    wm fh r0 r0 " << (base_addr + w * 4) << "\n";
     }
 }
@@ -504,7 +524,7 @@ void Generator::gen_branch_if_false(node_t *cond, const std::string &label, int 
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
         this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
-        this->asm_file_ << "    " << negated_branch(cond->sval)
+        this->asm_file_ << "    " << negated_branch(cond->sval, is_signed_binop(cond))
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
     // 一般条件: 値を評価し，0(偽)なら飛ぶ
@@ -527,7 +547,7 @@ void Generator::gen_branch_if_true(node_t *cond, const std::string &label, int r
     if (cond->kind == ND_BINOP && is_comparison(cond->sval)) {
         this->gen_expr(cond->children[0], reg);       // 左 → r{reg}
         this->gen_expr_protecting(cond->children[1], reg + 1, {reg});   // 右 → r{reg+1}
-        this->asm_file_ << "    " << comparison_branch(cond->sval)
+        this->asm_file_ << "    " << comparison_branch(cond->sval, is_signed_binop(cond))
                         << " r" << reg << " r" << (reg + 1) << " " << label << "\n";
     }
     // 一般条件: 値を評価し，0でない(真)なら飛ぶ
@@ -546,7 +566,7 @@ void Generator::gen_compare(node_t *expr, int reg) {
     this->gen_expr(expr->children[0], reg);        // 左 → r{reg}
     this->gen_expr_protecting(expr->children[1], reg + 1, {reg});    // 右 → r{reg+1}
     // 比較が真なら .Lt へ
-    this->asm_file_ << "    " << comparison_branch(expr->sval)
+    this->asm_file_ << "    " << comparison_branch(expr->sval, is_signed_binop(expr))
                     << " r" << reg << " r" << (reg + 1) << " " << t << "\n";
     this->asm_file_ << "    mov fh r0 r" << reg << " 0\n";   // 偽: r{reg} = 0
     this->asm_file_ << "    jmp " << end << "\n";
@@ -613,13 +633,14 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     this->gen_load(reg, var->sym, var->loc);                              // r{reg} = x
     this->asm_file_ << "    mov fh r0 r" << (reg + 1) << " 1\n";         // r{reg+1} = 1
 
+    // 加減算は符号によって命令が変わらないため，符号付きかどうかは常に真として渡す
     if (is_prefix) {
         // 前置 ++x/--x : r{reg}を増減して書き戻す (新値がそのまま式の値として残る)
-        this->gen_binop_instr(op, reg, reg, reg + 1);                       // r{reg} = x ± 1
+        this->gen_binop_instr(op, true, reg, reg, reg + 1);                 // r{reg} = x ± 1
         this->gen_store(reg, var->sym);                                     // x = r{reg}
     } else {
         // 後置 x++/x-- : 旧値をr{reg}に残したまま，新値をr{reg+1}で計算して書き戻す
-        this->gen_binop_instr(op, reg + 1, reg, reg + 1);                   // r{reg+1} = x ± 1
+        this->gen_binop_instr(op, true, reg + 1, reg, reg + 1);             // r{reg+1} = x ± 1
         this->gen_store(reg + 1, var->sym);                                 // x = r{reg+1}
     }
 }
@@ -783,7 +804,7 @@ void Generator::gen_switch(node_t *stmt) {
     for (size_t i = 1; i < stmt->children.size(); i++) {
         node_t *c = stmt->children[i];
         if (c->kind == ND_CASE) {
-            this->asm_file_ << "    mov fh r0 r1 " << c->ival << "\n";    // r1 = case値
+            this->asm_file_ << "    mov fh r0 r1 " << imm_literal(c->ival) << "\n";    // r1 = case値
             this->asm_file_ << "    eq r0 r1 " << label_of[c] << "\n";    // 一致ならそのcaseへ
         }
     }
@@ -804,17 +825,17 @@ void Generator::gen_switch(node_t *stmt) {
     this->break_labels_.pop_back();
 }
 
-// r{dst} = r{lhs} op r{rhs} となる演算命令を出力する
-// 二項演算と複合代入で共用する (剰余だけはdivの4引数形式)
-void Generator::gen_binop_instr(const std::string &op, int dst, int lhs, int rhs) {
-    // 剰余: divは商をrdへ・余りをimmが指すレジスタ番地へ格納する
+// r{dst} = r{lhs} op r{rhs} となる演算命令を出力する (is_signedは符号付きで演算するか)
+// 二項演算と複合代入で共用する (剰余だけはdiv/divuの4引数形式)
+void Generator::gen_binop_instr(const std::string &op, bool is_signed, int dst, int lhs, int rhs) {
+    // 剰余: div/divuは商をrdへ・余りをimmが指すレジスタ番地へ格納する
     // 商をr{rhs}に捨て，余りをr{dst}(番地dst)へ得る
     if (op == "%") {
-        this->asm_file_ << "    div r" << lhs << " r" << rhs
+        this->asm_file_ << "    " << (is_signed ? "div" : "divu") << " r" << lhs << " r" << rhs
                         << " r" << rhs << " " << dst << "\n";
     } else {
         // それ以外は単一命令
-        const std::string mn = binop_mnemonic(op);   // 演算子→命令
+        const std::string mn = binop_mnemonic(op, is_signed);     // 演算子→命令
         this->asm_file_ << "    " << mn
                         << " r" << lhs << " r" << rhs << " r" << dst << "\n";
     }
@@ -822,8 +843,9 @@ void Generator::gen_binop_instr(const std::string &op, int dst, int lhs, int rhs
 
 // 変数の値をr{reg}へ読み込む
 // 置き場所がレジスタ直結(LED等のI/Oレジスタ)ならmovのレジスタ間コピー，メモリ変数ならrm
-// メモリ変数はchar/shortの型幅でmaskし(他バイトのゴミを混入させない)，符号付きなので読み込み後に符号拡張する
-// (レジスタ上の演算は型に関係なく常に32ビットで行うため，char/shortはintに昇格した状態で保持する)
+// メモリ変数はchar/shortの型幅でmaskし(他バイトのゴミを混入させない)，符号付きなら読み込み後に符号拡張する
+// (レジスタ上の演算は型に関係なく常に32ビットで行うため，char/shortはintに昇格した状態で保持する．
+//  rmはmaskで選ばなかった上位バイトを0で埋めるため，符号なしは読み込んだままでゼロ拡張になっている)
 void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
     if (sym->location == LOC_REGISTER) {
         // mov rs1=番地, rd=r{reg} : r{reg} = register[番地] (即値を付けないとレジスタ間コピーになる)
@@ -839,11 +861,11 @@ void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
     switch (sym->type.base) {
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 8, reg + 1, loc);
+            if (sym->type.is_signed) this->gen_sign_extend(reg, 8, reg + 1, loc);
             break;
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r0 r" << reg << " " << sym->address << "\n";
-            this->gen_sign_extend(reg, 16, reg + 1, loc);
+            if (sym->type.is_signed) this->gen_sign_extend(reg, 16, reg + 1, loc);
             break;
         case BASE_INT:
             // rm: メモリ絶対番地からr{reg}へ読み込む (即値アドレス指定のためrs1のr0は無視される)
@@ -882,19 +904,19 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
 }
 
 // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング，結果は同じレジスタに上書き)
-// gen_loadのメモリ変数分岐と同じマスク・符号拡張の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
+// gen_loadのメモリ変数分岐と同じマスク・符号拡張(符号付きのみ)の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
 // 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
 void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc) {
     switch (type.base) {
-        // char: 下位1バイトを読み込み，8ビット値として符号拡張する
+        // char: 下位1バイトを読み込み，符号付きなら8ビット値として符号拡張する
         case BASE_CHAR:
             this->asm_file_ << "    rm 1h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 8, work_reg, loc);
+            if (type.is_signed) this->gen_sign_extend(reg, 8, work_reg, loc);
             break;
-        // short: 下位2バイトを読み込み，16ビット値として符号拡張する
+        // short: 下位2バイトを読み込み，符号付きなら16ビット値として符号拡張する
         case BASE_SHORT:
             this->asm_file_ << "    rm 3h r" << reg << " r" << reg << "\n";
-            this->gen_sign_extend(reg, 16, work_reg, loc);
+            if (type.is_signed) this->gen_sign_extend(reg, 16, work_reg, loc);
             break;
         // int: 4バイトすべてを読み込む (符号拡張は不要)
         case BASE_INT:
@@ -972,7 +994,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
         case ND_INT_LIT:
         case ND_CHAR_LIT:
         case ND_SIZEOF:
-            this->asm_file_ << "    mov fh r0 r" << reg << " " << expr->ival << "\n";
+            this->asm_file_ << "    mov fh r0 r" << reg << " " << imm_literal(expr->ival) << "\n";
             break;
 
         // 文字列リテラル: 配列名と同様，先頭の番地(コンパイル時確定の即値)をr{reg}に載せる
@@ -1016,7 +1038,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の左辺の値を保護する)
                 this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                 // 左辺と右辺を演算子で畳み，結果をr{reg}に置く
-                this->gen_binop_instr(expr->sval, reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
+                this->gen_binop_instr(expr->sval, is_signed_binop(expr), reg, reg, reg + 1);   // r{reg} = r{reg} op r{reg+1}
             }
             break;
 
@@ -1119,10 +1141,11 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // 代入先の現在値をr{reg}へ読み込む
                     this->gen_load_indirect(reg, lhs->type, reg + 2, lhs->loc);             // r{reg} = 現在値
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);    // "+=" → "+"
+                    const bool is_signed = is_signed_operation(op, lhs->type, expr->children[1]->type);   // 符号付きで演算するか
                     // 右辺をr{reg+2}に評価する
                     this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
-                    this->gen_binop_instr(op, reg, reg, reg + 2);
+                    this->gen_binop_instr(op, is_signed, reg, reg, reg + 2);
                 }
                 // r{reg}の値を，r{reg+1}のアドレスへ型に応じたマスクで書き込む (代入式の値もr{reg}に残る)
                 this->gen_store_indirect(reg + 1, reg, lhs->type);
@@ -1138,8 +1161,9 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // 右辺をr{reg+1}に評価する (関数呼び出しを含む場合はr{reg}の現在値を保護する)
                     this->gen_expr_protecting(expr->children[1], reg + 1, {reg});
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
+                    const bool is_signed = is_signed_operation(op, lhs->type, expr->children[1]->type);   // 符号付きで演算するか
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
-                    this->gen_binop_instr(op, reg, reg, reg + 1);
+                    this->gen_binop_instr(op, is_signed, reg, reg, reg + 1);
                 }
                 // 変数へ書き込む (代入式の値もr{reg}に残る)
                 this->gen_store(reg, lhs->sym);

@@ -1,0 +1,5 @@
+// 構文解析エラー: 16進の整数リテラルが32ビットの範囲(0xFFFFFFFFまで)を超える (異常系)
+void main(void) {
+    unsigned int x;
+    x = 0x100000000;
+}

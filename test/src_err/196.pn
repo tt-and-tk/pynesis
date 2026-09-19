@@ -1,0 +1,10 @@
+// 意味解析エラー: ビット列が同じcase値(-1と0xFFFFFFFF)は重複になる (異常系)
+void main(void) {
+    unsigned int x = 0;
+    switch (x) {
+        case 0xFFFFFFFF:
+            break;
+        case -1:
+            break;
+    }
+}
