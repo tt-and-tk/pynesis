@@ -1,6 +1,8 @@
 .global main
 
 main:
+    mov fh r0 r0 12
+    sub r16 r0 r16
     mov fh r0 r0 42
     mov fh r0 r1 1
     mov fh r0 r2 2
@@ -14,7 +16,7 @@ main:
     mov fh r0 r1 0
     add r0 r1 r0
     rm fh r0 r0
-    wm fh r0 r0 16
+    wmr fh r16 r0 0
     mov fh r0 r0 65
     mov fh r0 r1 1
     mov fh r0 r2 8
@@ -27,7 +29,7 @@ main:
     mov fh r0 r1 24
     sll r0 r1 r0
     sra r0 r1 r0
-    wm 1h r0 r0 20
+    wmr 1h r16 r0 4
     mov fh r0 r0 1000
     mov fh r0 r1 1
     mov fh r0 r2 1
@@ -44,5 +46,7 @@ main:
     mov fh r0 r1 16
     sll r0 r1 r0
     sra r0 r1 r0
-    wm 3h r0 r0 24
+    wmr 3h r16 r0 8
+    mov fh r0 r0 12
+    add r16 r0 r16
     ret

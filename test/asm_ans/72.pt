@@ -1,0 +1,82 @@
+.global add, twice, main
+
+main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 1
+    wmr fh r16 r0 0
+    mov fh r0 r1 2
+    wmr fh r16 r1 -12
+    mov fh r0 r1 3
+    wmr fh r16 r1 -8
+    call add
+    mov fh r30 r1
+    rmr fh r16 r0 0
+    wmr fh r16 r0 -12
+    wmr fh r16 r1 -8
+    call add
+    mov fh r30 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 1
+    wmr fh r16 r0 -12
+    mov fh r0 r0 2
+    wmr fh r16 r0 -8
+    call add
+    mov fh r30 r0
+    wmr fh r16 r0 0
+    mov fh r0 r1 3
+    wmr fh r16 r1 -12
+    mov fh r0 r1 4
+    wmr fh r16 r1 -8
+    call add
+    mov fh r30 r1
+    rmr fh r16 r0 0
+    wmr fh r16 r0 -12
+    wmr fh r16 r1 -8
+    call add
+    mov fh r30 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 2
+    wmr fh r16 r0 -8
+    call twice
+    mov fh r30 r0
+    mov fh r0 r0 5
+    wmr fh r16 r0 -8
+    wmr fh r16 r0 -12
+    call add
+    mov fh r30 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+add:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+twice:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    wmr fh r16 r0 -12
+    rmr fh r16 r0 0
+    wmr fh r16 r0 -8
+    call add
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret

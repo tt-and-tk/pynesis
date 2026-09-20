@@ -2,7 +2,7 @@
 
 main:
     mov fh r0 r0 127
-    wm fh r0 r0 28
+    wmr fh r16 r0 -8
     call twice
     mov fh r30 r0
     wm fh r0 r0 24
@@ -30,11 +30,17 @@ main:
     ret
 
 twice:
-    rm fh r0 r0 28
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
     mov fh r0 r1 2
     mul r0 r1 r0
     mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
     ret
+    mov fh r0 r0 4
+    add r16 r0 r16
     ret
 
 limit:

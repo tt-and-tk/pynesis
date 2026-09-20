@@ -1,16 +1,18 @@
 .global seven, main
 
 main:
+    mov fh r0 r0 12
+    sub r16 r0 r16
     mov fh r0 r0 0
-    wm fh r0 r0 8
+    wmr fh r16 r0 0
     mov fh r0 r0 10
-    rm fh r0 r1 8
+    rmr fh r16 r1 0
     mov fh r0 r2 4
     mul r1 r2 r1
     mov fh r0 r2 0
     add r1 r2 r1
     wm fh r1 r0
-    rm fh r0 r1 8
+    rmr fh r16 r1 0
     mov fh r0 r2 4
     mul r1 r2 r1
     mov fh r0 r2 0
@@ -20,21 +22,23 @@ main:
     mov fh r0 r2 5
     add r0 r2 r0
     wm fh r1 r0
-    rm fh r0 r1 8
+    rmr fh r16 r1 0
     mov fh r0 r2 4
     mul r1 r2 r1
     mov fh r0 r2 0
     add r1 r2 r1
     mov fh r1 r0
     rm fh r0 r0
-    wm fh r0 r0 12
-    wm fh r0 r1 16
+    wmr fh r16 r0 4
+    wmr fh r16 r1 8
     call seven
     mov fh r30 r2
-    rm fh r0 r0 12
-    rm fh r0 r1 16
+    rmr fh r16 r0 4
+    rmr fh r16 r1 8
     add r0 r2 r0
     wm fh r1 r0
+    mov fh r0 r0 12
+    add r16 r0 r16
     ret
 
 seven:

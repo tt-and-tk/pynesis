@@ -62,7 +62,8 @@ int compile_pn_to_asm(int argc, char **argv) {
 
         // アセンブリコードを生成する (Code Generator)
         Generator generator(ast, symbols, analyzer.func_params(), analyzer.struct_defs(),
-                             analyzer.scratch_base(), asm_file);
+                             analyzer.func_local_sizes(), analyzer.call_graph(),
+                             analyzer.global_size(), asm_file);
         generator();
 
         asm_file.flush();

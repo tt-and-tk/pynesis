@@ -1,27 +1,37 @@
 .global sum_pair, main
 
 main:
+    mov fh r0 r0 8
+    sub r16 r0 r16
     call sum_pair
     mov fh r30 r0
-    wm fh r0 r0 16
+    wmr fh r16 r0 0
     mov fh r0 r0 8
-    wm fh r0 r0 20
+    wmr fh r16 r0 4
+    mov fh r0 r0 8
+    add r16 r0 r16
     ret
 
 sum_pair:
+    mov fh r0 r0 8
+    sub r16 r0 r16
     mov fh r0 r0 10
-    wm 3h r0 r0 8
+    wmr 3h r16 r0 0
     mov fh r0 r0 20
-    wm 3h r0 r0 12
-    rm 3h r0 r0 8
+    wmr 3h r16 r0 4
+    rmr 3h r16 r0 0
     mov fh r0 r1 16
     sll r0 r1 r0
     sra r0 r1 r0
-    rm 3h r0 r1 12
+    rmr 3h r16 r1 4
     mov fh r0 r2 16
     sll r1 r2 r1
     sra r1 r2 r1
     add r0 r1 r0
     mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
     ret
+    mov fh r0 r0 8
+    add r16 r0 r16
     ret

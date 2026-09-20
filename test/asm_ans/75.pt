@@ -1,0 +1,140 @@
+.global sum, main
+
+main:
+    mov fh r0 r0 40
+    sub r16 r0 r16
+    mov fh r0 r0 25185
+    wmr fh r16 r0 12
+    mov fh r0 r0 1
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 2
+    mov fh r0 r1 1
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 3
+    mov fh r0 r1 2
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 2
+    mov fh r0 r1 2
+    sll r0 r1 r0
+    mov fh r0 r1 0
+    add r16 r1 r1
+    add r0 r1 r0
+    rm fh r0 r0
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 16
+    add r1 r2 r1
+    add r16 r1 r1
+    wm fh r1 r0
+    mov fh r0 r2 36
+    add r16 r2 r2
+    mov fh r0 r3 12
+    add r16 r3 r3
+    mov fh r0 r1 0
+    mov fh r0 r5 0
+    mov fh r0 r6 3
+    mov fh r0 r7 1
+.L0:
+    egt r1 r6 .L1
+    add r3 r1 r4
+    rm 1h r4 r0
+    eq r0 r5 .L2
+    add r2 r1 r4
+    wm 1h r4 r0
+    add r1 r7 r1
+    jmp .L0
+.L1:
+    add r2 r6 r4
+    wm 1h r4 r5
+    jmp .L3
+.L2:
+    add r2 r1 r4
+    wm 1h r4 r5
+.L3:
+    mov fh r0 r1 12
+    add r16 r1 r1
+    mov fh r0 r0 0
+    mov fh r0 r3 3
+    mov fh r0 r4 0
+    mov fh r0 r5 1
+.L4:
+    egt r0 r3 .L5
+    add r1 r0 r2
+    rm 1h r2 r2
+    eq r2 r4 .L5
+    print r2
+    add r0 r5 r0
+    jmp .L4
+.L5:
+    mov fh r0 r0 0
+    add r16 r0 r0
+    wmr fh r16 r0 -12
+    mov fh r0 r0 3
+    wmr fh r16 r0 -8
+    call sum
+    mov fh r30 r0
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 16
+    add r1 r2 r1
+    add r16 r1 r1
+    rm fh r1 r1
+    add r0 r1 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 40
+    add r16 r0 r16
+    ret
+
+sum:
+    mov fh r0 r0 16
+    sub r16 r0 r16
+    mov fh r0 r0 0
+    wmr fh r16 r0 0
+    mov fh r0 r0 0
+    wmr fh r16 r0 4
+.L6:
+    rmr fh r16 r0 4
+    rmr fh r16 r1 12
+    egt r0 r1 .L8
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    rmr fh r16 r2 8
+    add r1 r2 r1
+    rm fh r1 r1
+    add r0 r1 r0
+    wmr fh r16 r0 0
+.L7:
+    rmr fh r16 r0 4
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wmr fh r16 r1 4
+    jmp .L6
+.L8:
+    rmr fh r16 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 16
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 16
+    add r16 r0 r16
+    ret

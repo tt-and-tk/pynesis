@@ -1,0 +1,27 @@
+// フレーム上に置いた配列・構造体・文字列の扱い
+// これらの番地は実行時のSPから計算するため，グローバルの絶対番地とは別の経路で求める
+struct Item {
+    int v;
+    char name[4];
+};
+int sum(int values[], int count) {
+    int total = 0;
+    for (int i = 0; i < count; i++) {
+        total += values[i];
+    }
+    return total;
+}
+int g;
+void main(void) {
+    int table[3];
+    char msg[] = "ab";
+    struct Item items[2];
+    struct Item single;
+    table[0] = 1;
+    table[1] = 2;
+    table[2] = 3;
+    items[1].v = table[2];      // 構造体配列要素のメンバ (実行時に番地を計算する)
+    strcopy(single.name, msg);  // 単一の構造体変数のメンバ配列 (フレーム内の固定オフセット)
+    print(msg);
+    g = sum(table, 3) + items[1].v;   // ローカル配列を配列パラメータへ渡す (6 + 3)
+}
