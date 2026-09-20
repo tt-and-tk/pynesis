@@ -86,22 +86,26 @@ public:
 
 private:
     node_t *root_;                                       // AST
+
+    // 解析の成果物 (result()でコード生成へ渡す)
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
-    std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
-    std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→パラメータのシンボル列
+    std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→引数のシンボル列
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
+    std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
+    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合
+    int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地 (割り当て後はグローバル領域のバイト数)
+
+    // 解析の途中で使う情報
+    std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
-    int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地
     int local_size_;                                     // 現在解析中の関数のローカル変数領域に確保済みのバイト数
-    std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
     std::vector<std::map<std::string, const symbol_t *>> scopes_;  // ローカル変数のスコープスタック (内側ほど後ろ)
     int loop_depth_ = 0;                                 // ループの入れ子の深さ (break/continueの検査用)
     int switch_depth_ = 0;                               // switchの入れ子の深さ (breakの検査用)
     std::string current_function_;                       // 現在解析中の関数名 (呼び出しグラフ構築用)
     type_t current_return_type_;                         // 現在解析中の関数の戻り値型 (return文の整合性検査用)
-    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合
 
     // 解析メソッド
     void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査

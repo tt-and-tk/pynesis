@@ -13,9 +13,7 @@ const std::string RAX_REGISTER = "r30";
 // ハードウェア制約: スタックポインタ(SP)のアセンブリ表記 (6'h10)
 const std::string SP_REGISTER = "r16";
 
-// 注釈付きASTとシンボルテーブルを受け取り，アセンブリコードを生成するジェネレータ
-// ローカル変数・引数・レジスタの退避先は，呼び出しごとにスタック上へ確保するフレームに置く
-// (フレームの構成と呼び出し規約は ../specification/compiler.md を参照)
+// 注釈付きASTと意味解析の結果を受け取り，アセンブリコードを生成するジェネレータ
 class Generator {
 public:
     Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file);

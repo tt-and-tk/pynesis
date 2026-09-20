@@ -177,7 +177,9 @@ void Generator::gen_func(node_t *func) {
     this->gen_frame_enter();
     this->gen_func_body(func);
 
-    // 確保した退避領域で足りていたことを確かめる (足りなければ他の変数を壊した出力になっている)
+    // 本番の生成で退避したレジスタが，確保した退避領域に収まっていたことを確かめる
+    // (式の形だけで退避するレジスタが決まる以上ここは通らないが，その前提が崩れた場合に
+    //  フレーム上の他の値を壊した出力が黙って出ることを防ぐ)
     if ((this->max_spill_reg_ + 1) * 4 > this->spill_size_) {
         throw std::string("compiler error: register spill area is too small in '") + func->sval + "'";
     }
@@ -235,13 +237,13 @@ void Generator::gen_frame_leave() {
 }
 
 // フレームの大きさだけSPを動かす命令を出力する
-// 即値を直接加減算する命令がないため，大きさをいったんレジスタに載せてから計算する
-// (作業用のr0が使えるのは，フレームを動かすのが関数の開始直後と復帰の直前に限られ，
-//  どちらもr0が値を保持していないため)
 void Generator::gen_sp_shift(const std::string &mnemonic) {
     const int frame_size = this->calc_frame_size();   // フレームのバイト数
     // 引数もローカル変数もレジスタの退避も持たない関数の場合 (動かす領域がないため，これ以上何もしない)
     if (frame_size == 0) return;
+
+    // 即値を直接加減算する命令がないため，大きさをいったんr0に載せてから計算する
+    // (r0を使えるのは，フレームを動かすのが関数の開始直後と復帰の直前に限られ，どちらもr0が値を保持していないため)
 
     (*this->out_) << "    mov fh r0 r0 " << frame_size << "\n";
     (*this->out_) << "    " << mnemonic << " " << SP_REGISTER << " r0 " << SP_REGISTER << "\n";
@@ -978,10 +980,15 @@ void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
         (*this->out_) << "    rm " << mask << " r0 r" << reg << " " << sym->address << "\n";
     }
     // フレーム上の変数の場合
-    else {
+    else if (sym->location == LOC_LOCAL || sym->location == LOC_PARAM) {
         // rmr: SPにフレーム内オフセットを足した番地からr{reg}へ読み込む
         (*this->out_) << "    rmr " << mask << " " << SP_REGISTER << " r" << reg
                       << " " << this->calc_frame_offset(sym) << "\n";
+    }
+    // メモリにもレジスタにも置かれていない場合 (値を読み出す手段がない)
+    else {
+        throw std::string("compiler error: '") + sym->name
+              + "' has no readable storage at " + loc_to_string(loc);
     }
     // 符号付きchar/shortの場合 (レジスタ上の値は常にintとして扱うため，上位を符号ビットで埋める．
     //  符号なしは読み込みがmask外の上位バイトを0で埋めており，そのままintの値になっている)
@@ -1006,15 +1013,18 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
         (*this->out_) << "    wm " << mask << " r0 r" << reg << " " << sym->address << "\n";
     }
     // フレーム上の変数の場合
-    else {
+    else if (sym->location == LOC_LOCAL || sym->location == LOC_PARAM) {
         // wmr: SPにフレーム内オフセットを足した番地へr{reg}を書き込む
         (*this->out_) << "    wmr " << mask << " " << SP_REGISTER << " r" << reg
                       << " " << this->calc_frame_offset(sym) << "\n";
     }
+    // メモリにもレジスタにも置かれていない場合 (値を書き込む先がない)
+    else {
+        throw std::string("compiler error: '") + sym->name + "' has no writable storage";
+    }
 }
 
 // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング，結果は同じレジスタに上書き)
-// gen_loadのメモリ変数分岐と同じマスク・符号拡張(符号付きのみ)の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
 // 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
 void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc) {
     // 型の幅のバイトだけを読み込む
@@ -1261,21 +1271,22 @@ void Generator::gen_expr(node_t *expr, int reg) {
 
 // 関数呼び出しを生成する
 // 各引数を評価して呼び出し先の引数領域になる位置へ書き込み，CALLする
-// (書き込む位置は ../specification/compiler.md の呼び出し規約を参照)
 // 評価にr{reg}以降を使うのは，呼び出し元がr{reg}未満のレジスタに置いている生存値
 // (二項演算の左辺等)を壊さないため
 void Generator::gen_call(node_t *expr, int reg) {
-    const auto &params = this->analysis_.func_params.at(expr->sval);          // 呼び出し先の引数のシンボル列
-    const int arg_count = static_cast<int>(expr->children.size());   // 引数の個数
+    const auto &params = this->analysis_.func_params.at(expr->sval);   // 呼び出し先の引数のシンボル列
+    const int arg_count = static_cast<int>(expr->children.size());     // 引数の個数
 
-    // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，
-    // 内側の呼び出しを含む引数があるときに先に書き込むと，内側の呼び出しに上書きされる．
-    // そこで，呼び出しを含む最後の引数までは値をレジスタに残し，書き込みは最後にまとめて行う
+    // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，引数の式が
+    // 関数呼び出しを含む場合(f(1, g())のgのような，引数の中で呼ぶ関数)は，その呼び出しが
+    // 自分の引数を同じ位置へ書いてしまう．そこで，呼び出しを含む最後の引数までは書き込みを
+    // 後回しにし，値をレジスタに残したまま評価する
     int held_count = 0;   // 値をレジスタに残したままにする引数の個数
     for (int i = 0; i < arg_count; i++) {
         if (contains_call(expr->children[i])) held_count = i + 1;
     }
-    // レジスタに残す引数はそれぞれ1本を占め，残りの引数はその上の1本を使い回す
+    // 残す引数はそれぞれ1本のレジスタを占めるため，その分だけ同時に使えるレジスタが必要になる
+    // (残りの引数は，書き込むまで値を保つ必要がないため，その上の1本を使い回す)
     if (reg + std::min(arg_count - 1, held_count) >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at ")
               + loc_to_string(expr->loc);
@@ -1291,12 +1302,17 @@ void Generator::gen_call(node_t *expr, int reg) {
             this->gen_array_base_addr(arg_reg, arg->sym);
         }
         // スカラーを渡す引数の場合 (式を評価する．レジスタに残した引数はその間も保護する)
-        else {
+        else if (params[i]->type.base != BASE_STRUCT && params[i]->type.base != BASE_VOID) {
             std::vector<int> protect_regs;   // 評価中に値を保護するレジスタ
             for (int held = 0; held < i && held < held_count; held++) {
                 protect_regs.push_back(reg + held);
             }
             this->gen_expr_protecting(arg, arg_reg, protect_regs);
+        }
+        // 配列でもスカラーでもない引数の場合 (構造体・voidは引数にできない)
+        else {
+            throw std::string("compiler error: cannot pass '") + params[i]->name
+                  + "' to function '" + expr->sval + "' at " + loc_to_string(arg->loc);
         }
         // 以降に呼び出しが無い引数の場合 (上書きされないため，評価した時点で書き込む)
         if (i >= held_count) {

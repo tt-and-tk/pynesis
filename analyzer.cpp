@@ -119,7 +119,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
         this->next_addr_ += bytes;
         return addr;
     }
-    // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数)を渡された場合
+    // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
     throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
