@@ -131,9 +131,14 @@ int Analyzer::alloc_var(int bytes, location_t location) {
         this->local_size_ += bytes;
         return offset;
     }
-    const int addr = this->next_addr_;   // 確保する領域の絶対番地
-    this->next_addr_ += bytes;
-    return addr;
+    // 絶対番地に置く変数の場合
+    if (location == LOC_GLOBAL) {
+        const int addr = this->next_addr_;   // 確保する領域の絶対番地
+        this->next_addr_ += bytes;
+        return addr;
+    }
+    // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数)を渡された場合
+    throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
 // 1パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する

@@ -14,16 +14,8 @@ const std::string RAX_REGISTER = "r30";
 const std::string SP_REGISTER = "r16";
 
 // 注釈付きASTとシンボルテーブルを受け取り，アセンブリコードを生成するジェネレータ
-//
-// ローカル変数・パラメータ・レジスタの退避先は，呼び出しごとにスタック上へ確保するフレームに置く．
-// フレームは関数の先頭でSPを下げて確保し，復帰の直前に戻す．プロローグ直後のSPを起点とした
-// レイアウトは次のとおりで，パラメータと戻り先は呼び出し元がSPより下へ書き込んだものが，
-// SPを下げた結果としてフレームの一部になる．
-//
-//   SP+0                    : ローカル変数領域 (Lバイト)
-//   SP+L                    : レジスタ退避領域 (Sバイト．r{i}の退避先はSP+L+i*4)
-//   SP+L+S                  : パラメータ領域 (4*nバイト．呼び出し元が書き込む)
-//   SP+L+S+4n (=SP+F)       : 戻り先アドレス (CALLが積む)
+// ローカル変数・引数・レジスタの退避先は，呼び出しごとにスタック上へ確保するフレームに置く
+// (フレームの構成と呼び出し規約は ../specification/compiler.md を参照)
 class Generator {
 public:
     Generator(node_t *root, const std::map<std::string, const symbol_t *> &symbols,
@@ -43,13 +35,12 @@ private:
     const std::map<std::string, std::set<std::string>> &call_graph_;  // 関数名→直接呼び出す関数名の集合
     const int global_size_;                                   // グローバル変数・文字列リテラルが占めるバイト数
     std::ofstream &asm_file_;                                 // 出力先アセンブリファイル
-    std::ostream *out_;                                       // 現在の出力先 (下見の間は捨てる先へ向ける)
-    int local_size_ = 0;       // 生成中の関数のローカル変数領域のバイト数 (L)
-    int spill_size_ = 0;       // 生成中の関数のレジスタ退避領域のバイト数 (S)
-    int param_size_ = 0;       // 生成中の関数のパラメータ領域のバイト数 (4n)
-    int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号 (下見で数え，退避領域の大きさを決める)
-    std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数 (F．スタック使用量の検査に使う)
-    std::map<std::string, int> stack_bytes_;                  // 関数名→その関数を呼び出してから戻るまでのスタック使用量
+    std::ostream *out_;                                       // 現在の出力先 (数えるためだけの生成では捨てる先を指す)
+    int local_size_ = 0;       // 生成中の関数のローカル変数領域のバイト数
+    int spill_size_ = 0;       // 生成中の関数のレジスタ退避領域のバイト数
+    int param_size_ = 0;       // 生成中の関数の引数領域のバイト数
+    int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号
+    std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数
     int label_count_ = 0;                                     // 局所ラベルの連番カウンタ (.L0, .L1, ...)
     // break/continueの飛び先ラベルのスタック (最内が末尾)
     // continueはループのみ，breakはループとswitchの両方が積む
@@ -61,7 +52,9 @@ private:
     void gen_global_inits();         // グローバル変数の初期化 (mainの先頭に出力)
     void gen_func(node_t *func);     // 関数定義 (ラベル + フレームの確保 + 本体)
     void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰
-    void gen_frame_alloc(bool is_release);  // フレームぶんSPを下げる/戻す命令 (フレームが空なら何も出力しない)
+    void gen_frame_enter();          // フレームを確保する命令 (関数の先頭に置く)
+    void gen_frame_leave();          // フレームを解放する命令 (復帰の直前に置く)
+    void gen_sp_shift(const std::string &mnemonic);  // フレームの大きさだけSPを動かす命令 (確保・解放で共用する)
     void gen_block(node_t *block);   // ブロック (中の文を順に生成)
     void gen_stmt(node_t *stmt);     // 文 (種別ごとに振り分け)
     void gen_var_decl(node_t *decl); // 変数宣言 (初期化子があれば代入コードを生成)
@@ -125,21 +118,16 @@ private:
     // AST全体(全関数の本体)を再帰的に走査し，式中に現れる文字列リテラル(匿名グローバル配列)を集める
     // 変数宣言の初期化子として使われた文字列リテラルはsymを持たないため対象外
     void collect_string_literals(node_t *node, std::vector<node_t *> &out);
-    // フレーム上の変数(ローカル変数・パラメータ)の，プロローグ直後のSPから数えたオフセットを返す
-    int frame_offset(const symbol_t *sym) const;
-    int spill_offset(int reg) const;   // r{reg}の退避枠の，プロローグ直後のSPから数えたオフセットを返す
-    // 引数を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
-    // (arg_count個の引数のindex番目．呼び出し先がフレームを確保するとパラメータ領域になる位置)
-    static int arg_offset(int arg_count, int index);
-    // 関数本体を出力を捨てて一度生成し，退避に使う最大のレジスタ番号を数えて退避領域の大きさを決める
-    // (退避するレジスタはフレームの大きさに依存しないため，仮の大きさで生成しても結果は変わらない)
-    int measure_spill_size(node_t *func);
-    // グローバル変数とスタックがメモリ容量に収まるか検査する
-    // (スタック使用量はmainを起点に呼び出しグラフを辿って求める．再帰があると深さが実行時にしか
-    //  決まらないため検査しない)
-    void check_memory_usage();
-    // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す．
-    // path: 現在の探索経路(再帰の検出用)．再帰を見つけた場合はis_recursiveをtrueにする
-    // (どの経路から到達しても使用量は同じになるため，一度求めた値は記録して使い回す)
-    int stack_bytes_dfs(const std::string &func, std::set<std::string> &path, bool &is_recursive);
+    // フレーム上の変数(ローカル変数・引数)の，フレームの基準から数えたオフセットを返す
+    int calc_frame_offset(const symbol_t *sym) const;
+    int calc_spill_offset(int reg) const;   // r{reg}の退避枠の，フレームの基準から数えたオフセットを返す
+    // arg_count個の引数のindex番目を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
+    static int calc_arg_offset(int arg_count, int index);
+    int calc_spill_size(node_t *func);      // 関数が必要とするレジスタ退避領域のバイト数を求める
+    void check_memory_usage();   // グローバル変数とスタックがメモリ容量に収まるか検査する
+    // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
+    // path: 現在の探索経路(再帰の検出用)．recorded: 関数ごとに求めた使用量(再訪時に使い回す)
+    // 再帰を見つけた場合はis_recursiveをtrueにする
+    int calc_stack_bytes(const std::string &func, std::set<std::string> &path,
+                         std::map<std::string, int> &recorded, bool &is_recursive);
 };
