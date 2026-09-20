@@ -1152,16 +1152,17 @@ void Generator::gen_expr(node_t *expr, int reg) {
             for (int i = 0; i < arg_count; i++) {
                 if (contains_call(expr->children[i])) held_count = i + 1;
             }
-            // 保持する引数の個数だけレジスタが同時に必要になる
-            if (held_count > 0 && reg + held_count - 1 >= MAX_REG) {
+            // 保持する引数はそれぞれ別のレジスタを占め，残りの引数はその上の1本を使い回す
+            if (reg + std::min(arg_count - 1, held_count) >= MAX_REG) {
                 throw std::string("compiler error: expression too complex (out of registers) at ")
                       + loc_to_string(expr->loc);
             }
 
             for (int i = 0; i < arg_count; i++) {
                 node_t *arg = expr->children[i];
-                // 保持する引数はそれぞれ別のレジスタへ，書き込む引数は共通のr{reg}へ評価する
-                const int arg_reg = (i < held_count) ? reg + i : reg;   // この引数を評価するレジスタ
+                // 保持する引数はそれぞれ別のレジスタへ，書き込む引数は保持するレジスタの上の1本へ評価する
+                // (保持する引数と同じレジスタを使うと，書き込む前の値を壊してしまう)
+                const int arg_reg = reg + std::min(i, held_count);   // この引数を評価するレジスタ
                 if (params[i]->type.is_array) {
                     // 配列引数: ベースアドレスをロードする
                     this->gen_array_base_addr(arg_reg, arg->sym);

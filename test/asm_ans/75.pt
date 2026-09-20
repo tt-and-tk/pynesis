@@ -1,4 +1,4 @@
-.global sum, main
+.global sum, head, one, main
 
 main:
     mov fh r0 r0 40
@@ -99,6 +99,15 @@ main:
     rm fh r1 r1
     add r0 r1 r0
     wm fh r0 r0 0
+    call one
+    mov fh r30 r0
+    mov fh r0 r1 0
+    add r16 r1 r1
+    wmr fh r16 r1 -8
+    wmr fh r16 r0 -12
+    call head
+    mov fh r30 r0
+    wm fh r0 r0 0
     mov fh r0 r0 40
     add r16 r0 r16
     ret
@@ -137,4 +146,29 @@ sum:
     ret
     mov fh r0 r0 16
     add r16 r0 r16
+    ret
+
+head:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    rmr fh r16 r2 4
+    add r1 r2 r1
+    rm fh r1 r1
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+one:
+    mov fh r0 r0 1
+    mov fh r0 r30
+    ret
     ret
