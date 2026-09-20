@@ -30,5 +30,5 @@ void main(void) {
     strcopy(single.name, msg);  // 単一の構造体変数のメンバ配列 (フレーム内の固定オフセット)
     print(msg);
     g = sum(table, 3) + items[1].v;   // ローカル配列を配列パラメータへ渡す (6 + 3)
-    g = head(one(), table);           // 呼び出しを含む引数の後ろに配列引数が続く (1 + 1)
+    g = head(one(), table);           // 呼び出しを含む引数の後ろに配列引数が続く (1 + table[0] = 2)
 }

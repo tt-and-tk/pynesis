@@ -1,0 +1,87 @@
+.global sum_down, fill, main
+
+main:
+    mov fh r0 r0 3
+    wmr fh r16 r0 -8
+    call fill
+    mov fh r0 r0 0
+    wmr fh r16 r0 -12
+    mov fh r0 r0 3
+    wmr fh r16 r0 -8
+    call sum_down
+    mov fh r30 r0
+    wm fh r0 r0 1024
+    ret
+
+sum_down:
+    mov fh r0 r0 528
+    sub r16 r0 r16
+    rmr fh r16 r0 524
+    mov fh r0 r1 0
+    egt r0 r1 .L0
+    mov fh r0 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 528
+    add r16 r0 r16
+    ret
+.L0:
+    rmr fh r16 r0 524
+    mov fh r0 r1 2
+    sll r0 r1 r0
+    rmr fh r16 r1 520
+    add r0 r1 r0
+    rm fh r0 r0
+    wmr fh r16 r0 512
+    rmr fh r16 r0 512
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    rmr fh r16 r0 512
+    wmr fh r16 r0 516
+    rmr fh r16 r1 520
+    wmr fh r16 r1 -12
+    rmr fh r16 r1 524
+    mov fh r0 r2 1
+    sub r1 r2 r1
+    wmr fh r16 r1 -8
+    call sum_down
+    mov fh r30 r1
+    rmr fh r16 r0 516
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 528
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 528
+    add r16 r0 r16
+    ret
+
+fill:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 0
+    egt r0 r1 .L1
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+.L1:
+    rmr fh r16 r0 0
+    rmr fh r16 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    sub r0 r1 r0
+    wmr fh r16 r0 -8
+    call fill
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret

@@ -1,0 +1,14 @@
+// 生成エラー: 呼び出しを含む引数を保持するレジスタ(16本)が足りない (異常系)
+// 最後に呼び出しを含む引数までを同時に保持するため，引数が多いほどレジスタを使う
+int one(void) {
+    return 1;
+}
+int many(int a1, int a2, int a3, int a4, int a5, int a6, int a7, int a8,
+         int a9, int a10, int a11, int a12, int a13, int a14, int a15, int a16, int a17) {
+    return a1 + a17;
+}
+int g;
+void main(void) {
+    g = many(one(), one(), one(), one(), one(), one(), one(), one(),
+             one(), one(), one(), one(), one(), one(), one(), one(), one());
+}
