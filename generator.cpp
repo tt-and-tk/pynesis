@@ -1062,22 +1062,27 @@ void Generator::gen_sign_extend(int reg, int bits, int work_reg, const loc_t &lo
 // 退避してから評価し，評価後に復元する
 // 退避先は呼び出しごとのフレーム内にあるため，呼び出し先が同じレジスタを退避しても
 // 呼び出し元の退避値は壊れない
+//
+// 手順:
+//   1. 保護するレジスタの値をメモリへ退避する
+//   2. 式を評価する
+//   3. 退避した値をレジスタへ復元する
 void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs) {
     // 関数呼び出しを含まない式はreg以上のレジスタしか使わず保護対象を壊さないため，退避せずに評価する
     if (!contains_call(expr)) {
         this->gen_expr(expr, reg);
         return;
     }
-    // 保護するレジスタの値を，レジスタ番号ごとに決まった退避枠へ書き出す
+    // 1. 保護するレジスタの値を，レジスタ番号ごとに決まった退避枠へ書き出す
     for (const int protect_reg : protect_regs) {
         // 退避枠の大きさを決めるため，退避したレジスタのうち最大の番号を控える
         if (protect_reg > this->max_spill_reg_) this->max_spill_reg_ = protect_reg;
         (*this->out_) << "    wmr fh " << SP_REGISTER << " r" << protect_reg
                       << " " << this->calc_spill_offset(protect_reg) << "\n";
     }
-    // 式を評価する (呼び出し先がレジスタを使い直すため，保護するレジスタの値はここで壊れうる)
+    // 2. 式を評価する (呼び出し先がレジスタを使い直すため，保護するレジスタの値はここで壊れうる)
     this->gen_expr(expr, reg);
-    // 退避枠から値を読み戻し，保護するレジスタを評価前の値に戻す
+    // 3. 退避枠から値を読み戻し，保護するレジスタを評価前の値に戻す
     for (const int protect_reg : protect_regs) {
         (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << protect_reg
                       << " " << this->calc_spill_offset(protect_reg) << "\n";
@@ -1273,25 +1278,34 @@ void Generator::gen_expr(node_t *expr, int reg) {
 // 各引数を評価して呼び出し先の引数領域になる位置へ書き込み，CALLする
 // 評価にr{reg}以降を使うのは，呼び出し元がr{reg}未満のレジスタに置いている生存値
 // (二項演算の左辺等)を壊さないため
+//
+// 手順:
+//   1. 書き込みを後回しにする引数の個数を決める
+//   2. 同時に必要なレジスタが足りるか確かめる
+//   3. 引数を順に評価し，後回しにしないものはその場で書き込む
+//   4. 後回しにした引数を書き込む
+//   5. 呼び出し，戻り値を受け取る
 void Generator::gen_call(node_t *expr, int reg) {
     const auto &params = this->analysis_.func_params.at(expr->sval);   // 呼び出し先の引数のシンボル列
     const int arg_count = static_cast<int>(expr->children.size());     // 引数の個数
 
-    // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，引数の式が
-    // 関数呼び出しを含む場合(f(1, g())のgのような，引数の中で呼ぶ関数)は，その呼び出しが
-    // 自分の引数を同じ位置へ書いてしまう．そこで，呼び出しを含む最後の引数までは書き込みを
-    // 後回しにし，値をレジスタに残したまま評価する
+    // 1. 引数を書き込む位置は現在のSPより下にあり，そこは次に呼ぶ関数の戻り先とフレームが
+    //    占める領域でもある．このため，引数の式が関数呼び出しを含む場合
+    //    (f(1, g(2))のgのような，引数の中で呼ぶ関数)は，その関数の引数やローカル変数が
+    //    書き込み済みの引数に重なって壊す．そこで，呼び出しを含む最後の引数までは
+    //    書き込みを後回しにし，値をレジスタに残したまま評価する
     int held_count = 0;   // 値をレジスタに残したままにする引数の個数
     for (int i = 0; i < arg_count; i++) {
         if (contains_call(expr->children[i])) held_count = i + 1;
     }
-    // 残す引数はそれぞれ1本のレジスタを占めるため，その分だけ同時に使えるレジスタが必要になる
-    // (残りの引数は，書き込むまで値を保つ必要がないため，その上の1本を使い回す)
+    // 2. 残す引数はそれぞれ1本のレジスタを占めるため，その分だけ同時に使えるレジスタが必要になる
+    //    (残りの引数は，書き込むまで値を保つ必要がないため，その上の1本を使い回す)
     if (reg + std::min(arg_count - 1, held_count) >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at ")
               + loc_to_string(expr->loc);
     }
 
+    // 3. 引数を宣言順に評価する
     for (int i = 0; i < arg_count; i++) {
         node_t *arg = expr->children[i];
         // レジスタに残す引数と，その上の1本で評価する引数とで使うレジスタを分ける
@@ -1319,11 +1333,12 @@ void Generator::gen_call(node_t *expr, int reg) {
             this->gen_arg_store(arg_reg, params[i]->type, arg_count, i);
         }
     }
-    // レジスタに残しておいた引数を書き込む (内側の呼び出しがすべて終わっている)
+    // 4. レジスタに残しておいた引数を書き込む (引数の中で呼ぶ関数はすべて戻っている)
     for (int i = 0; i < held_count; i++) {
         this->gen_arg_store(reg + i, params[i]->type, arg_count, i);
     }
 
+    // 5. 呼び出す
     (*this->out_) << "    call " << expr->sval << "\n";
     // 戻り値を返す関数の場合 (RAXに置かれた戻り値を式の結果のレジスタへ取り出す)
     if (expr->type.base != BASE_VOID) {
