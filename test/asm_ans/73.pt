@@ -1,0 +1,50 @@
+.global f11, f10, f9, f8, f7, f6, f5, f4, f3, f2, f1, main
+
+main:
+    call f1
+    ret
+
+f11:
+    mov fh r0 r0 11
+    wm fh r0 r0 0
+    ret
+
+f10:
+    call f11
+    ret
+
+f9:
+    call f10
+    ret
+
+f8:
+    call f9
+    ret
+
+f7:
+    call f8
+    ret
+
+f6:
+    call f7
+    ret
+
+f5:
+    call f6
+    ret
+
+f4:
+    call f5
+    ret
+
+f3:
+    call f4
+    ret
+
+f2:
+    call f3
+    ret
+
+f1:
+    call f2
+    ret

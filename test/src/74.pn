@@ -1,0 +1,15 @@
+// 呼び出しをまたいでレジスタを保護する式が，呼び出し元と呼び出し先の両方にある場合
+// 退避先は呼び出しごとのフレーム内にあるため，呼び出し先の退避が呼び出し元の退避値を壊さない
+int leaf(int n) {
+    return n + 1;
+}
+int inner(int a, int b) {
+    return a + leaf(b);      // 左辺aを退避してからleafを呼ぶ
+}
+int outer(int a, int b) {
+    return a + inner(a, b);  // 呼び出し元でも同じレジスタを退避する
+}
+int g;
+void main(void) {
+    g = outer(10, 20);       // 10 + (10 + 21) = 41
+}

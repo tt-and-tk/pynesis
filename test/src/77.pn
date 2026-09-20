@@ -1,0 +1,30 @@
+// 再帰する関数がローカル変数・ローカル配列・配列パラメータを持つ場合
+// 呼び出しごとに別のフレームへ確保するため，戻った後も自分の値が残っている
+// グローバル変数とフレーム1つ分の合計はメモリ容量に収まるが，再帰の深さは実行時にしか
+// 決まらないため，容量の検査は行われない
+int g[256];                       // 1024バイト
+
+int sum_down(int values[], int index) {
+    int buf[128];                 // 512バイト (フレームを大きくして深さを制限する)
+    int current;                  // ローカル変数(退避・パラメータと同じフレームに同居する)
+    if (index < 0) {
+        return 0;
+    }
+    current = values[index];
+    buf[0] = current;
+    return current + sum_down(values, index - 1);   // 戻った後も自分のcurrentを使う
+}
+
+void fill(int index) {            // 戻り値を持たない再帰
+    if (index < 0) {
+        return;
+    }
+    g[index] = index;
+    fill(index - 1);
+}
+
+int total;
+void main(void) {
+    fill(3);
+    total = sum_down(g, 3);       // 0+1+2+3 = 6
+}

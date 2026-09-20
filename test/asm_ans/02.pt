@@ -1,8 +1,12 @@
 .global main
 
 main:
+    mov fh r0 r0 8
+    sub r16 r0 r16
     mov fh r0 r0 7
     wm fh r0 r0 0
     mov fh r0 r0 5
-    wm fh r0 r0 8
+    wmr fh r16 r0 0
+    mov fh r0 r0 8
+    add r16 r0 r16
     ret

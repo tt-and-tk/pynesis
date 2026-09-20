@@ -1,6 +1,8 @@
 .global main
 
 main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
     mov fh r0 r0 80000000h
     wm fh r0 r0 0
     mov fh r0 r0 -8
@@ -8,7 +10,7 @@ main:
     mov fh r0 r0 255
     wm 1h r0 r0 8
     mov fh r0 r0 10
-    wm fh r0 r0 24
+    wmr fh r16 r0 0
     rm fh r0 r0 0
     mov fh r0 r1 4
     srl r0 r1 r0
@@ -18,27 +20,27 @@ main:
     sra r0 r1 r0
     wm fh r0 r0 12
     rm fh r0 r0 4
-    rm fh r0 r1 24
+    rmr fh r16 r1 0
     sra r0 r1 r0
     wm fh r0 r0 12
     rm fh r0 r0 0
-    rm fh r0 r1 24
+    rmr fh r16 r1 0
     divu r0 r1 r0
     wm fh r0 r0 12
     rm fh r0 r0 4
-    rm fh r0 r1 24
+    rmr fh r16 r1 0
     divu r0 r1 r1 0
     wm fh r0 r0 12
-    rm fh r0 r0 24
+    rmr fh r16 r0 0
     mov fh r0 r1 3
     divu r0 r1 r0
-    wm fh r0 r0 24
+    wmr fh r16 r0 0
     rm fh r0 r0 4
-    rm fh r0 r1 24
+    rmr fh r16 r1 0
     sra r0 r1 r0
     wm fh r0 r0 4
     rm fh r0 r0 4
-    rm fh r0 r1 24
+    rmr fh r16 r1 0
     divu r0 r1 r0
     wm fh r0 r0 4
     mov fh r0 r1 1
@@ -71,4 +73,6 @@ main:
     mov fh r0 r0 1
 .L3:
     wm fh r0 r0 12
+    mov fh r0 r0 4
+    add r16 r0 r16
     ret

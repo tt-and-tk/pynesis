@@ -59,7 +59,7 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
 }
 
 // コンストラクタ: ASTを受け取る
-Analyzer::Analyzer(node_t *root) : root_(root), next_addr_(g_global_base_addr) {}
+Analyzer::Analyzer(node_t *root) : root_(root), next_addr_(g_global_base_addr), local_size_(0) {}
 
 // 意味解析を実行してシンボルテーブルを返す
 std::map<std::string, const symbol_t *> Analyzer::operator()() {
@@ -84,34 +84,43 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
 
-    // 呼び出しグラフを検査する (再帰の検出，最大ネスト段数の超過検出)
-    this->check_call_depth();
-
-    // レジスタ退避領域を，全変数のアドレス割り当て後の空き番地に確保する
-    this->scratch_base_ = this->next_addr_;
-    this->next_addr_ += MAX_REG * 4;
-
-    // 全変数の合計アドレスがアドレス空間(28ビット)を超えていないか確認する
-    if (this->next_addr_ > 0x10000000) {
-        throw std::string("compiler error: total variable memory exceeds address space (28-bit)");
+    // グローバル変数・文字列リテラルだけでメモリを使い切っていないか確認する
+    // (スタックはメモリの上端から下へ伸びるため，残りがなければ関数を1つも呼び出せない．
+    //  スタックまで含めた容量の検査は，フレームの大きさが確定するコード生成で行う)
+    if (this->next_addr_ > RAM_SIZE) {
+        throw std::string("compiler error: global variables (")
+              + std::to_string(this->next_addr_) + " bytes) exceed memory capacity ("
+              + std::to_string(RAM_SIZE) + " bytes)";
     }
 
     return this->symbols_;
 }
 
-// パラメータシンボル表を返す
-const std::map<std::string, std::vector<const symbol_t *>> &Analyzer::func_params() const {
-    return this->func_params_;
+// コード生成が参照する解析結果を返す
+// (グローバル変数は0番地から順に割り当てるため，割り当て後の次の番地がそのまま占有バイト数になる)
+analysis_result_t Analyzer::result() const {
+    return {this->func_params_, this->struct_defs_, this->func_local_sizes_,
+            this->call_graph_, this->next_addr_};
 }
 
-// 構造体定義表を返す
-const std::map<std::string, struct_def_t> &Analyzer::struct_defs() const {
-    return this->struct_defs_;
-}
-
-// レジスタ退避領域の先頭番地を返す
-int Analyzer::scratch_base() const {
-    return this->scratch_base_;
+// 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
+// ローカル変数はスタックフレーム上に確保するため，関数ごとにフレーム内のローカル変数領域の
+// 先頭から数えたオフセットを割り当てる(実際の番地は実行時のSPに応じて決まる)
+int Analyzer::alloc_var(int bytes, location_t location) {
+    // フレーム上に置く変数の場合
+    if (location == LOC_LOCAL) {
+        const int offset = this->local_size_;   // 確保する領域のローカル変数領域内でのオフセット
+        this->local_size_ += bytes;
+        return offset;
+    }
+    // 絶対番地に置く変数の場合
+    if (location == LOC_GLOBAL) {
+        const int addr = this->next_addr_;   // 確保する領域の絶対番地
+        this->next_addr_ += bytes;
+        return addr;
+    }
+    // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
+    throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
 // 1パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する
@@ -286,11 +295,10 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
     this->resolve_decl_type(decl);
     const int element_count = decl->type.is_array ? decl->type.array_size : 1;   // 配列の要素数 (配列でなければ1)
 
-    // 構造体変数(配列なら配列全体)のアドレスを確保し，メンバ構成込みの型情報を持つシンボルを生成する
-    symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->next_addr_, true, true};
-    // 構造体1個分のワード数×要素数ぶん，次に割り当てるアドレスを進める
+    // 構造体1個分のワード数×要素数ぶんの領域を確保し，メンバ構成込みの型情報を持つシンボルを生成する
     // (メンバのメモリレイアウトは../specification/compiler.mdの「構造体」節を参照)
-    this->next_addr_ += this->struct_defs_.at(decl->type.struct_name).total_words * 4 * element_count;
+    const int bytes = this->struct_defs_.at(decl->type.struct_name).total_words * 4 * element_count;   // 確保するバイト数
+    symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->alloc_var(bytes, location), true, true};
     // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
     return sym;
 }
@@ -362,11 +370,11 @@ void Analyzer::collect_globals() {
                 // 配列の要素数を確定させる (先に参照されて解決済みなら何もしない)
                 this->resolve_decl_type(child);
                 // アドレスを割り当てて登録する (確保ワード数は型に応じて計算)
-                symbol_t *sym =
-                    new symbol_t{child->sval, child->type, LOC_GLOBAL, this->next_addr_, true, true};
+                const int bytes = Analyzer::calc_array_words(child->type) * 4;   // 配列が占めるバイト数
+                symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
+                                             this->alloc_var(bytes, LOC_GLOBAL), true, true};
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
-                this->next_addr_ += Analyzer::calc_array_words(child->type) * 4;
             } else {
                 // スカラー変数: 初期化子があればコンパイル時に計算し，リテラルに置き換える(定数畳み込み)
                 if (!child->children.empty()) {
@@ -380,17 +388,16 @@ void Analyzer::collect_globals() {
                     // (ASTは全ノードをdeleteせず，プロセス終了時のOS回収に任せる方針のため)
                     child->children[0] = folded;  // 初期化式の子要素を計算済みのリテラルで更新する
                 }
-                // ソース宣言のグローバル変数はnewでヒープ確保し解放しない
-                symbol_t *sym =
-                    new symbol_t{child->sval, child->type, LOC_GLOBAL, this->next_addr_, true, true};
+                // ソース宣言のグローバル変数はnewでヒープ確保し解放しない (型に関係なく1変数=1ワード(4バイト)使う)
+                symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
+                                             this->alloc_var(4, LOC_GLOBAL), true, true};
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;   // 宣言ノード自身もシンボルを指す (コード生成でアドレス参照に使う)
-                this->next_addr_ += 4;   // 型に関係なく1変数=1ワード(4バイト)使う
             }
         }
         // 関数定義: パラメータのシンボルを登録する (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
         // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
-        // パラメータの番地割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
+        // パラメータのオフセット割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
             std::vector<const symbol_t *> params;
@@ -411,8 +418,9 @@ void Analyzer::collect_globals() {
                           + "' at " + loc_to_string(param->loc);
                 }
 
-                symbol_t *sym = new symbol_t{param->sval, param->type, LOC_LOCAL, this->next_addr_, true, true};
-                this->next_addr_ += 4;
+                // パラメータは配列(先頭番地を保持する)も含め1つにつき1ワードを宣言順に占める
+                symbol_t *sym = new symbol_t{param->sval, param->type, LOC_PARAM,
+                                             static_cast<int>(params.size()) * 4, true, true};
                 param->sym = sym;
                 params.push_back(sym);
             }
@@ -621,6 +629,8 @@ void Analyzer::analyze_functions() {
         this->current_function_ = child->sval;
         this->current_return_type_ = child->type;
         this->call_graph_[child->sval];   // 呼び出し先が無い関数もグラフに登録しておく(空集合)
+        // ローカル変数はこの関数のフレーム内に確保するため，関数ごとにオフセットを0から数え直す
+        this->local_size_ = 0;
 
         // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
@@ -633,45 +643,12 @@ void Analyzer::analyze_functions() {
         // 関数本体ブロック(最後の子)を検査する
         this->analyze_block(child->children.back());
 
+        // 確定したローカル変数領域の大きさを記録する (コード生成がフレームの大きさを決めるのに使う)
+        this->func_local_sizes_[child->sval] = this->local_size_;
+
         // 関数スコープを閉じる
         this->scopes_.pop_back();
     }
-}
-
-// 呼び出しグラフを検査する (再帰の検出，最大ネスト段数MAX_CALL_DEPTHの超過検出)
-// mainを起点に深さ優先探索する(mainはCALLされないため，ネスト段数の起点として数えない)
-void Analyzer::check_call_depth() {
-    std::set<std::string> path;   // 現在の呼び出し経路(再帰検出用)
-    this->check_call_depth_dfs("main", path);
-}
-
-// funcから辿れる呼び出し経路を深さ優先探索し，再帰とネスト段数超過を検査する
-// pathには現在の探索経路上にある関数名が入っている(再帰=pathに既にある関数への到達で検出する)
-// 戻り値: funcを起点とした場合の最大ネスト段数(func自身は含まず，呼び出し先の段数のみ)
-int Analyzer::check_call_depth_dfs(const std::string &func, std::set<std::string> &path) {
-    // 現在の経路に既にfuncがあれば，直接・間接を問わず再帰(循環)
-    if (path.count(func)) {
-        throw std::string("compiler error: recursive function call detected involving '") + func + "'";
-    }
-
-    path.insert(func);   // 経路にfuncを追加してから子を探索する
-
-    int max_depth = 0;   // funcの呼び出し先の中で最も深いネスト段数
-    for (const std::string &callee : this->call_graph_[func]) {
-        const int callee_depth = this->check_call_depth_dfs(callee, path);
-        if (callee_depth + 1 > max_depth) {
-            max_depth = callee_depth + 1;
-        }
-    }
-
-    path.erase(func);   // 探索し終えたので経路から外す(他の兄弟経路と共有しないため)
-
-    if (max_depth > MAX_CALL_DEPTH) {
-        throw std::string("compiler error: function call nesting exceeds maximum depth (")
-              + std::to_string(MAX_CALL_DEPTH) + ") at '" + func + "'";
-    }
-
-    return max_depth;
 }
 
 // ブロックを検査する (新しいローカルスコープを積み，抜けるときに捨てる)
@@ -839,9 +816,10 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     } else if (decl->type.is_array) {
         // 配列の要素数を確定させる (文字列リテラルの長さ，または定数式)
         this->resolve_decl_type(decl);
-        // アドレスを割り当てて登録する
-        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL, this->next_addr_, true, true};
-        this->next_addr_ += Analyzer::calc_array_words(decl->type) * 4;
+        // フレーム内のオフセットを割り当てて登録する
+        const int bytes = Analyzer::calc_array_words(decl->type) * 4;   // 配列が占めるバイト数
+        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL,
+                                     this->alloc_var(bytes, LOC_LOCAL), true, true};
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
     } else {
@@ -854,9 +832,9 @@ void Analyzer::analyze_local_decl(node_t *decl) {
                       + loc_to_string(decl->loc);
             }
         }
-        // メモリ番地を割り当てて登録する (ローカルも静的割り当てで固定番地)
-        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL, this->next_addr_, true, true};
-        this->next_addr_ += 4;
+        // フレーム内のオフセットを割り当てて登録する (型に関係なく1変数=1ワード(4バイト)使う)
+        symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL,
+                                     this->alloc_var(4, LOC_LOCAL), true, true};
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;   // 宣言ノード自身もシンボルを指す
     }
@@ -916,8 +894,9 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_STRING_LIT: {
             // サイズは文字列長 + 1(ヌル終端)
             type_t str_type = {BASE_CHAR, true, true, static_cast<int>(expr->sval.size()) + 1};
-            symbol_t *sym = new symbol_t{"", str_type, LOC_GLOBAL, this->next_addr_, true, false};
-            this->next_addr_ += Analyzer::calc_array_words(str_type) * 4;
+            const int bytes = Analyzer::calc_array_words(str_type) * 4;   // 文字列が占めるバイト数
+            symbol_t *sym = new symbol_t{"", str_type, LOC_GLOBAL,
+                                         this->alloc_var(bytes, LOC_GLOBAL), true, false};
             expr->sym = sym;
             expr->type = str_type;
             return;
@@ -1161,7 +1140,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: call to undefined function '")
                       + expr->sval + "' at " + loc_to_string(expr->loc);
             }
-            // 呼び出しグラフに記録する (再帰・ネスト段数の検査用)
+            // 呼び出しグラフに記録する (スタック使用量の見積もり用)
             this->call_graph_[this->current_function_].insert(expr->sval);
             // 引数の数がパラメータの数と一致するか検証する
             const auto &params = this->func_params_[expr->sval];

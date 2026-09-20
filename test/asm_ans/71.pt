@@ -1,0 +1,96 @@
+.global fact, is_even, is_odd, main
+
+main:
+    mov fh r0 r0 5
+    wmr fh r16 r0 -8
+    call fact
+    mov fh r30 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 4
+    wmr fh r16 r0 -8
+    call is_even
+    mov fh r30 r0
+    wm fh r0 r0 0
+    ret
+
+fact:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 4
+    mov fh r0 r1 1
+    gt r0 r1 .L0
+    mov fh r0 r0 1
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+.L0:
+    rmr fh r16 r0 4
+    wmr fh r16 r0 0
+    rmr fh r16 r1 4
+    mov fh r0 r2 1
+    sub r1 r2 r1
+    wmr fh r16 r1 -8
+    call fact
+    mov fh r30 r1
+    rmr fh r16 r0 0
+    mul r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+is_even:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 0
+    ne r0 r1 .L1
+    mov fh r0 r0 1
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+.L1:
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    sub r0 r1 r0
+    wmr fh r16 r0 -8
+    call is_odd
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+is_odd:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 0
+    ne r0 r1 .L2
+    mov fh r0 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+.L2:
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    sub r0 r1 r0
+    wmr fh r16 r0 -8
+    call is_even
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret

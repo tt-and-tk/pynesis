@@ -1,0 +1,64 @@
+.global two, pick, main
+
+main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 10
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 97
+    wmr fh r16 r0 0
+    call two
+    mov fh r30 r1
+    rmr fh r16 r0 0
+    mov fh r0 r2 0
+    wmr fh r16 r2 -12
+    mov fh r0 r2 3
+    wmr 3h r16 r2 -8
+    wmr 1h r16 r0 -20
+    wmr fh r16 r1 -16
+    call pick
+    mov fh r30 r0
+    wm fh r0 r0 8
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+two:
+    mov fh r0 r0 2
+    mov fh r0 r30
+    ret
+    ret
+
+pick:
+    mov fh r0 r0 16
+    sub r16 r0 r16
+    rmr 1h r16 r0 0
+    mov fh r0 r1 24
+    sll r0 r1 r0
+    sra r0 r1 r0
+    rmr fh r16 r1 4
+    add r0 r1 r0
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    rmr fh r16 r2 8
+    add r1 r2 r1
+    rm fh r1 r1
+    add r0 r1 r0
+    rmr 3h r16 r1 12
+    mov fh r0 r2 16
+    sll r1 r2 r1
+    sra r1 r2 r1
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 16
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 16
+    add r16 r0 r16
+    ret

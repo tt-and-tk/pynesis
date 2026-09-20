@@ -1,0 +1,14 @@
+// 3つ以上の引数のうち途中だけが関数呼び出しを含む場合と，型の異なる引数が混ざる場合
+// 呼び出しを含む引数までをレジスタに保持し，それより後ろの引数は評価のたびに書き込む
+int two(void) {
+    return 2;
+}
+int pick(char c, int n, int values[], short s) {
+    return c + n + values[0] + s;
+}
+int table[2];
+int g;
+void main(void) {
+    table[0] = 10;
+    g = pick('a', two(), table, 3);   // 'a'(97)と two() を保持し，配列と3は直接書き込む (97+2+10+3)
+}

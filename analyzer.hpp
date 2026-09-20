@@ -6,8 +6,10 @@
 
 #include "parser.hpp"
 
-// ハードウェア制約: 関数呼び出しネストの最大段数 (戻り先レジスタ6'h11〜6'h1aの10本による)
-const int MAX_CALL_DEPTH = 10;
+// ハードウェア制約: メインメモリの容量(バイト)
+// (グローバル変数を下位番地から，スタックを上端から確保するため，両者の合計がこの値に収まる必要がある．
+//  詳細は ../specification/memory.md を参照)
+const int RAM_SIZE = 4096;
 // ソフトウェア側の安全上限: プログラムの最大命令数
 // (ROM自体に固定容量は無く，ROM_SIZEはコンパイル対象プログラムのサイズに応じてアセンブラが自動算出する．
 //  現行のROM読み出し回路は組合せ論理でLUT資源を消費するため，その範囲で安全に収まる値として設定．
@@ -33,7 +35,8 @@ struct const_value_t {
 typedef enum {
     LOC_REGISTER,   // レジスタ直結 (LED等のハードウェア変数)
     LOC_GLOBAL,     // メモリ上の絶対番地 (グローバル変数)
-    LOC_LOCAL,      // 関数ローカルなメモリ領域 (現状は静的割り当ての固定番地，将来は相対アドレス)
+    LOC_LOCAL,      // スタックフレームのローカル変数領域 (addressはその領域の先頭からのバイトオフセット)
+    LOC_PARAM,      // スタックフレームの引数領域 (addressはその領域の先頭からのバイトオフセット)
     LOC_CONST,      // 置き場所を持たないコンパイル時定数 (const変数．参照箇所へ値を直接埋め込む)
 } location_t;
 
@@ -42,7 +45,7 @@ struct symbol_t {
     std::string name;       // 変数名
     type_t type;            // 型情報
     location_t location;    // 置き場所の種別
-    int address;            // レジスタ番地 / メモリ絶対番地 / SPオフセット / 定数値の32ビットのビット列 (locationに応じて解釈)
+    int address;            // レジスタ番地 / メモリ絶対番地 / フレーム内オフセット / 定数値の32ビットのビット列 (locationに応じて解釈)
     bool readable;          // 読み込み可能かどうか (falseの参照はコンパイルエラー)
     bool writable;          // 書き込み可能かどうか (falseへの代入はコンパイルエラー)
 };
@@ -60,39 +63,49 @@ struct struct_def_t {
     int total_words;                       // 構造体全体が占めるワード数
 };
 
+// 意味解析の結果 (コード生成が参照する情報をまとめたもの．各表はアナライザが保持する実体を指す)
+struct analysis_result_t {
+    // 関数名→引数のシンボル列 (コード生成で引数の書き込み先の位置に使う)
+    const std::map<std::string, std::vector<const symbol_t *>> &func_params;
+    // 構造体名→メンバ構成 (コード生成が，構造体配列の要素1個分が占めるバイト数を計算するのに使う．
+    //  構造体配列は，このバイト数×添字ぶんだけ先頭からずらして各要素の位置を求める)
+    const std::map<std::string, struct_def_t> &struct_defs;
+    // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
+    const std::map<std::string, int> &func_local_sizes;
+    // 関数名→直接呼び出す関数名の集合 (コード生成が最大スタック使用量を求めるのに使う)
+    const std::map<std::string, std::set<std::string>> &call_graph;
+    int global_size;   // グローバル変数・文字列リテラルが占めるバイト数
+};
+
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
     explicit Analyzer(node_t *root);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
-    // パラメータシンボル表 (関数名→パラメータのシンボル列．コード生成で引数の書き込み先アドレスに使う)
-    const std::map<std::string, std::vector<const symbol_t *>> &func_params() const;
-    // 構造体定義表(struct_defs_)を返す単純なゲッター．
-    // コード生成が，構造体配列の要素1個分が占めるバイト数(配列上で要素を飛び越す間隔)を
-    // 計算するのに使う(構造体配列は，このバイト数×添字ぶんだけ先頭番地からずらして各要素の番地を求める)
-    const std::map<std::string, struct_def_t> &struct_defs() const;
-    // 呼び出しをまたいで生かしたいレジスタ値の退避領域の先頭番地
-    // (呼び出された関数はr0から使い直すため，レジスタは呼び出しをまたいで保持されない．
-    //  全変数のアドレス割り当てが終わった直後の空き番地から，MAX_REG個分の退避枠を確保している)
-    int scratch_base() const;
+    analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST
+
+    // 解析の成果物 (result()でコード生成へ渡す)
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
-    std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
-    std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→パラメータのシンボル列
+    std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→引数のシンボル列
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
+    std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
+    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合
+    int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地 (割り当て後はグローバル領域のバイト数)
+
+    // 解析の途中で使う情報
+    std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
-    int next_addr_;                                      // 次に割り当てるメモリ番地 (グローバル→ローカルで連番)
-    int scratch_base_;                                    // レジスタ退避領域の先頭番地 (全変数のアドレス割り当て後に確保)
+    int local_size_;                                     // 現在解析中の関数のローカル変数領域に確保済みのバイト数
     std::vector<std::map<std::string, const symbol_t *>> scopes_;  // ローカル変数のスコープスタック (内側ほど後ろ)
     int loop_depth_ = 0;                                 // ループの入れ子の深さ (break/continueの検査用)
     int switch_depth_ = 0;                               // switchの入れ子の深さ (breakの検査用)
     std::string current_function_;                       // 現在解析中の関数名 (呼び出しグラフ構築用)
     type_t current_return_type_;                         // 現在解析中の関数の戻り値型 (return文の整合性検査用)
-    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合 (ネスト段数検査用)
 
     // 解析メソッド
     void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査
@@ -136,9 +149,7 @@ private:
     // 演算の対象がスカラーであることを検査する (operationはエラーメッセージ用の演算名)
     static void check_scalar_operand(const node_t *target, const std::string &operation);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
-    // 呼び出しグラフを検査する (再帰の検出，最大ネスト段数MAX_CALL_DEPTHの超過検出)
-    void check_call_depth();
-    // mainから呼び出しグラフを深さ優先探索し，再帰(既に経路上にある関数への到達)とネスト段数を検査する
-    // path: 現在の呼び出し経路(再帰検出用)．depthは戻り値(mainからのネスト段数の最大値)
-    int check_call_depth_dfs(const std::string &func, std::set<std::string> &path);
+    // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
+    // (グローバルは0番地から上へ，ローカルは関数ごとにフレーム内のローカル変数領域の先頭から確保する)
+    int alloc_var(int bytes, location_t location);
 };

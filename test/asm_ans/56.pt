@@ -1,6 +1,8 @@
 .global main
 
 main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
     mov fh r0 r0 FFFFFFFFh
     wm fh r0 r0 0
     rm fh r0 r0 0
@@ -10,22 +12,22 @@ main:
     wm fh r0 r0 4
 .L0:
     mov fh r0 r0 0
-    wm fh r0 r0 8
+    wmr fh r16 r0 0
 .L1:
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 3
     gtu r0 r1 .L3
     mov fh r0 r0 2
     wm fh r0 r0 4
 .L2:
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 1
     add r0 r1 r1
-    wm fh r0 r1 8
+    wmr fh r16 r1 0
     jmp .L1
 .L3:
 .L4:
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     rm fh r0 r1 0
     ltu r0 r1 .L5
     mov fh r0 r0 3
@@ -33,12 +35,12 @@ main:
     jmp .L4
 .L5:
 .L6:
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 1
     sub r0 r1 r1
-    wm fh r0 r1 8
+    wmr fh r16 r1 0
 .L7:
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 0
     ne r0 r1 .L11
     mov fh r0 r0 0
@@ -48,7 +50,7 @@ main:
 .L12:
     mov fh r0 r1 0
     eq r0 r1 .L9
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 5
     ltu r0 r1 .L13
     mov fh r0 r0 0
@@ -82,7 +84,7 @@ main:
     mov fh r0 r0 1
 .L16:
     wm fh r0 r0 4
-    rm fh r0 r0 8
+    rmr fh r16 r0 0
     mov fh r0 r1 0
     sub r1 r0 r0
     mov fh r0 r1 0
@@ -93,4 +95,6 @@ main:
     mov fh r0 r0 1
 .L20:
     wm fh r0 r0 4
+    mov fh r0 r0 4
+    add r16 r0 r16
     ret

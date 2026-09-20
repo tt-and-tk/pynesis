@@ -1,0 +1,25 @@
+// 再帰呼び出し (直接の再帰・相互再帰)
+// 呼び出しごとにフレームを確保するため，深い呼び出しでもパラメータ・ローカル変数が保たれる
+int fact(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fact(n - 1);        // 直接の再帰 (戻った後も自分のnを使う)
+}
+int is_even(int n) {
+    if (n == 0) {
+        return 1;
+    }
+    return is_odd(n - 1);          // 相互再帰
+}
+int is_odd(int n) {
+    if (n == 0) {
+        return 0;
+    }
+    return is_even(n - 1);
+}
+int g;
+void main(void) {
+    g = fact(5);                   // 120
+    g = is_even(4);                // 1
+}
