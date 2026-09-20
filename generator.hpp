@@ -18,22 +18,12 @@ const std::string SP_REGISTER = "r16";
 // (フレームの構成と呼び出し規約は ../specification/compiler.md を参照)
 class Generator {
 public:
-    Generator(node_t *root, const std::map<std::string, const symbol_t *> &symbols,
-              const std::map<std::string, std::vector<const symbol_t *>> &func_params,
-              const std::map<std::string, struct_def_t> &struct_defs,
-              const std::map<std::string, int> &func_local_sizes,
-              const std::map<std::string, std::set<std::string>> &call_graph,
-              int global_size, std::ofstream &asm_file);
+    Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file);
     void operator()();   // コード生成を実行して .pt に書き出す
 
 private:
     node_t *root_;                                            // 注釈付きAST
-    const std::map<std::string, const symbol_t *> &symbols_;  // シンボルテーブル (変数名→番地)
-    const std::map<std::string, std::vector<const symbol_t *>> &func_params_;  // 関数名→パラメータのシンボル列
-    const std::map<std::string, struct_def_t> &struct_defs_;  // 構造体名→メンバ構成 (構造体配列の要素間隔計算に使う)
-    const std::map<std::string, int> &func_local_sizes_;      // 関数名→ローカル変数領域のバイト数
-    const std::map<std::string, std::set<std::string>> &call_graph_;  // 関数名→直接呼び出す関数名の集合
-    const int global_size_;                                   // グローバル変数・文字列リテラルが占めるバイト数
+    const analysis_result_t analysis_;                        // 意味解析の結果
     std::ofstream &asm_file_;                                 // 出力先アセンブリファイル
     std::ostream *out_;                                       // 現在の出力先 (数えるためだけの生成では捨てる先を指す)
     int local_size_ = 0;       // 生成中の関数のローカル変数領域のバイト数
@@ -64,6 +54,9 @@ private:
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
+    void gen_call(node_t *expr, int reg);  // 関数呼び出し (引数の評価・受け渡しとCALL)
+    // r{reg}の値を，arg_count個の引数のindex番目を渡す位置へ書き込む
+    void gen_arg_store(int reg, const type_t &type, int arg_count, int index);
     // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
     void gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs);
     // r{dst}=r{lhs} op r{rhs}を出力 (is_signedは符号付きで演算するか)
@@ -121,6 +114,7 @@ private:
     // フレーム上の変数(ローカル変数・引数)の，フレームの基準から数えたオフセットを返す
     int calc_frame_offset(const symbol_t *sym) const;
     int calc_spill_offset(int reg) const;   // r{reg}の退避枠の，フレームの基準から数えたオフセットを返す
+    int calc_frame_size() const;            // 生成中の関数のフレームのバイト数を返す
     // arg_count個の引数のindex番目を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
     static int calc_arg_offset(int arg_count, int index);
     int calc_spill_size(node_t *func);      // 関数が必要とするレジスタ退避領域のバイト数を求める

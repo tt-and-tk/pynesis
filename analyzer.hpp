@@ -36,7 +36,7 @@ typedef enum {
     LOC_REGISTER,   // レジスタ直結 (LED等のハードウェア変数)
     LOC_GLOBAL,     // メモリ上の絶対番地 (グローバル変数)
     LOC_LOCAL,      // スタックフレームのローカル変数領域 (addressはその領域の先頭からのバイトオフセット)
-    LOC_PARAM,      // スタックフレームのパラメータ領域 (addressはその領域の先頭からのバイトオフセット)
+    LOC_PARAM,      // スタックフレームの引数領域 (addressはその領域の先頭からのバイトオフセット)
     LOC_CONST,      // 置き場所を持たないコンパイル時定数 (const変数．参照箇所へ値を直接埋め込む)
 } location_t;
 
@@ -63,22 +63,26 @@ struct struct_def_t {
     int total_words;                       // 構造体全体が占めるワード数
 };
 
+// 意味解析の結果 (コード生成が参照する情報をまとめたもの．各表はアナライザが保持する実体を指す)
+struct analysis_result_t {
+    // 関数名→引数のシンボル列 (コード生成で引数の書き込み先の位置に使う)
+    const std::map<std::string, std::vector<const symbol_t *>> &func_params;
+    // 構造体名→メンバ構成 (コード生成が，構造体配列の要素1個分が占めるバイト数を計算するのに使う．
+    //  構造体配列は，このバイト数×添字ぶんだけ先頭からずらして各要素の位置を求める)
+    const std::map<std::string, struct_def_t> &struct_defs;
+    // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
+    const std::map<std::string, int> &func_local_sizes;
+    // 関数名→直接呼び出す関数名の集合 (コード生成が最大スタック使用量を求めるのに使う)
+    const std::map<std::string, std::set<std::string>> &call_graph;
+    int global_size;   // グローバル変数・文字列リテラルが占めるバイト数
+};
+
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
     explicit Analyzer(node_t *root);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
-    // パラメータシンボル表 (関数名→パラメータのシンボル列．コード生成で引数の書き込み先アドレスに使う)
-    const std::map<std::string, std::vector<const symbol_t *>> &func_params() const;
-    // 構造体定義表(struct_defs_)を返す単純なゲッター．
-    // コード生成が，構造体配列の要素1個分が占めるバイト数(配列上で要素を飛び越す間隔)を
-    // 計算するのに使う(構造体配列は，このバイト数×添字ぶんだけ先頭番地からずらして各要素の番地を求める)
-    const std::map<std::string, struct_def_t> &struct_defs() const;
-    // 関数名→ローカル変数領域のバイト数の対応表 (コード生成がスタックフレームの大きさを決めるのに使う)
-    const std::map<std::string, int> &func_local_sizes() const;
-    // 関数名→直接呼び出す関数名の集合 (コード生成が最大スタック使用量を求めるのに使う)
-    const std::map<std::string, std::set<std::string>> &call_graph() const;
-    int global_size() const;   // グローバル変数・文字列リテラルが占めるバイト数
+    analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST

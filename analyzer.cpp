@@ -96,29 +96,11 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     return this->symbols_;
 }
 
-// パラメータシンボル表を返す
-const std::map<std::string, std::vector<const symbol_t *>> &Analyzer::func_params() const {
-    return this->func_params_;
-}
-
-// 構造体定義表を返す
-const std::map<std::string, struct_def_t> &Analyzer::struct_defs() const {
-    return this->struct_defs_;
-}
-
-// 関数ごとのローカル変数領域のバイト数を返す
-const std::map<std::string, int> &Analyzer::func_local_sizes() const {
-    return this->func_local_sizes_;
-}
-
-// 呼び出しグラフを返す
-const std::map<std::string, std::set<std::string>> &Analyzer::call_graph() const {
-    return this->call_graph_;
-}
-
-// グローバル変数・文字列リテラルが占めるバイト数を返す
-int Analyzer::global_size() const {
-    return this->next_addr_;
+// コード生成が参照する解析結果を返す
+// (グローバル変数は0番地から順に割り当てるため，割り当て後の次の番地がそのまま占有バイト数になる)
+analysis_result_t Analyzer::result() const {
+    return {this->func_params_, this->struct_defs_, this->func_local_sizes_,
+            this->call_graph_, this->next_addr_};
 }
 
 // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す

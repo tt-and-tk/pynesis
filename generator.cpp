@@ -85,17 +85,9 @@ static bool has_runtime_addr(const node_t *target) {
         || (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS);
 }
 
-// コンストラクタ: AST・シンボルテーブル・パラメータシンボル表・構造体定義表・
-// 関数ごとのローカル変数領域の大きさ・呼び出しグラフ・グローバル領域の大きさ・出力先を受け取る
-Generator::Generator(node_t *root, const std::map<std::string, const symbol_t *> &symbols,
-                     const std::map<std::string, std::vector<const symbol_t *>> &func_params,
-                     const std::map<std::string, struct_def_t> &struct_defs,
-                     const std::map<std::string, int> &func_local_sizes,
-                     const std::map<std::string, std::set<std::string>> &call_graph,
-                     int global_size, std::ofstream &asm_file)
-    : root_(root), symbols_(symbols), func_params_(func_params), struct_defs_(struct_defs),
-      func_local_sizes_(func_local_sizes), call_graph_(call_graph), global_size_(global_size),
-      asm_file_(asm_file), out_(&asm_file) {}
+// コンストラクタ: AST・意味解析の結果・出力先を受け取る
+Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file)
+    : root_(root), analysis_(analysis), asm_file_(asm_file), out_(&asm_file) {}
 
 // コード生成を実行して .pt に書き出す
 void Generator::operator()() {
@@ -174,15 +166,26 @@ void Generator::collect_string_literals(node_t *node, std::vector<node_t *> &out
 // 関数定義を生成する
 void Generator::gen_func(node_t *func) {
     // この関数のフレームの各領域の大きさを求める
-    this->local_size_ = this->func_local_sizes_.at(func->sval);
-    this->param_size_ = static_cast<int>(this->func_params_.at(func->sval).size()) * 4;
+    this->local_size_ = this->analysis_.func_local_sizes.at(func->sval);
+    this->param_size_ = static_cast<int>(this->analysis_.func_params.at(func->sval).size()) * 4;
     this->spill_size_ = this->calc_spill_size(func);
-    this->func_frame_sizes_[func->sval] = this->local_size_ + this->spill_size_ + this->param_size_;
+    this->func_frame_sizes_[func->sval] = this->calc_frame_size();
 
     // 関数ラベルを出力し，フレームを確保してから本体を生成する
     (*this->out_) << func->sval << ":\n";
+    this->max_spill_reg_ = -1;
     this->gen_frame_enter();
     this->gen_func_body(func);
+
+    // 確保した退避領域で足りていたことを確かめる (足りなければ他の変数を壊した出力になっている)
+    if ((this->max_spill_reg_ + 1) * 4 > this->spill_size_) {
+        throw std::string("compiler error: register spill area is too small in '") + func->sval + "'";
+    }
+}
+
+// 生成中の関数のフレームのバイト数を返す
+int Generator::calc_frame_size() const {
+    return this->local_size_ + this->spill_size_ + this->param_size_;
 }
 
 // 関数が必要とするレジスタ退避領域のバイト数を求める
@@ -236,7 +239,7 @@ void Generator::gen_frame_leave() {
 // (作業用のr0が使えるのは，フレームを動かすのが関数の開始直後と復帰の直前に限られ，
 //  どちらもr0が値を保持していないため)
 void Generator::gen_sp_shift(const std::string &mnemonic) {
-    const int frame_size = this->local_size_ + this->spill_size_ + this->param_size_;   // フレームのバイト数
+    const int frame_size = this->calc_frame_size();   // フレームのバイト数
     // 引数もローカル変数もレジスタの退避も持たない関数の場合 (動かす領域がないため，これ以上何もしない)
     if (frame_size == 0) return;
 
@@ -936,7 +939,7 @@ static const char *access_mask(const type_t &type) {
 
 // フレーム上の変数の，フレームの基準(SP)から数えたオフセットを返す
 int Generator::calc_frame_offset(const symbol_t *sym) const {
-    // パラメータはローカル変数領域とレジスタ退避領域の後ろに続く
+    // 引数はローカル変数領域とレジスタ退避領域の後ろに続く
     if (sym->location == LOC_PARAM) {
         return this->local_size_ + this->spill_size_ + sym->address;
     }
@@ -1014,37 +1017,18 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
 // gen_loadのメモリ変数分岐と同じマスク・符号拡張(符号付きのみ)の手順を，即値アドレスではなくレジスタが持つ実行時アドレスに適用する．
 // 符号拡張の作業用レジスタは呼び出し側が指定する(読み込み後も値を保持したいレジスタを避けられるようにするため)
 void Generator::gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc) {
-    switch (type.base) {
-        // char: 下位1バイトを読み込み，符号付きなら8ビット値として符号拡張する
-        case BASE_CHAR:
-            (*this->out_) << "    rm 1h r" << reg << " r" << reg << "\n";
-            if (type.is_signed) this->gen_sign_extend(reg, 8, work_reg, loc);
-            break;
-        // short: 下位2バイトを読み込み，符号付きなら16ビット値として符号拡張する
-        case BASE_SHORT:
-            (*this->out_) << "    rm 3h r" << reg << " r" << reg << "\n";
-            if (type.is_signed) this->gen_sign_extend(reg, 16, work_reg, loc);
-            break;
-        // int: 4バイトすべてを読み込む (符号拡張は不要)
-        case BASE_INT:
-            (*this->out_) << "    rm fh r" << reg << " r" << reg << "\n";
-            break;
-        default:
-            throw std::string("compiler error: unsupported scalar type in gen_load_indirect");
+    // 型の幅のバイトだけを読み込む
+    (*this->out_) << "    rm " << access_mask(type) << " r" << reg << " r" << reg << "\n";
+    // 符号付きchar/shortの場合 (レジスタ上の値は常にintとして扱うため，上位を符号ビットで埋める)
+    if (type.is_signed) {
+        if (type.base == BASE_CHAR)  this->gen_sign_extend(reg, 8, work_reg, loc);
+        if (type.base == BASE_SHORT) this->gen_sign_extend(reg, 16, work_reg, loc);
     }
 }
 
 // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
 void Generator::gen_store_indirect(int addr_reg, int val_reg, const type_t &type) {
-    const char *mask;
-    switch (type.base) {
-        case BASE_CHAR:  mask = "1h"; break;
-        case BASE_SHORT: mask = "3h"; break;
-        case BASE_INT:   mask = "fh"; break;
-        default:
-            throw std::string("compiler error: unsupported scalar type in gen_store_indirect");
-    }
-    (*this->out_) << "    wm " << mask << " r" << addr_reg << " r" << val_reg << "\n";
+    (*this->out_) << "    wm " << access_mask(type) << " r" << addr_reg << " r" << val_reg << "\n";
 }
 
 // r{reg}の下位bitsビットを符号として32ビットへ符号拡張する(シフト量の保持にr{work_reg}を使う)
@@ -1172,62 +1156,10 @@ void Generator::gen_expr(node_t *expr, int reg) {
             this->gen_incdec(expr, reg, false);       // 後置
             break;
 
-        // 関数呼び出し: 各引数を評価して呼び出し先の引数領域になる位置へ書き込み，CALLする
-        // (書き込む位置は ../specification/compiler.md の呼び出し規約を参照)
-        // 評価にr{reg}以降を使うのは，呼び出し元がr{reg}未満のレジスタに置いている生存値
-        // (二項演算の左辺等)を壊さないため
-        case ND_CALL: {
-            const auto &params = this->func_params_.at(expr->sval);
-            const int arg_count = static_cast<int>(expr->children.size());   // 引数の個数
-            // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，
-            // 内側の呼び出しを含む引数があるときに先に書き込むと，内側の呼び出しに上書きされる．
-            // そこで，呼び出しを含む最後の引数までは値をレジスタに残し，書き込みは最後にまとめて行う
-            int held_count = 0;   // 値をレジスタに残したままにする引数の個数
-            for (int i = 0; i < arg_count; i++) {
-                if (contains_call(expr->children[i])) held_count = i + 1;
-            }
-            // レジスタに残す引数はそれぞれ1本を占め，残りの引数はその上の1本を使い回す
-            if (reg + std::min(arg_count - 1, held_count) >= MAX_REG) {
-                throw std::string("compiler error: expression too complex (out of registers) at ")
-                      + loc_to_string(expr->loc);
-            }
-
-            for (int i = 0; i < arg_count; i++) {
-                node_t *arg = expr->children[i];
-                // レジスタに残す引数と，その上の1本で評価する引数とで使うレジスタを分ける
-                // (同じレジスタを使うと，書き込む前の引数の値を壊してしまう)
-                const int arg_reg = reg + std::min(i, held_count);   // この引数を評価するレジスタ
-                // 配列を渡す引数の場合 (値ではなく配列の先頭番地を渡す)
-                if (params[i]->type.is_array) {
-                    this->gen_array_base_addr(arg_reg, arg->sym);
-                }
-                // スカラーを渡す引数の場合 (式を評価する．レジスタに残した引数はその間も保護する)
-                else {
-                    std::vector<int> protect_regs;   // 評価中に値を保護するレジスタ
-                    for (int held = 0; held < i && held < held_count; held++) {
-                        protect_regs.push_back(reg + held);
-                    }
-                    this->gen_expr_protecting(arg, arg_reg, protect_regs);
-                }
-                // 以降に呼び出しが無い引数の場合 (上書きされないため，評価した時点で書き込む)
-                if (i >= held_count) {
-                    (*this->out_) << "    wmr " << access_mask(params[i]->type) << " " << SP_REGISTER
-                                  << " r" << arg_reg << " " << Generator::calc_arg_offset(arg_count, i) << "\n";
-                }
-            }
-            // レジスタに残しておいた引数を書き込む (内側の呼び出しがすべて終わっている)
-            for (int i = 0; i < held_count; i++) {
-                (*this->out_) << "    wmr " << access_mask(params[i]->type) << " " << SP_REGISTER
-                              << " r" << (reg + i) << " " << Generator::calc_arg_offset(arg_count, i) << "\n";
-            }
-
-            (*this->out_) << "    call " << expr->sval << "\n";
-            // 非void関数はRAX(r30)から戻り値を取り出す
-            if (expr->type.base != BASE_VOID) {
-                (*this->out_) << "    mov fh " << RAX_REGISTER << " r" << reg << "\n";
-            }
+        // 関数呼び出し
+        case ND_CALL:
+            this->gen_call(expr, reg);
             break;
-        }
 
         // 組み込み関数print: char配列をヌル終端まで1文字ずつ出力するループを生成する
         case ND_PRINT:
@@ -1327,10 +1259,72 @@ void Generator::gen_expr(node_t *expr, int reg) {
     }
 }
 
+// 関数呼び出しを生成する
+// 各引数を評価して呼び出し先の引数領域になる位置へ書き込み，CALLする
+// (書き込む位置は ../specification/compiler.md の呼び出し規約を参照)
+// 評価にr{reg}以降を使うのは，呼び出し元がr{reg}未満のレジスタに置いている生存値
+// (二項演算の左辺等)を壊さないため
+void Generator::gen_call(node_t *expr, int reg) {
+    const auto &params = this->analysis_.func_params.at(expr->sval);          // 呼び出し先の引数のシンボル列
+    const int arg_count = static_cast<int>(expr->children.size());   // 引数の個数
+
+    // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，
+    // 内側の呼び出しを含む引数があるときに先に書き込むと，内側の呼び出しに上書きされる．
+    // そこで，呼び出しを含む最後の引数までは値をレジスタに残し，書き込みは最後にまとめて行う
+    int held_count = 0;   // 値をレジスタに残したままにする引数の個数
+    for (int i = 0; i < arg_count; i++) {
+        if (contains_call(expr->children[i])) held_count = i + 1;
+    }
+    // レジスタに残す引数はそれぞれ1本を占め，残りの引数はその上の1本を使い回す
+    if (reg + std::min(arg_count - 1, held_count) >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+        node_t *arg = expr->children[i];
+        // レジスタに残す引数と，その上の1本で評価する引数とで使うレジスタを分ける
+        // (同じレジスタを使うと，書き込む前の引数の値を壊してしまう)
+        const int arg_reg = reg + std::min(i, held_count);   // この引数を評価するレジスタ
+        // 配列を渡す引数の場合 (値ではなく配列の先頭番地を渡す)
+        if (params[i]->type.is_array) {
+            this->gen_array_base_addr(arg_reg, arg->sym);
+        }
+        // スカラーを渡す引数の場合 (式を評価する．レジスタに残した引数はその間も保護する)
+        else {
+            std::vector<int> protect_regs;   // 評価中に値を保護するレジスタ
+            for (int held = 0; held < i && held < held_count; held++) {
+                protect_regs.push_back(reg + held);
+            }
+            this->gen_expr_protecting(arg, arg_reg, protect_regs);
+        }
+        // 以降に呼び出しが無い引数の場合 (上書きされないため，評価した時点で書き込む)
+        if (i >= held_count) {
+            this->gen_arg_store(arg_reg, params[i]->type, arg_count, i);
+        }
+    }
+    // レジスタに残しておいた引数を書き込む (内側の呼び出しがすべて終わっている)
+    for (int i = 0; i < held_count; i++) {
+        this->gen_arg_store(reg + i, params[i]->type, arg_count, i);
+    }
+
+    (*this->out_) << "    call " << expr->sval << "\n";
+    // 戻り値を返す関数の場合 (RAXに置かれた戻り値を式の結果のレジスタへ取り出す)
+    if (expr->type.base != BASE_VOID) {
+        (*this->out_) << "    mov fh " << RAX_REGISTER << " r" << reg << "\n";
+    }
+}
+
+// r{reg}の値を，arg_count個の引数のindex番目を渡す位置へ書き込む
+void Generator::gen_arg_store(int reg, const type_t &type, int arg_count, int index) {
+    (*this->out_) << "    wmr " << access_mask(type) << " " << SP_REGISTER << " r" << reg
+                  << " " << Generator::calc_arg_offset(arg_count, index) << "\n";
+}
+
 // 配列の先頭番地をr{reg}に載せる
 void Generator::gen_array_base_addr(int reg, const symbol_t *sym) {
-    // 配列を受け取る引数の場合 (サイズを持たない．呼び出し元が書き込んだ先頭番地を読み出す)
-    if (sym->type.array_size == 0) {
+    // 配列を受け取る引数の場合 (引数の位置には呼び出し元が書き込んだ先頭番地が入っている)
+    if (sym->location == LOC_PARAM) {
         (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << reg
                       << " " << this->calc_frame_offset(sym) << "\n";
         return;
@@ -1354,10 +1348,18 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
         throw std::string("compiler error: expression too complex (out of registers) at ")
               + loc_to_string(member_access->loc);
     }
-    const symbol_t *arr_sym = member_access->sym;          // 配列全体のシンボル(先頭番地・構造体名)
+    const symbol_t *arr_sym = member_access->sym;          // 配列全体のシンボル(先頭の位置・構造体名)
     node_t *array_access = member_access->children[0];     // arr[i] (children[0]=インデックス式)
-    const int stride_bytes = this->struct_defs_.at(arr_sym->type.struct_name).total_words * 4;
-    const int base_const = arr_sym->address + static_cast<int>(member_access->ival) * 4;  // 配列先頭+メンバオフセット
+    const int stride_bytes = this->analysis_.struct_defs.at(arr_sym->type.struct_name).total_words * 4;
+    const bool is_global = arr_sym->location == LOC_GLOBAL;   // 先頭が絶対番地で決まるか
+    // グローバル変数でもローカル変数でもない置き場所の場合 (構造体配列は他の置き場所を持たない)
+    if (!is_global && arr_sym->location != LOC_LOCAL) {
+        throw std::string("compiler error: '") + arr_sym->name
+              + "' is not placed in memory at " + loc_to_string(member_access->loc);
+    }
+    // 配列の先頭の位置(グローバル変数は絶対番地，ローカル変数はフレーム内オフセット)にメンバのオフセットを足す
+    const int base_const = (is_global ? arr_sym->address : this->calc_frame_offset(arr_sym))
+                           + static_cast<int>(member_access->ival) * 4;
 
     // r{reg} = インデックス式 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
     this->gen_expr_protecting(array_access->children[0], reg, protect_regs);
@@ -1369,13 +1371,8 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
     // r{reg} = 実アドレス
     (*this->out_) << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
     // ローカル変数の場合 (ここまでの計算はフレーム内オフセットであり，実行時のSPを足して番地にする)
-    if (arr_sym->location == LOC_LOCAL) {
+    if (!is_global) {
         (*this->out_) << "    add " << SP_REGISTER << " r" << reg << " r" << reg << "\n";
-    }
-    // グローバル変数でもローカル変数でもない置き場所の場合 (構造体配列は他の置き場所を持たない)
-    else if (arr_sym->location != LOC_GLOBAL) {
-        throw std::string("compiler error: '") + arr_sym->name
-              + "' is not placed in memory at " + loc_to_string(member_access->loc);
     }
 }
 
@@ -1455,9 +1452,9 @@ void Generator::check_memory_usage() {
     // 再帰がある場合 (深さが実行時にしか決まらず使用量を見積もれないため，検査しない)
     if (is_recursive) return;
 
-    if (this->global_size_ + stack_bytes > RAM_SIZE) {
+    if (this->analysis_.global_size + stack_bytes > RAM_SIZE) {
         throw std::string("compiler error: global variables (")
-              + std::to_string(this->global_size_) + " bytes) and stack ("
+              + std::to_string(this->analysis_.global_size) + " bytes) and stack ("
               + std::to_string(stack_bytes) + " bytes) exceed memory capacity ("
               + std::to_string(RAM_SIZE) + " bytes)";
     }
@@ -1480,7 +1477,7 @@ int Generator::calc_stack_bytes(const std::string &func, std::set<std::string> &
     path.insert(func);   // 経路にfuncを追加してから呼び出し先を探索する
 
     int max_callee_bytes = 0;   // 呼び出し先のうち最も多いスタック使用量
-    for (const std::string &callee : this->call_graph_.at(func)) {
+    for (const std::string &callee : this->analysis_.call_graph.at(func)) {
         // 呼び出しごとに戻り先アドレス(4バイト)が積まれる
         const int callee_bytes = 4 + this->calc_stack_bytes(callee, path, recorded, is_recursive);
         if (callee_bytes > max_callee_bytes) max_callee_bytes = callee_bytes;

@@ -31,7 +31,6 @@ int compile_pn_to_asm(int argc, char **argv) {
     args_t args;                                // コマンドライン引数
     std::vector<token_t> tokens;                // トークン列 (字句解析結果)
     node_t *ast = nullptr;                      // AST (構文解析結果)
-    std::map<std::string, const symbol_t *> symbols;    // シンボルテーブル (意味解析結果)
 
     // コマンドライン引数を取得する
     get_args(argc, argv, args);
@@ -51,7 +50,7 @@ int compile_pn_to_asm(int argc, char **argv) {
 
         // 意味解析を行い，シンボルテーブルを構築する (Semantic Analyzer)
         Analyzer analyzer(ast);
-        symbols = analyzer();
+        analyzer();
 
         // 出力アセンブリファイルを開く
         // (字句解析〜意味解析でエラーになった場合に空のファイルを残さないよう，コード生成の直前に開く)
@@ -61,9 +60,7 @@ int compile_pn_to_asm(int argc, char **argv) {
         }
 
         // アセンブリコードを生成する (Code Generator)
-        Generator generator(ast, symbols, analyzer.func_params(), analyzer.struct_defs(),
-                             analyzer.func_local_sizes(), analyzer.call_graph(),
-                             analyzer.global_size(), asm_file);
+        Generator generator(ast, analyzer.result(), asm_file);
         generator();
 
         asm_file.flush();
