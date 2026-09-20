@@ -49,6 +49,7 @@ private:
     int param_size_ = 0;       // 生成中の関数のパラメータ領域のバイト数 (4n)
     int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号 (下見で数え，退避領域の大きさを決める)
     std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数 (F．スタック使用量の検査に使う)
+    std::map<std::string, int> stack_bytes_;                  // 関数名→その関数を呼び出してから戻るまでのスタック使用量
     int label_count_ = 0;                                     // 局所ラベルの連番カウンタ (.L0, .L1, ...)
     // break/continueの飛び先ラベルのスタック (最内が末尾)
     // continueはループのみ，breakはループとswitchの両方が積む
@@ -59,7 +60,7 @@ private:
     void gen_program();              // プログラム全体 (.global宣言 + main優先で各関数を出力)
     void gen_global_inits();         // グローバル変数の初期化 (mainの先頭に出力)
     void gen_func(node_t *func);     // 関数定義 (ラベル + フレームの確保 + 本体)
-    void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰 (フレームの大きさを決める下見でも呼ぶ)
+    void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰
     void gen_frame_alloc(bool is_release);  // フレームぶんSPを下げる/戻す命令 (フレームが空なら何も出力しない)
     void gen_block(node_t *block);   // ブロック (中の文を順に生成)
     void gen_stmt(node_t *stmt);     // 文 (種別ごとに振り分け)
@@ -104,7 +105,7 @@ private:
     void gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc);
     // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
     void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);
-    // 文字列をchar配列に書き込む初期化コードを生成する (作業用にr0・r1を使う)
+    // 文字列をchar配列に書き込む初期化コードを生成する (作業用にr0を使う)
     void gen_string_init(const symbol_t *sym, const std::string &str);
     void gen_print_string(const symbol_t *sym, int reg);  // char配列をヌル終端まで1文字ずつ出力するループを生成する
     void gen_scan_line(const symbol_t *sym, int reg);     // 標準入力を改行まで読み込みchar配列へヌル終端付きで格納するループを生成する
@@ -126,11 +127,19 @@ private:
     void collect_string_literals(node_t *node, std::vector<node_t *> &out);
     // フレーム上の変数(ローカル変数・パラメータ)の，プロローグ直後のSPから数えたオフセットを返す
     int frame_offset(const symbol_t *sym) const;
+    int spill_offset(int reg) const;   // r{reg}の退避枠の，プロローグ直後のSPから数えたオフセットを返す
+    // 引数を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
+    // (arg_count個の引数のindex番目．呼び出し先がフレームを確保するとパラメータ領域になる位置)
+    static int arg_offset(int arg_count, int index);
+    // 関数本体を出力を捨てて一度生成し，退避に使う最大のレジスタ番号を数えて退避領域の大きさを決める
+    // (退避するレジスタはフレームの大きさに依存しないため，仮の大きさで生成しても結果は変わらない)
+    int measure_spill_size(node_t *func);
     // グローバル変数とスタックがメモリ容量に収まるか検査する
     // (スタック使用量はmainを起点に呼び出しグラフを辿って求める．再帰があると深さが実行時にしか
     //  決まらないため検査しない)
     void check_memory_usage();
     // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す．
     // path: 現在の探索経路(再帰の検出用)．再帰を見つけた場合はis_recursiveをtrueにする
+    // (どの経路から到達しても使用量は同じになるため，一度求めた値は記録して使い回す)
     int stack_bytes_dfs(const std::string &func, std::set<std::string> &path, bool &is_recursive);
 };

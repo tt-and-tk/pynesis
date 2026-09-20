@@ -179,23 +179,31 @@ void Generator::collect_string_literals(node_t *node, std::vector<node_t *> &out
 void Generator::gen_func(node_t *func) {
     this->local_size_ = this->func_local_sizes_.at(func->sval);
     this->param_size_ = static_cast<int>(this->func_params_.at(func->sval).size()) * 4;
+    this->spill_size_ = this->measure_spill_size(func);
+    this->func_frame_sizes_[func->sval] = this->local_size_ + this->spill_size_ + this->param_size_;
 
-    // 下見: 退避に使う最大のレジスタ番号を数える (出力は捨て，ラベルの連番は生成し直す前に巻き戻す)
+    (*this->out_) << func->sval << ":\n";
+    this->gen_frame_alloc(false);
+    this->gen_func_body(func);
+}
+
+// 関数本体を出力を捨てて一度生成し，退避に使う最大のレジスタ番号から退避領域の大きさを求める
+// 生成に伴って進むラベルの連番と，仮に置く退避領域の大きさは，呼び出し前の状態へ戻す
+int Generator::measure_spill_size(node_t *func) {
     const int label_count_before = this->label_count_;   // 下見を始める前のラベルの連番
+    const int spill_size_before = this->spill_size_;     // 下見を始める前の退避領域の大きさ
     std::ostringstream discarded;                        // 下見の出力を捨てる先
+
     this->out_ = &discarded;
     this->max_spill_reg_ = -1;
     this->spill_size_ = MAX_REG * 4;   // 下見の間は最大の大きさを仮に置く (数えた結果には影響しない)
     this->gen_func_body(func);
+
+    const int measured = (this->max_spill_reg_ + 1) * 4;   // 退避したレジスタの本数から求めた大きさ
     this->out_ = &this->asm_file_;
     this->label_count_ = label_count_before;
-
-    // 本番: 数えたレジスタ番号から退避領域の大きさを確定させ，フレームを確保して本体を生成する
-    this->spill_size_ = (this->max_spill_reg_ + 1) * 4;
-    this->func_frame_sizes_[func->sval] = this->local_size_ + this->spill_size_ + this->param_size_;
-    (*this->out_) << func->sval << ":\n";
-    this->gen_frame_alloc(false);
-    this->gen_func_body(func);
+    this->spill_size_ = spill_size_before;
+    return measured;
 }
 
 // 関数の本体と，末尾から関数を抜ける場合の復帰を生成する
@@ -923,6 +931,18 @@ int Generator::frame_offset(const symbol_t *sym) const {
     return sym->address;
 }
 
+// r{reg}の退避枠の，プロローグ直後のSPから数えたオフセットを返す
+// 退避領域はローカル変数領域の後ろに続き，レジスタ番号ごとに1ワードの枠を持つ
+int Generator::spill_offset(int reg) const {
+    return this->local_size_ + reg * 4;
+}
+
+// 引数を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
+// 現在のSPのすぐ下に戻り先アドレスの1ワードが積まれ，その下に引数が宣言順に並ぶ
+int Generator::arg_offset(int arg_count, int index) {
+    return -4 - arg_count * 4 + index * 4;
+}
+
 // 変数の値をr{reg}へ読み込む
 // 置き場所がレジスタ直結(LED等のI/Oレジスタ)ならmovのレジスタ間コピー，グローバル変数ならrm，
 // フレーム上の変数(ローカル変数・パラメータ)ならSPからの相対位置を指定するrmrを使う
@@ -1040,15 +1060,15 @@ void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int
     for (const int protect_reg : protect_regs) {
         // 退避枠の大きさを決めるため，退避したレジスタのうち最大の番号を控える
         if (protect_reg > this->max_spill_reg_) this->max_spill_reg_ = protect_reg;
-        const int offset = this->local_size_ + protect_reg * 4;   // r{protect_reg}の退避枠のフレーム内オフセット
-        (*this->out_) << "    wmr fh " << SP_REGISTER << " r" << protect_reg << " " << offset << "\n";
+        (*this->out_) << "    wmr fh " << SP_REGISTER << " r" << protect_reg
+                      << " " << this->spill_offset(protect_reg) << "\n";
     }
     // 式を評価する (呼び出し先がレジスタを使い直すため，保護するレジスタの値はここで壊れうる)
     this->gen_expr(expr, reg);
     // 退避枠から値を読み戻し，保護するレジスタを評価前の値に戻す
     for (const int protect_reg : protect_regs) {
-        const int offset = this->local_size_ + protect_reg * 4;   // r{protect_reg}の退避枠のフレーム内オフセット
-        (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << protect_reg << " " << offset << "\n";
+        (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << protect_reg
+                      << " " << this->spill_offset(protect_reg) << "\n";
     }
 }
 
@@ -1136,16 +1156,16 @@ void Generator::gen_expr(node_t *expr, int reg) {
 
         // 関数呼び出し: 各引数を評価して現在のSPより下へ書き込んでからCALLする
         // 書き込み先は，呼び出し先が自分のフレームを確保したときにパラメータ領域になる位置であり，
-        // 戻り先アドレスの1つ下から引数の宣言順に並ぶ(i番目の引数はSP-4-4n+4i番地)．
+        // 戻り先アドレスの1つ下から引数の宣言順に並ぶ(位置はarg_offsetが求める)．
         // 評価にr{reg}以降を使うのは，呼び出し元がr{reg}未満のレジスタに置いている生存値
         // (二項演算の左辺等)を破壊しないため．callでレジスタは揮発するが，
         // 呼び出し前後で生きた値はメモリにあるため問題ない
         case ND_CALL: {
             const auto &params = this->func_params_.at(expr->sval);
             const int arg_count = static_cast<int>(expr->children.size());   // 引数の個数
-            // 引数を書き込む位置は呼び出し先のフレーム全体より下にあり，呼び出し先が引数を
-            // 書き込む位置と重なる．このため，関数呼び出しを含む引数がある場合は，その引数までを
-            // レジスタに保持したまま評価し，内側の呼び出しがすべて終わってから書き込む
+            // 引数を書き込む位置は，同じSPから行うどの呼び出しでも同じになる．このため，
+            // 関数呼び出しを含む引数がある場合は，その引数までをレジスタに保持したまま評価し，
+            // 内側の呼び出しがすべて終わってから書き込む
             // (先に書き込むと，内側の呼び出しが同じ位置へ自分の引数を書いて壊してしまう)．
             // 最後に関数呼び出しを含む引数より後ろの引数は，以降に呼び出しがないため評価のたびに書き込む
             int held_count = 0;   // 評価した値をレジスタに保持したままにする引数の個数
@@ -1177,13 +1197,13 @@ void Generator::gen_expr(node_t *expr, int reg) {
                 // 保持する引数は，すべての評価が終わってからまとめて書き込む
                 if (i >= held_count) {
                     (*this->out_) << "    wmr " << access_mask(params[i]->type) << " " << SP_REGISTER
-                                  << " r" << arg_reg << " " << (-4 - arg_count * 4 + i * 4) << "\n";
+                                  << " r" << arg_reg << " " << Generator::arg_offset(arg_count, i) << "\n";
                 }
             }
             // 保持していた引数をパラメータ領域になる位置へ書き込む
             for (int i = 0; i < held_count; i++) {
                 (*this->out_) << "    wmr " << access_mask(params[i]->type) << " " << SP_REGISTER
-                              << " r" << (reg + i) << " " << (-4 - arg_count * 4 + i * 4) << "\n";
+                              << " r" << (reg + i) << " " << Generator::arg_offset(arg_count, i) << "\n";
             }
 
             (*this->out_) << "    call " << expr->sval << "\n";
@@ -1424,12 +1444,17 @@ void Generator::check_memory_usage() {
 
 // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
 // func自身のフレームに，呼び出し先の中で最も多く使うものの使用量(戻り先アドレスの4バイトを含む)を足す
+// 同じ関数へ複数の経路から到達しても結果は変わらないため，一度求めた値を記録して使い回す
+// (記録しないと，呼び出し関係が枝分かれしてから合流する形で探索する経路の数が指数的に増える)
 int Generator::stack_bytes_dfs(const std::string &func, std::set<std::string> &path, bool &is_recursive) {
     // 現在の経路に既にfuncがあれば，直接・間接を問わず再帰であり，深さが定まらない
     if (path.count(func)) {
         is_recursive = true;
         return 0;
     }
+    const auto recorded = this->stack_bytes_.find(func);
+    if (recorded != this->stack_bytes_.end()) return recorded->second;
+
     path.insert(func);   // 経路にfuncを追加してから呼び出し先を探索する
 
     int max_callee_bytes = 0;   // 呼び出し先のうち最も多いスタック使用量
@@ -1440,7 +1465,10 @@ int Generator::stack_bytes_dfs(const std::string &func, std::set<std::string> &p
     }
 
     path.erase(func);   // 探索し終えたので経路から外す(他の呼び出し経路と共有しないため)
-    return this->func_frame_sizes_.at(func) + max_callee_bytes;
+    const int bytes = this->func_frame_sizes_.at(func) + max_callee_bytes;   // funcを起点とした使用量
+    // 再帰を含む探索の途中で得た値は，打ち切った経路の分だけ少なくなるため記録しない
+    if (!is_recursive) this->stack_bytes_[func] = bytes;
+    return bytes;
 }
 
 // 番地が実行時に決まる代入先(配列要素または構造体配列要素のメンバ)の実アドレスをr{reg}に計算する

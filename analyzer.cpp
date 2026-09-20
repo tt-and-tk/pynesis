@@ -1153,7 +1153,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: call to undefined function '")
                       + expr->sval + "' at " + loc_to_string(expr->loc);
             }
-            // 呼び出しグラフに記録する (再帰・ネスト段数の検査用)
+            // 呼び出しグラフに記録する (スタック使用量の見積もり用)
             this->call_graph_[this->current_function_].insert(expr->sval);
             // 引数の数がパラメータの数と一致するか検証する
             const auto &params = this->func_params_[expr->sval];
