@@ -94,10 +94,11 @@ typedef enum {
     ND_FUNC_ADDR,       // 関数の番地 (svalに関数名．呼び出し以外の文脈で書かれた関数名を意味解析が置き換える)
     ND_ADDR,            // 番地の取得 &x (children: [番地を取る式])
     ND_DEREF,           // 間接参照 *p (children: [ポインタの式])
-    // 配列要素アクセス a[i] (children: [インデックス式]，構造体メンバ配列なら[インデックス式, ND_MEMBER_ACCESS])．
-    // 構造体配列(a自体がstruct配列)の場合，要素a[i]は単独では値を持たず，必ずND_MEMBER_ACCESSの基底として使われる
+    // 配列要素アクセス a[i] (children: 配列変数・ポインタ変数ならsvalに名前を持ち[インデックス式]，
+    // それ以外なら[インデックス式, 添字を付ける基底の式(ND_MEMBER_ACCESS・ND_DEREF・ND_ARRAY_ACCESS)])．
+    // 要素が構造体の場合，要素a[i]は単独では値を持たず，ND_MEMBER_ACCESSの基底か&の対象としてのみ使われる
     ND_ARRAY_ACCESS,
-    // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)・構造体配列要素(ND_ARRAY_ACCESS)・
+    // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)・要素が構造体の配列要素(ND_ARRAY_ACCESS)・
     // 構造体ポインタの間接参照(ND_DEREF)のいずれか]，svalにメンバ名)．p->bはND_DEREFを基底とする形に展開する
     ND_MEMBER_ACCESS,
 } node_kind_t;

@@ -1440,6 +1440,21 @@ void Analyzer::analyze_expr(node_t *expr) {
                 return;
             }
 
+            // (4) 基底の式に添字を付けた要素のメンバ: s.items[i].member，(*pp)[i].member
+            // (要素の番地は添字を付ける対象の値から実行時に求まるため，(3)と同じくメンバのオフセットだけを注釈する)
+            if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 2) {
+                this->analyze_expr(base);
+                // 要素が構造体でない場合
+                if (base->type.base != BASE_STRUCT || base->type.pointer_depth != 0) {
+                    throw std::string("compiler error: member access requires a struct, but got '")
+                          + type_to_string(base->type) + "' at " + loc_to_string(expr->loc);
+                }
+                const struct_member_t &member = this->find_member(base->type.struct_name, expr);
+                expr->ival = member.offset_words;
+                expr->type = member.type;
+                return;
+            }
+
             const symbol_t *base_sym;           // 基底(構造体変数・構造体配列全体・構造体ポインタ)のシンボル
             if (base->kind == ND_ARRAY_ACCESS) {
                 // (2) 構造体配列の要素へのメンバアクセス: arr[i].member (構造体ポインタの添字p[i].memberを含む)

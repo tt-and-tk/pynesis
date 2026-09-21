@@ -83,8 +83,9 @@ private:
     // 先頭番地は，構造体の配列なら配列の番地，構造体へのポインタなら指している番地．
     // 保護するレジスタを指定すると，インデックス式の評価中もそれらの値を保護する(既に確定した値を持つとき使う)
     void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
-    // 構造体ポインタの指す先のメンバ(p->member)の実アドレスをr{reg}に計算する (ポインタの値にメンバのオフセットを足す)
-    void gen_deref_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
+    // 基底の構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
+    // (構造体ポインタの指す先のメンバ(p->member)・基底の式に添字を付けた要素のメンバ(s.items[i].member等))
+    void gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
     // 構造体配列要素のメンバ・ポインタの指す先等，実行時に計算したアドレスからスカラー値を読むときに使う．
     // 符号付きchar/shortの符号拡張ではr{work_reg}を作業用に使い，エラーは読み出す式の位置で報告する

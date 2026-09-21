@@ -1508,18 +1508,18 @@ void Generator::gen_lvalue_addr(node_t *target, int reg, const std::vector<int> 
             return;
         // 構造体メンバの場合 (基底の種類で番地の求め方が変わる)
         case ND_MEMBER_ACCESS: {
-            const node_kind_t base_kind = target->children[0]->kind;   // メンバが属する構造体の式の種別
+            const node_t *base = target->children[0];   // メンバが属する構造体の式
             // 構造体変数のメンバの場合 (意味解析が番地を合成したシンボルを持つ)
-            if (base_kind == ND_VAR) {
+            if (base->kind == ND_VAR) {
                 this->gen_var_addr(reg, target->sym);
             }
-            // 構造体配列要素・構造体ポインタの添字のメンバの場合
-            else if (base_kind == ND_ARRAY_ACCESS) {
+            // 構造体配列・構造体ポインタの変数に添字を付けた要素のメンバの場合
+            else if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 1) {
                 this->gen_struct_array_member_addr(target, reg, protect_regs);
             }
-            // 構造体ポインタの指す先のメンバの場合
-            else if (base_kind == ND_DEREF) {
-                this->gen_deref_member_addr(target, reg, protect_regs);
+            // 構造体ポインタの指す先・基底の式に添字を付けた要素のメンバの場合
+            else if (base->kind == ND_DEREF || base->kind == ND_ARRAY_ACCESS) {
+                this->gen_offset_member_addr(target, reg, protect_regs);
             }
             // メンバアクセスの基底になりえない式の場合 (構文解析が受け付けないため到達しない)
             else {
@@ -1655,21 +1655,22 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
     }
 }
 
-// 構造体ポインタの指す先のメンバ(p->member)の実アドレスをr{reg}に計算する
-// アドレス = ポインタの値 + メンバオフセット(コンパイル時定数，member_accessが合成時にexpr->ivalへ保存済み)
-// レジスタ使用: r{reg}=ポインタの値→アドレス, r{reg+1}=メンバオフセット(作業用．先頭のメンバなら使わない)
-void Generator::gen_deref_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
-    node_t *pointer = member_access->children[0]->children[0];   // 構造体ポインタの式 (p->memberのp)
-    // r{reg} = ポインタの値 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
-    this->gen_expr_protecting(pointer, reg, protect_regs);
-    // 先頭のメンバの場合 (ポインタの値がそのままメンバの番地になるため，これ以上何もしない)
+// 基底の構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
+// アドレス = 基底の構造体の番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にexpr->ivalへ保存済み)
+// 基底の構造体の番地は，構造体ポインタの指す先(p->member)ならポインタの値，
+// 基底の式に添字を付けた要素(s.items[i].member)ならその要素の番地
+// レジスタ使用: r{reg}=基底の番地→アドレス, r{reg+1}=メンバオフセット(作業用．先頭のメンバなら使わない)
+void Generator::gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
+    // r{reg} = 基底の構造体の番地 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
+    this->gen_lvalue_addr(member_access->children[0], reg, protect_regs);
+    // 先頭のメンバの場合 (基底の番地がそのままメンバの番地になるため，これ以上何もしない)
     if (member_access->ival == 0) return;
     // 作業用のr{reg+1}が上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at ")
               + loc_to_string(member_access->loc);
     }
-    // r{reg} = ポインタの値 + メンバのオフセット
+    // r{reg} = 基底の番地 + メンバのオフセット
     (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << (member_access->ival * 4) << "\n";
     (*this->out_) << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
 }

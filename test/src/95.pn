@@ -1,0 +1,24 @@
+// 基底の式に添字を付けた要素が構造体のとき，そのメンバも読み書きできる
+// (構造体へのポインタを持つメンバの添字 s.items[i].v・ポインタへのポインタの添字 (*pp)[i].v)
+// 要素の番地を求めてから，メンバのオフセットを足す
+struct Item {
+    int k;
+    int v;
+};
+
+struct Holder {
+    struct Item *items;
+};
+
+struct Item store[2];
+struct Holder h;
+int r;
+
+void main(void) {
+    struct Item *ip = store;
+    struct Item **pp = &ip;
+    int i = 1;
+    h.items = store;
+    h.items[i].v = 5;         // store[1].v
+    r = (*pp)[i].v;           // 5
+}
