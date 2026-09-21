@@ -313,7 +313,7 @@ void Generator::gen_stmt(node_t *stmt) {
             this->gen_frame_leave();
             (*this->out_) << "    ret\n";
             break;
-        // 式文: 最上位の種類によらず，含まれる副作用(代入・関数呼び出し・増減等)のため評価する．結果(r0)は捨てる
+        // 式文・for文の更新: 最上位の種類によらず，含まれる副作用(代入・関数呼び出し・増減等)のため評価する．結果(r0)は捨てる
         default:
             this->gen_expr(stmt, 0);
             break;
