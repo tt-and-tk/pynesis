@@ -880,7 +880,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         this->scopes_.push_back({});
         if (stmt->children[0]) this->analyze_stmt(stmt->children[0]);  // 初期化
         if (stmt->children[1]) this->analyze_value(stmt->children[1]); // 条件
-        if (stmt->children[2]) this->analyze_expr(stmt->children[2]);  // 更新
+        if (stmt->children[2]) this->analyze_discarded(stmt->children[2]);  // 更新
         this->loop_depth_++;
         this->analyze_stmt(stmt->children[3]);                         // 本体
         this->loop_depth_--;
@@ -911,9 +911,9 @@ void Analyzer::analyze_stmt(node_t *stmt) {
                   + loc_to_string(stmt->loc);
         }
     }
-    // それ以外は式文として検査する
+    // それ以外は式文として検査する (値は捨てる)
     else {
-        this->analyze_expr(stmt);
+        this->analyze_discarded(stmt);
     }
 }
 
@@ -1061,12 +1061,20 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
 // (代入の右辺・引数・戻り値・演算のオペランド等．書き込み先や&の対象として使う式はanalyze_lvalueで検査する)
 // 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む
 // (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
+// 構造体・配列の扱いは値を捨てる式と共通のため，その検査に任せ，ここではvoidだけを検査する
 void Analyzer::analyze_value(node_t *expr) {
-    this->analyze_expr(expr);
+    this->analyze_discarded(expr);
     // void値の場合
     if (expr->type.base == BASE_VOID) {
         throw std::string("compiler error: cannot use void value in expression at ") + loc_to_string(expr->loc);
     }
+}
+
+// 評価した結果の値を捨てる式(式文・for文の更新)を検査する
+// 値を使わないためvoid(戻り値のない関数呼び出し)は許すが，評価すれば値を読むことになるため，
+// 構造体はエラーにし，配列は先頭要素へのポインタとして型を書き込む
+void Analyzer::analyze_discarded(node_t *expr) {
+    this->analyze_expr(expr);
     // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
     if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")

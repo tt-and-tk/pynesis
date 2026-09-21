@@ -1,0 +1,7 @@
+// 意味解析エラー: 構造体ポインタの指す先の構造体そのものは式文にできない (異常系)
+struct Point { int x; int y; };
+struct Point s;
+void main(void) {
+    struct Point *sp = &s;
+    *sp;
+}
