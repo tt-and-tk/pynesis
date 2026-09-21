@@ -1566,7 +1566,7 @@ void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int
     this->gen_scale(reg, reg + 1, expr->step, expr);
 
     // 実行後: r{reg+1} = 先頭番地 (実行時計算の場合は，求めたオフセットのr{reg}も保護する)
-    // 添字を付ける対象(基底)を式として持つ場合 (構造体のメンバ・間接参照・ポインタの配列の要素に添字を付けた場合)
+    // 添字を付ける対象(基底)を式として持つ場合 (配列変数・ポインタ変数の名前以外に添字を付けた場合)
     if (expr->children.size() == 2) {
         node_t *base = expr->children[1];                   // 添字を付ける基底の式
         std::vector<int> base_protect_regs = protect_regs;  // 先頭番地の計算中に保護するレジスタ
