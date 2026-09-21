@@ -88,7 +88,7 @@ private:
     // 先頭番地は，構造体の配列なら配列の番地，構造体へのポインタなら指している番地．
     // 保護するレジスタを指定すると，インデックス式の評価中もそれらの値を保護する(既に確定した値を持つとき使う)
     void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
-    // 基底の構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
+    // メンバの前に書いた式(基底)が表す構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
     // (構造体ポインタの指す先のメンバ(p->member)・基底の式に添字を付けた要素のメンバ(s.items[i].member等))
     // 呼び出し元が値を持っているレジスタを指定すると，基底の式の評価で関数を呼ぶ場合に，その前後で退避・復元して値を保つ
     void gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});

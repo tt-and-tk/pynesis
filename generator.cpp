@@ -1566,7 +1566,7 @@ void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int
     this->gen_scale(reg, reg + 1, expr->step, expr);
 
     // 実行後: r{reg+1} = 先頭番地 (実行時計算の場合は，求めたオフセットのr{reg}も保護する)
-    // 基底の式を持つ場合 (構造体のメンバ・間接参照・ポインタの配列の要素)
+    // 添字を付ける対象(基底)を式として持つ場合 (構造体のメンバ・間接参照・ポインタの配列の要素に添字を付けた場合)
     if (expr->children.size() == 2) {
         node_t *base = expr->children[1];                   // 添字を付ける基底の式
         std::vector<int> base_protect_regs = protect_regs;  // 先頭番地の計算中に保護するレジスタ
@@ -1662,7 +1662,7 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
     }
 }
 
-// 基底の構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
+// メンバの前に書いた式(基底)が表す構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
 // アドレス = 基底の構造体の番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にmember_offset_wordsへ保存済み)
 // 基底の構造体の番地は，構造体ポインタの指す先(p->member)ならポインタの値，
 // 基底の式に添字を付けた要素(s.items[i].member)ならその要素の番地
