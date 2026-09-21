@@ -1,0 +1,8 @@
+// 構文解析エラー: sizeofに構造体へのポインタの型名は書けない(構造体の型名はsizeofの対象外のため) (異常系)
+struct Tag {
+    int x;
+};
+int r;
+void main(void) {
+    r = sizeof(struct Tag *);
+}

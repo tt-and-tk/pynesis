@@ -1,0 +1,5 @@
+// 構文解析エラー: constは型名より前にのみ書けるため，*の後ろにも書けない(int *const p) (異常系)
+int g;
+void main(void) {
+    int *const p = &g;
+}

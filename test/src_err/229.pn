@@ -1,0 +1,9 @@
+// 意味解析エラー: 番地が実行時に決まるメンバ配列(構造体ポインタの指す先のメンバ配列)はprintに渡せない (異常系)
+struct Entry {
+    char name[4];
+};
+struct Entry e;
+void main(void) {
+    struct Entry *p = &e;
+    print(p->name);
+}

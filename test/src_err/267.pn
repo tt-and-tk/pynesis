@@ -1,0 +1,7 @@
+// 意味解析エラー: 構造体のメンバにも，定義されていない構造体へのポインタは宣言できない (異常系)
+struct Node {
+    int value;
+    struct Missing *next;
+};
+void main(void) {
+}

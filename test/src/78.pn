@@ -3,7 +3,7 @@
 int two(void) {
     return 2;
 }
-int pick(char c, int n, int values[], short s) {
+int pick(char c, int n, int *values, short s) {
     return c + n + values[0] + s;
 }
 int table[2];

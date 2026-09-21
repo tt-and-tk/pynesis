@@ -1,0 +1,7 @@
+// 意味解析エラー: 配列の添字にポインタは使えない(添字は整数に限る) (異常系)
+int arr[4];
+int r;
+void main(void) {
+    int *p = arr;
+    r = arr[p];
+}

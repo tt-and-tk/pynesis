@@ -1,0 +1,4 @@
+// 意味解析エラー: nullptrは整数の変数へ代入できない (異常系)
+void main(void) {
+    int x = nullptr;
+}

@@ -1,0 +1,22 @@
+// 配列を関数へ渡す: 配列変数・構造体変数のメンバ配列・構造体配列要素のメンバ配列は，いずれも先頭要素へのポインタとして渡せる
+// 構造体配列要素のメンバ配列(entries[i].name)は，添字から番地を実行時に求めて引数に書き込む
+struct Entry {
+    int size;
+    char name[4];
+};
+
+struct Entry one;
+struct Entry entries[2];
+char buf[4];
+int total;
+
+int second(char *s) {
+    return s[1];
+}
+
+void main(void) {
+    int i = 1;
+    total = second(buf);
+    total = total + second(one.name);
+    total = total + second(entries[i].name);
+}

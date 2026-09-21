@@ -1,0 +1,9 @@
+// 意味解析エラー: 関数ポインタどうしは大小を比較できない(一致・不一致のみ) (異常系)
+int zero(void) {
+    return 0;
+}
+int r;
+void main(void) {
+    int (*f)(void) = zero;
+    r = f < zero;
+}

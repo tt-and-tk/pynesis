@@ -1,0 +1,8 @@
+// 意味解析エラー: 関数ポインタを通した呼び出しも，引数の数がシグネチャと一致しなければならない (異常系)
+int twice(int a) {
+    return a * 2;
+}
+void main(void) {
+    int (*f)(int) = twice;
+    f(1, 2);
+}

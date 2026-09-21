@@ -1,0 +1,27 @@
+// 構造体へのポインタ: &で構造体変数・構造体配列要素の番地を取り，->で指す先のメンバを読み書きする
+// (*p).memberは p->member と同じ．p[i].memberは構造体1個分のバイト数を単位にずらした要素のメンバになる
+// 自身の構造体を指すメンバ(next)を持てる
+struct Node {
+    int value;
+    struct Node *next;
+    char tag[4];
+};
+
+struct Node a;
+struct Node list[2];
+int r1;
+int r2;
+int r3;
+
+void main(void) {
+    struct Node *p = &a;
+    int i = 1;
+    p->value = 7;
+    p->next = &list[i];
+    p->next->value = 8;       // list[1].value
+    (*p).tag[2] = 'x';
+    r1 = p->next->value;      // 8
+    p = list;
+    r2 = p[i].value;          // 8
+    r3 = (p + 1)->value;      // 8 (ポインタの加算も構造体1個分を単位にずれる)
+}

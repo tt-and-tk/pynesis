@@ -1,0 +1,6 @@
+// 意味解析エラー: 整数を返す関数からnullptrは返せない (異常系)
+int find(void) {
+    return nullptr;
+}
+void main(void) {
+}

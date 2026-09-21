@@ -1,0 +1,25 @@
+// 番地の取得の対象: 間接参照(&*p)・ポインタの添字(&p[i])・構造体ポインタのメンバ(&p->m)・
+// ローカルの構造体配列要素のメンバ(&arr[i].m)・ローカル配列の要素
+struct Pair {
+    int a;
+    int b;
+};
+
+int g[4];
+int *r1;
+int *r2;
+int *r3;
+int *r4;
+int *r5;
+
+void main(void) {
+    struct Pair pairs[2];
+    int local[2];
+    int *p = g;
+    struct Pair *pp = pairs;
+    r1 = &*p;                 // pと同じ番地
+    r2 = &p[2];
+    r3 = &pp->b;
+    r4 = &pairs[1].b;
+    r5 = &local[1];
+}

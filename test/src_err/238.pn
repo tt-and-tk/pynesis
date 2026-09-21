@@ -1,0 +1,4 @@
+// 意味解析エラー: mainはプログラムの開始点であり，番地を取って呼び出すことはできない (異常系)
+void (*entry)(void) = main;
+void main(void) {
+}

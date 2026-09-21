@@ -1,0 +1,8 @@
+// 意味解析エラー: 関数ポインタに++/--は使えない(関数の番地をずらす意味がない) (異常系)
+int zero(void) {
+    return 0;
+}
+void main(void) {
+    int (*f)(void) = zero;
+    f++;
+}

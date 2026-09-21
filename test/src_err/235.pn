@@ -1,0 +1,9 @@
+// 意味解析エラー: 指す先の型が異なるポインタどうしの差は求められない (異常系)
+int ia[4];
+char ca[4];
+int r;
+void main(void) {
+    int *p = ia;
+    char *c = ca;
+    r = p - c;
+}

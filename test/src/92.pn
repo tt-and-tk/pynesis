@@ -1,0 +1,17 @@
+// ポインタのsizeofは定数式(配列の要素数・const変数の初期化子・caseの値)でも使え，引数で受け取ったポインタでも4になる
+int *gp;
+int words[sizeof(gp)];            // 要素数4
+int r;
+
+int f(char *s) {
+    const int N = sizeof(s);
+    switch (N) {
+        case sizeof(int *):
+            return 1;
+    }
+    return 0;
+}
+
+void main(void) {
+    r = f("a") + sizeof(words);   // 1 + 16
+}

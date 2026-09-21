@@ -1,0 +1,9 @@
+// 意味解析エラー: 構造体へのポインタの指す先(構造体そのもの)は値として読めない．メンバを参照する (異常系)
+struct Tag {
+    int x;
+};
+struct Tag t;
+void main(void) {
+    struct Tag *p = &t;
+    int y = *p;
+}

@@ -1,0 +1,9 @@
+// 意味解析エラー: switchの条件式にポインタは使えない (異常系)
+int g;
+void main(void) {
+    int *p = &g;
+    switch (p) {
+        default:
+            break;
+    }
+}

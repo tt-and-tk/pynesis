@@ -1,0 +1,26 @@
+// グローバルのポインタの初期化子: nullptr・グローバル変数の番地・配列の先頭・要素やメンバの番地・関数の番地・文字列リテラルと，
+// それらに整数定数を足し引きした式を書ける．番地は意味解析で確定するが，値は他の初期化子と同じくmainの先頭で書き込む
+// 後方で宣言した変数・関数の番地も使える
+struct Pair {
+    int first;
+    int second;
+};
+
+int *p0 = nullptr;
+int *p1 = &g;
+int *p2 = table;
+int *p3 = &table[2] - 1;
+int *p4 = &pairs[1].second;
+char *msg = "hi";
+int (*handler)(void) = zero;
+int g;
+int table[4];
+struct Pair pairs[2];
+
+int zero(void) {
+    return 0;
+}
+
+void main(void) {
+    g = *p3;
+}

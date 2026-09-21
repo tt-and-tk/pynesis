@@ -51,7 +51,7 @@ const std::map<std::string, token_kind_t> g_keywords = {
     {"while",    TK_WHILE},    {"do",       TK_DO},
     {"switch",   TK_SWITCH},   {"case",     TK_CASE},      {"default",  TK_DEFAULT},
     {"break",    TK_BREAK},    {"continue", TK_CONTINUE},
-    {"return",   TK_RETURN},   {"sizeof",   TK_SIZEOF},
+    {"return",   TK_RETURN},   {"sizeof",   TK_SIZEOF},   {"nullptr",  TK_NULLPTR},
     {"print",    TK_PRINT},    {"scan",     TK_SCAN},
     {"streq",    TK_STREQ},    {"strcopy",  TK_STRCOPY},
 };
@@ -61,7 +61,7 @@ const std::map<std::string, token_kind_t> g_operators = {
     {"<<=", TK_LSHIFT_ASSIGN}, {">>=", TK_RSHIFT_ASSIGN},
     {"==",  TK_EQEQ},    {"!=",  TK_NEQ},      {"<=",  TK_LEQ},       {">=",  TK_GEQ},
     {"<<",  TK_LSHIFT},  {">>",  TK_RSHIFT},   {"&&",  TK_AMPAMP},    {"||",  TK_PIPEPIPE},
-    {"++",  TK_PLUSPLUS},{"--",  TK_MINUSMINUS},
+    {"++",  TK_PLUSPLUS},{"--",  TK_MINUSMINUS},{"->",  TK_ARROW},
     {"+=",  TK_PLUS_ASSIGN}, {"-=", TK_MINUS_ASSIGN}, {"*=", TK_STAR_ASSIGN},
     {"/=",  TK_SLASH_ASSIGN},{"%=", TK_PCT_ASSIGN},
     {"&=",  TK_AMP_ASSIGN},  {"|=", TK_PIPE_ASSIGN},  {"^=", TK_CARET_ASSIGN},

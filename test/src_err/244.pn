@@ -1,0 +1,6 @@
+// 意味解析エラー: ポインタを返す関数から整数は返せない (異常系)
+int *find(void) {
+    return 1;
+}
+void main(void) {
+}

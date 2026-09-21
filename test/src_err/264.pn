@@ -1,0 +1,9 @@
+// 意味解析エラー: 関数ポインタには添字を付けられない (異常系)
+int zero(void) {
+    return 0;
+}
+int r;
+void main(void) {
+    int (*f)(void) = zero;
+    r = f[0];
+}

@@ -1,0 +1,29 @@
+// ポインタの基本: 番地の取得(&)と間接参照(*)による読み書き，nullptrの代入・比較・条件式
+// グローバル変数・ローカル変数の番地を取り，引数で受け取ったポインタの指す先へ書き込む
+// 条件式のポインタはnullptrなら偽になるため，0ではなくnullptrの値(80000000h)と比べる
+int g;
+int *gp;
+int result;
+
+void set(int *p, int v) {
+    *p = v;
+}
+
+void main(void) {
+    int x = 1;
+    int *lp = &x;
+    gp = &g;
+    *gp = 5;                      // g = 5
+    set(lp, *gp + 1);             // x = 6
+    result = x;
+    lp = nullptr;
+    if (lp == nullptr) {
+        result = result + 10;     // 16
+    }
+    if (!lp) {
+        result = result + 100;    // 116
+    }
+    if (gp && lp) {
+        result = 0;               // lpがnullptrのため実行されない
+    }
+}

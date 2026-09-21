@@ -19,8 +19,12 @@ const int MAX_INSTRUCTION_COUNT = 4096;
 const int MAX_REG = 16;
 
 // 整数昇格後の型が符号付き(int)かどうかを返す
-// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーのみ)
+// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーと，
+//  番地を符号なしの値として比較するポインタ・nullptrのみ)
 bool is_promoted_signed(const type_t &type);
+// 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
+// (条件式でnullptrを偽とする判定や，整数との取り違えの検査に使う)
+bool is_pointer_like(const type_t &type);
 // 二項演算を符号付きで行うかどうかを返す
 // (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
 bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
@@ -63,16 +67,20 @@ struct struct_def_t {
     int total_words;                       // 構造体全体が占めるワード数
 };
 
+// 型の論理バイト数を返す (配列は要素数×要素のバイト数．構造体はstruct_defsのメンバ構成から求める)
+int type_size_bytes(const type_t &type, const std::map<std::string, struct_def_t> &struct_defs);
+
 // 意味解析の結果 (コード生成が参照する情報をまとめたもの．各表はアナライザが保持する実体を指す)
 struct analysis_result_t {
     // 関数名→引数のシンボル列 (コード生成で引数の書き込み先の位置に使う)
     const std::map<std::string, std::vector<const symbol_t *>> &func_params;
-    // 構造体名→メンバ構成 (コード生成が，構造体配列の要素1個分が占めるバイト数を計算するのに使う．
+    // 構造体名→メンバ構成 (コード生成が，構造体の要素1個分が占めるバイト数とメンバのオフセットを求めるのに使う．
     //  構造体配列は，このバイト数×添字ぶんだけ先頭からずらして各要素の位置を求める)
     const std::map<std::string, struct_def_t> &struct_defs;
     // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
     const std::map<std::string, int> &func_local_sizes;
-    // 関数名→直接呼び出す関数名の集合 (コード生成が最大スタック使用量を求めるのに使う)
+    // 関数名→呼び出しうる関数名の集合 (コード生成が最大スタック使用量を求めるのに使う．
+    //  関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された全関数を呼びうるものとして含める)
     const std::map<std::string, std::set<std::string>> &call_graph;
     int global_size;   // グローバル変数・文字列リテラルが占めるバイト数
 };
@@ -92,11 +100,14 @@ private:
     std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→引数のシンボル列
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
     std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
-    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合
+    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→呼び出しうる関数名の集合
     int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地 (割り当て後はグローバル領域のバイト数)
 
     // 解析の途中で使う情報
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
+    std::map<std::string, std::shared_ptr<func_sig_t>> func_sigs_;  // 関数名→シグネチャ (関数の番地の型と呼び出しの引数検査に使う)
+    std::set<std::string> addr_taken_funcs_;             // 番地を取得された関数名 (関数ポインタを通して呼ばれうる関数)
+    std::set<std::string> indirect_callers_;             // 関数ポインタを通した呼び出しを含む関数(呼び出し元)の名前
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
@@ -118,8 +129,6 @@ private:
     static const_value_t eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r);
     static long long const_symbol_value(const symbol_t *sym);   // const変数のシンボルが保持する値を型に応じて解釈して返す
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
-    // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
-    int type_size_bytes(const type_t &type) const;
     // 宣言ノードの型を確定させる (構造体型なら構造体定義を解決し，配列なら要素数を計算して畳み込む．確定済みなら何もしない)
     // 後方の宣言も解決できるよう，宣言順によらず必要になった時点で呼ばれる
     void resolve_decl_type(node_t *decl);
@@ -138,15 +147,41 @@ private:
     // const変数の初期化子を定数式として計算し，値を持つシンボル(置き場所LOC_CONST)を生成して返す
     // (register_struct_varと同じく，シンボル表への格納はグローバル/ローカルの区別を知る呼び出し元が行う)
     symbol_t *register_const_var(const node_t *decl);
+    // 型に構造体名が現れる場合(ポインタの指す先・関数ポインタの引数と戻り値を含む)，その構造体が定義済みであることを確かめる
+    void check_type_exists(const type_t &type, const loc_t &loc) const;
+    // ポインタ型のグローバル変数の初期化子が，コンパイル時に値が決まる番地の式であることを確かめる
+    // (変数の値・ローカル変数の番地・関数呼び出しを使う初期化子はエラーにする)
+    void check_global_pointer_inits();
+    // コンパイル時に値が決まる番地の式(nullptr・グローバル変数や関数の番地と，それに整数定数を足し引きした式)かを返す
+    static bool is_address_constant(const node_t *expr);
+    // 番地がコンパイル時に決まる左辺値(グローバル変数と，その定数の添字の要素・メンバ)かを返す
+    static bool is_static_lvalue(const node_t *expr);
+    // 値がコンパイル時に決まる整数の式かを返す (名前解決・定数の埋め込みを終えた式を対象にする)
+    static bool is_integer_constant(const node_t *expr);
     void analyze_functions();                               // 3パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
+    // 評価した結果の値(整数・ポインタ)を使う式(代入の右辺・引数・戻り値・演算のオペランド等)を検査する
+    // (値を持たないvoid・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む)
+    void analyze_value(node_t *expr);
+    // 書き込み先・番地の取得対象になる式(左辺値)を検査し名前解決・型注釈する (値を読む側の検査は行わない)
+    void analyze_lvalue(node_t *expr);
+    void analyze_call(node_t *expr);                        // 関数呼び出し(直接・関数ポインタ経由)を検査する
+    void analyze_binop(node_t *expr);                       // 二項演算を検査し，結果の型を注釈する
+    // 構造体のメンバを名前から探す (見つからなければexprの位置でエラー)
+    const struct_member_t &find_member(const std::string &struct_name, const node_t *expr) const;
+    type_t func_pointer_type(const std::string &name) const;  // その関数を指す関数ポインタの型を返す
+    // 式srcの値を，型dstの格納先(代入・初期化する変数，関数の引数，戻り値)へ格納できるか検査する
+    // 格納先の型と値の型のどちらかがポインタ(nullptrを含む)の場合に，ポインタと整数の取り違えと，
+    // 指す先の型の違いをエラーにする(整数どうしは型が異なっても格納できる)．contextはエラーメッセージ用の格納の種類
+    static void check_assignable(const type_t &dst, const node_t *src, const std::string &context);
+    static bool is_same_type(const type_t &a, const type_t &b);   // 2つの型が(ポインタの指す先を含め)同じかを返す
     // print/streq/strcopyに共通する引数検査を行う (builtin_nameはエラーメッセージ用の関数名)
     void check_char_array_operand(node_t *target, const std::string &builtin_name);
-    // 演算の対象がスカラーであることを検査する (operationはエラーメッセージ用の演算名)
+    // 演算の対象がスカラー(整数またはポインタ)であることを検査する (operationはエラーメッセージ用の演算名)
     static void check_scalar_operand(const node_t *target, const std::string &operation);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
     // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す

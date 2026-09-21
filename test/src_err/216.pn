@@ -1,0 +1,5 @@
+// 意味解析エラー: const変数はメモリ上の番地を持たないため，番地を取れない (異常系)
+const int N = 1;
+void main(void) {
+    int *p = &N;
+}
