@@ -1,0 +1,11 @@
+// 文字列リテラルは値として使うと先頭要素へのポインタ(char *)になり，ローカルのポインタの初期化子や引数に書ける
+int r;
+
+char first(char *s) {
+    return *s;
+}
+
+void main(void) {
+    char *s = "xy";
+    r = first(s + 1) + first("z");   // 'y' + 'z'
+}
