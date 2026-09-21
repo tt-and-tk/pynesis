@@ -43,9 +43,8 @@ static bool is_signed_literal(long long value) {
 // 整数昇格後の型が符号付き(int)かどうかを返す
 // 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
 bool is_promoted_signed(const type_t &type) {
-    // ポインタ・nullptrの場合 (番地は符号なしの値として比較する)
-    if (is_pointer_like(type)) return false;
-    return type.is_signed || type.base != BASE_INT || type.is_array;
+    // ポインタ・nullptr(番地は符号なしの値として比較する)でなく，符号付きint・intへ昇格するchar/short・配列なら符号付き
+    return !is_pointer_like(type) && (type.is_signed || type.base != BASE_INT || type.is_array);
 }
 
 // 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
@@ -381,16 +380,13 @@ void Analyzer::collect_globals() {
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
             } else if (is_pointer_value(child->type)) {
-                // ポインタ変数: 指す先の構造体が定義済みか確かめ，1ワードを割り当てて登録する
+                // ポインタ変数: 型に構造体が現れる場合はその定義が済んでいるか確かめ，1ワードを割り当てて登録する
                 this->check_type_exists(child->type, child->loc);
                 symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
                                              this->alloc_var(4, LOC_GLOBAL), true, true};
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
                 // 初期化子は，全グローバル変数の番地が決まってから検査する (後方で宣言された変数の番地も使えるようにするため)
-                if (!child->children.empty()) {
-                    this->pointer_global_decls_.push_back(child);
-                }
             } else if (child->type.is_array) {
                 // 配列の要素数を確定させる (先に参照されて解決済みなら何もしない)
                 this->resolve_decl_type(child);
@@ -420,36 +416,42 @@ void Analyzer::collect_globals() {
                 child->sym = sym;   // 宣言ノード自身もシンボルを指す (コード生成でアドレス参照に使う)
             }
         }
-        // 関数定義: パラメータのシンボルとシグネチャを登録する (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
-        // 呼び出し側の引数検査(analyze_call)は3パス目より前に全関数のシグネチャが必要なため，
-        // パラメータのオフセット割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
-        // シンボルをスコープに積んで本体を検査するだけになる
+        // 関数定義: 各引数の名前・型・フレーム上の位置(シンボル)と，関数の引数の型の並び・戻り値型(シグネチャ)を登録する
+        // (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
+        // 3パス目で関数本体を検査する際，本体より後ろに定義された関数の呼び出しも引数を検査できるよう，
+        // 全関数のシグネチャをここ(2パス目)で揃えておく．3パス目(analyze_functions)は，ここで作った引数の
+        // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
-            // 戻り値型に現れる構造体が定義済みか確かめる
+            // 戻り値型に構造体が現れる場合はその定義が済んでいるか確かめる
             this->check_type_exists(child->type, child->loc);
             auto sig = std::make_shared<func_sig_t>();   // この関数のシグネチャ
             sig->return_type = child->type;
             std::vector<const symbol_t *> params;
             for (size_t i = 0; i + 1 < child->children.size(); i++) {
                 node_t *param = child->children[i];
-                // パラメータの型に現れる構造体が定義済みか確かめる
+                // 引数の型に構造体が現れる場合はその定義が済んでいるか確かめる
                 this->check_type_exists(param->type, param->loc);
 
-                // 同一関数内でのパラメータ名重複はエラー
+                // 同一関数内での引数名重複はエラー
                 for (const symbol_t *p : params) {
                     if (p->name == param->sval) {
                         throw std::string("compiler error: duplicate parameter name '") + param->sval
                               + "' at " + loc_to_string(param->loc);
                     }
                 }
-                // ハードウェア変数と同名のパラメータは禁止する (I/Oレジスタの誤上書き防止)
+                // 関数と同名の引数は禁止する (呼び出しの名前f(...)が関数と変数のどちらを指すかを一意にするため)
+                if (this->func_names_.count(param->sval)) {
+                    throw std::string("compiler error: '") + param->sval + "' is already declared as a function at "
+                          + loc_to_string(param->loc);
+                }
+                // ハードウェア変数と同名の引数は禁止する (I/Oレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
                     throw std::string("compiler error: cannot shadow hardware register '") + param->sval
                           + "' at " + loc_to_string(param->loc);
                 }
 
-                // パラメータはポインタ(番地を保持する)も含め1つにつき1ワードを宣言順に占める
+                // 引数はポインタ(番地を保持する)も含め1つにつき1ワードを宣言順に占める
                 symbol_t *sym = new symbol_t{param->sval, param->type, LOC_PARAM,
                                              static_cast<int>(params.size()) * 4, true, true};
                 param->sym = sym;
@@ -613,7 +615,8 @@ const_value_t Analyzer::eval_const_binop(const node_t *expr, const const_value_t
     return {wrap32(result, is_signed), is_signed};
 }
 
-// 配列が占有するワード数を計算する (int・ポインタ=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
+// 配列が占有するワード数を計算する
+// (1要素のバイト数はint・ポインタが4，shortが2，charが1．要素を詰めて並べ，ワード単位に切り上げる)
 int Analyzer::calc_array_words(const type_t &type) {
     const int n = type.array_size;
     // ポインタの配列の場合 (要素は番地を保持する1ワード)
@@ -653,11 +656,11 @@ int Analyzer::type_size_bytes(const type_t &type) const {
     return type.is_array ? elem_bytes * type.array_size : elem_bytes;
 }
 
-// 型に現れる構造体名が定義済みであることを確かめる
+// 型に構造体名が現れる場合，その構造体が定義済みであることを確かめる (現れなければ何もしない)
 // ポインタの指す先の構造体は宣言時に定義を解決しないため，名前が存在することだけをここで確かめる
 void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
-    // 構造体型(構造体へのポインタを含む)の場合
-    if (type.base == BASE_STRUCT && !this->struct_decl_nodes_.count(type.struct_name)) {
+    // 構造体型(構造体へのポインタを含む)で，その構造体が定義されていない場合
+    if (type.base == BASE_STRUCT && this->struct_decl_nodes_.count(type.struct_name) == 0) {
         throw std::string("compiler error: use of undeclared struct '") + type.struct_name
               + "' at " + loc_to_string(loc);
     }
@@ -671,15 +674,19 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
 }
 
 // ポインタ型のグローバル変数の初期化子を検査する
-// グローバル変数の初期化子は，mainより前に実行される処理が存在しないため値が意味解析で確定する式に限る．
+// グローバル変数の初期化子は，mainより前に実行される処理が存在しないため，コンパイル時に値が決まる式に限る．
 // ポインタの場合は整数の定数式の代わりに，グローバル変数・関数の番地(に整数定数を足し引きした式)とnullptrを許す．
 // 値は整数のように畳み込まず，他の初期化子と同じくmainの先頭で番地を求めて書き込む
 void Analyzer::check_global_pointer_inits() {
-    for (node_t *decl : this->pointer_global_decls_) {
+    for (node_t *decl : this->root_->children) {
+        // 初期化子を持つポインタ型のグローバル変数の宣言でない場合
+        if (decl->kind != ND_VAR_DECL || !is_pointer_value(decl->type) || decl->children.empty()) continue;
         node_t *init = decl->children[0];   // 初期化子の式
+        // 初期化子を値として検査し，名前解決と型注釈を行う
         this->analyze_value(init);
+        // 初期化子の値を変数の型の格納先へ格納できるか検査する (整数の値・指す先の型が異なるポインタはエラー)
         Analyzer::check_assignable(decl->type, init, "initialization");
-        // 番地が意味解析で確定しない式の場合 (変数の値の参照・関数呼び出し・間接参照等)
+        // コンパイル時に番地が決まらない式の場合 (変数の値の参照・関数呼び出し・間接参照等)
         if (!Analyzer::is_address_constant(init)) {
             throw std::string("compiler error: initializer of global pointer '") + decl->sval
                   + "' must be nullptr or an address of a global variable or function at "
@@ -688,10 +695,11 @@ void Analyzer::check_global_pointer_inits() {
     }
 }
 
-// 式が，番地が意味解析で確定するポインタの式かを返す
+// コンパイル時に値が決まる番地の式かを返す
 // (nullptr・関数の番地・グローバル配列や文字列リテラルの先頭・&グローバルの左辺値と，それらに整数定数を足し引きした式)
 bool Analyzer::is_address_constant(const node_t *expr) {
     switch (expr->kind) {
+        // nullptr・関数の番地・文字列リテラルの先頭の番地の場合 (常にコンパイル時に決まる)
         case ND_NULLPTR:
         case ND_FUNC_ADDR:
         case ND_STRING_LIT:
@@ -702,9 +710,10 @@ bool Analyzer::is_address_constant(const node_t *expr) {
         // メンバ配列の先頭の番地として使われるメンバ
         case ND_MEMBER_ACCESS:
             return expr->is_decayed && Analyzer::is_static_lvalue(expr);
-        case ND_ADDR:
+        // &の場合 (対象の番地がコンパイル時に決まる左辺値ならよい)
+        case ND_ADDR_OF:
             return Analyzer::is_static_lvalue(expr->children[0]);
-        // ポインタに整数定数を足し引きした式
+        // ポインタに整数定数を足し引きした式の場合 (ポインタ側がこの関数の条件を満たし，整数側が整数定数ならよい)
         case ND_BINOP: {
             const node_t *lhs = expr->children[0];   // 左辺
             const node_t *rhs = expr->children[1];   // 右辺
@@ -712,18 +721,21 @@ bool Analyzer::is_address_constant(const node_t *expr) {
             if (expr->sval == "+" && Analyzer::is_integer_constant(lhs)) {
                 return Analyzer::is_address_constant(rhs);
             }
+            // ポインタ±整数定数の場合
             return (expr->sval == "+" || expr->sval == "-")
                 && Analyzer::is_address_constant(lhs) && Analyzer::is_integer_constant(rhs);
         }
+        // それ以外(変数の値の参照・関数呼び出し・間接参照等)の場合 (実行時に値が決まる)
         default:
             return false;
     }
 }
 
-// 式が，番地が意味解析で確定する左辺値かを返す
+// 番地がコンパイル時に決まる左辺値かを返す
 // (グローバル変数と，その配列要素(添字が整数定数)・メンバ．グローバルスコープにはグローバル変数しかない)
 bool Analyzer::is_static_lvalue(const node_t *expr) {
     switch (expr->kind) {
+        // 変数の場合 (グローバルスコープで名前解決した変数はグローバル変数であり，番地が固定)
         case ND_VAR:
             return true;
         // 配列の要素の場合 (ポインタの指す先は実行時に決まるため，配列そのものの要素に限る)
@@ -744,15 +756,17 @@ bool Analyzer::is_static_lvalue(const node_t *expr) {
             return base->kind == ND_VAR
                 || (base->kind == ND_ARRAY_ACCESS && Analyzer::is_static_lvalue(base));
         }
+        // それ以外(ポインタの指す先等)の場合 (番地が実行時に決まる)
         default:
             return false;
     }
 }
 
-// 式が，値が意味解析で確定する整数の式かを返す
+// 値がコンパイル時に決まる整数の式かを返す
 // const変数は名前解決の時点で値のリテラルに置き換わっているため，リテラルと演算子だけを調べればよい
 bool Analyzer::is_integer_constant(const node_t *expr) {
     switch (expr->kind) {
+        // リテラル・sizeofの場合 (値が決まっている)
         case ND_INT_LIT:
         case ND_CHAR_LIT:
         case ND_SIZEOF:
@@ -760,18 +774,20 @@ bool Analyzer::is_integer_constant(const node_t *expr) {
         // 単項演算 (++/--は変数を書き換えるため除く)
         case ND_UNOP:
             return expr->sval != "++" && expr->sval != "--" && Analyzer::is_integer_constant(expr->children[0]);
+        // 二項演算・三項演算子の場合 (オペランドがすべて整数定数ならよい)
         case ND_BINOP:
             return Analyzer::is_integer_constant(expr->children[0]) && Analyzer::is_integer_constant(expr->children[1]);
         case ND_TERNARY:
             return Analyzer::is_integer_constant(expr->children[0]) && Analyzer::is_integer_constant(expr->children[1])
                 && Analyzer::is_integer_constant(expr->children[2]);
+        // それ以外(変数の値の参照・関数呼び出し等)の場合 (実行時に値が決まる)
         default:
             return false;
     }
 }
 
 // 3パス目: 各関数本体を検査する
-// ND_FUNC_DEFのchildren = [param0, param1, ..., block] (パラメータがなければchildren[0]がブロック)
+// ND_FUNC_DEFのchildren = [param0, param1, ..., block] (引数がなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
         if (child->kind != ND_FUNC_DEF) continue;
@@ -783,10 +799,10 @@ void Analyzer::analyze_functions() {
         // ローカル変数はこの関数のフレーム内に確保するため，関数ごとにオフセットを0から数え直す
         this->local_size_ = 0;
 
-        // 関数スコープを開く (パラメータと本体のローカル変数が同じスコープに入る)
+        // 関数スコープを開く (引数と本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // パラメータをスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
+        // 引数をスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
@@ -835,7 +851,8 @@ void Analyzer::analyze_stmt(node_t *stmt) {
                       + "' cannot return a value at " + loc_to_string(stmt->loc);
             }
             this->analyze_value(stmt->children[0]);
-            // 戻り値型と値の型がポインタと整数で食い違う場合 (整数どうしは幅への切り詰めも行わずそのまま返す)
+            // 戻り値を戻り値型の格納先へ格納できるか検査する (ポインタと整数の取り違え・指す先の型の違いをエラーにする．
+            // 整数どうしは幅への切り詰めも行わずそのまま返す)
             Analyzer::check_assignable(this->current_return_type_, stmt->children[0], "return");
         }
     }
@@ -900,7 +917,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
 // switch文を検査する (children: 条件式, 本体の文とcase/defaultラベルが平坦に並ぶ)
 void Analyzer::analyze_switch(node_t *stmt) {
     this->analyze_value(stmt->children[0]);   // 条件式
-    // 条件式がポインタの場合 (case値の整数定数と比べる意味がないため)
+    // 条件式がポインタの場合 (case値は整数定数であり，番地と比べる意味がないためエラーにする)
     if (is_pointer_like(stmt->children[0]->type)) {
         throw std::string("compiler error: switch condition must be an integer at ")
               + loc_to_string(stmt->children[0]->loc);
@@ -953,6 +970,11 @@ void Analyzer::analyze_local_decl(node_t *decl) {
               + "' at " + loc_to_string(decl->loc);
     }
 
+    // 関数と同名のローカル変数は宣言できない (呼び出しの名前f(...)が関数と変数のどちらを指すかを一意にするため)
+    if (this->func_names_.count(decl->sval)) {
+        throw std::string("compiler error: '") + decl->sval + "' is already declared as a function at "
+              + loc_to_string(decl->loc);
+    }
     // ハードウェア変数と同名のローカル変数は宣言できない (I/Oレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
@@ -985,7 +1007,9 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         this->check_type_exists(decl->type, decl->loc);
         // 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
         if (!decl->children.empty()) {
+            // 初期化子を値として検査し，名前解決と型注釈を行う
             this->analyze_value(decl->children[0]);
+            // 初期化子の値を変数の型の格納先へ格納できるか検査する (ポインタと整数の取り違え・指す先の型の違いをエラーにする)
             Analyzer::check_assignable(decl->type, decl->children[0], "initialization");
         }
         // フレーム内のオフセットを割り当てて登録する (型に関係なく1変数=1ワード(4バイト)使う)
@@ -1030,8 +1054,8 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
     }
 }
 
-// 値として使う式を検査する
-// 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を注釈する
+// 値(整数・ポインタのように1つのレジスタに読み込めるもの)を求める位置に書かれた式を検査する
+// 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む
 // (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
 void Analyzer::analyze_value(node_t *expr) {
     this->analyze_expr(expr);
@@ -1078,21 +1102,21 @@ void Analyzer::analyze_lvalue(node_t *expr) {
           + loc_to_string(expr->loc);
 }
 
-// 関数呼び出しを検査する (children: [呼び出し先の式, 引数...])
-// 呼び出し先が関数名そのもの(同名の変数に隠されていないもの)なら直接呼び出し，それ以外は関数ポインタを通した呼び出しとし，
-// どちらも呼び出し先の型が持つシグネチャで引数と戻り値を検査する
+// 関数呼び出しを検査する (children: [呼び出す関数(関数名または関数ポインタの値を持つ式), 引数...])
+// 呼び出す関数が関数名なら直接呼び出し，それ以外は関数ポインタを通した呼び出しとし，
+// どちらも呼び出す関数の型が持つシグネチャで引数と戻り値を検査する
 void Analyzer::analyze_call(node_t *expr) {
-    node_t *callee = expr->children[0];   // 呼び出し先の式
-    const bool is_direct = callee->kind == ND_VAR && this->lookup_symbol(callee->sval) == nullptr;   // 関数名による直接呼び出しか
-    // 直接呼び出しの場合
+    node_t *callee = expr->children[0];                                                      // 呼び出す関数
+    const bool is_direct = callee->kind == ND_VAR && this->func_names_.count(callee->sval);  // 関数名による直接呼び出しか
+    // 変数でも関数でもない名前の場合
+    if (callee->kind == ND_VAR && !is_direct && this->lookup_symbol(callee->sval) == nullptr) {
+        throw std::string("compiler error: call to undefined function '")
+              + callee->sval + "' at " + loc_to_string(expr->loc);
+    }
+    // 直接呼び出しの場合 (関数と同名の変数は宣言できないため，関数名は常に関数を指す)
     if (is_direct) {
-        // 変数でも関数でもない名前の場合
-        if (!this->func_names_.count(callee->sval)) {
-            throw std::string("compiler error: call to undefined function '")
-                  + callee->sval + "' at " + loc_to_string(expr->loc);
-        }
-        // 呼び出す関数の番地として注釈し，呼び出しグラフに記録する (番地を値として取得したわけではないため，
-        // 関数ポインタを通して呼ばれうる関数には加えない)
+        // 呼び出す関数を関数の番地を表すノードに置き換えてその型を書き込み，呼び出しグラフに記録する
+        // (番地を値として取得したわけではないため，関数ポインタを通して呼ばれうる関数には加えない)
         callee->kind = ND_FUNC_ADDR;
         callee->type = this->func_pointer_type(callee->sval);
         expr->sval = callee->sval;
@@ -1109,20 +1133,22 @@ void Analyzer::analyze_call(node_t *expr) {
         this->indirect_callers_.insert(this->current_function_);
     }
 
-    // 引数の数がパラメータの数と一致するか検証する
-    const func_sig_t &sig = *callee->type.func_sig;   // 呼び出し先のシグネチャ
+    // 渡す引数の数が，呼び出す関数の引数の数と一致するか検証する
+    const func_sig_t &sig = *callee->type.func_sig;       // 呼び出す関数のシグネチャ
     const size_t arg_count = expr->children.size() - 1;   // 引数の個数
     if (arg_count != sig.param_types.size()) {
-        const std::string callee_name = is_direct ? "function '" + expr->sval + "'" : "function pointer";   // エラーメッセージに書く呼び出し先
+        const std::string callee_name = is_direct ? "function '" + expr->sval + "'" : "function pointer";   // エラーメッセージに書く呼び出す関数
         throw std::string("compiler error: ") + callee_name + " expects "
               + std::to_string(sig.param_types.size()) + " argument(s) but got "
               + std::to_string(arg_count) + " at " + loc_to_string(expr->loc);
     }
-    // 各引数を，パラメータの型の格納先へ格納できるか検査する
-    // (整数どうしは型が異なっても受け付け，パラメータの型で格納する．値の変換規則が決まっているため，型の一致は検査しない)
+    // 渡す各引数を，呼び出す関数の引数の型の格納先へ格納できるか検査する
+    // (整数どうしは型が異なっても受け付け，呼び出す関数の引数の型で格納する．値の変換規則が決まっているため，型の一致は検査しない)
     for (size_t i = 0; i < arg_count; i++) {
         node_t *arg = expr->children[i + 1];   // i番目の引数
+        // 引数を値として検査し，名前解決と型注釈を行う
         this->analyze_value(arg);
+        // 引数の値を，呼び出す関数のi番目の引数の型の格納先へ格納できるか検査する
         Analyzer::check_assignable(sig.param_types[i], arg, "argument " + std::to_string(i + 1));
     }
     expr->type = sig.return_type;
@@ -1133,11 +1159,11 @@ void Analyzer::analyze_call(node_t *expr) {
 void Analyzer::analyze_binop(node_t *expr) {
     this->analyze_value(expr->children[0]);
     this->analyze_value(expr->children[1]);
-    const type_t &lhs = expr->children[0]->type;   // 左辺の型
-    const type_t &rhs = expr->children[1]->type;   // 右辺の型
-    const std::string &op = expr->sval;            // 演算子
-    const bool is_lhs_pointer = is_pointer_like(lhs);   // 左辺がポインタ(nullptrを含む)か
-    const bool is_rhs_pointer = is_pointer_like(rhs);   // 右辺がポインタ(nullptrを含む)か
+    const type_t &lhs = expr->children[0]->type;       // 左辺の型
+    const type_t &rhs = expr->children[1]->type;       // 右辺の型
+    const std::string &op = expr->sval;                // 演算子
+    const bool is_lhs_pointer = is_pointer_like(lhs);  // 左辺がポインタ(nullptrを含む)か
+    const bool is_rhs_pointer = is_pointer_like(rhs);  // 右辺がポインタ(nullptrを含む)か
     // 比較・論理演算か (結果は0/1のint)
     const bool is_boolean = op == "==" || op == "!=" || op == "<" || op == ">"
                          || op == "<=" || op == ">=" || op == "&&" || op == "||";
@@ -1174,18 +1200,19 @@ void Analyzer::analyze_binop(node_t *expr) {
     // ポインタに整数を足し引きする場合 (ポインタ+整数・整数+ポインタ・ポインタ-整数)
     const bool is_pointer_offset =
         (op == "+" || op == "-") && is_pointer_value(lhs) && !is_func_pointer(lhs) && !is_rhs_pointer;   // ポインタ±整数か
+    // (加算は交換できるためC言語と同じく整数+ポインタも許す．整数-ポインタは意味を持たないため許さない)
     const bool is_offset_pointer =
         op == "+" && !is_lhs_pointer && is_pointer_value(rhs) && !is_func_pointer(rhs);                  // 整数+ポインタか
     if (is_pointer_offset || is_offset_pointer) {
         const type_t &pointer = is_pointer_offset ? lhs : rhs;   // 足し引きされるポインタの型
         expr->type = pointer;
-        expr->ival = this->pointee_size(pointer);
+        expr->step = this->pointee_size(pointer);
         return;
     }
     // ポインタどうしの差の場合 (同じ配列を指す同じ型のポインタどうしで，間の要素数をintで返す)
     if (op == "-" && is_pointer_value(lhs) && !is_func_pointer(lhs) && Analyzer::is_same_type(lhs, rhs)) {
         expr->type = type_t{BASE_INT, true};
-        expr->ival = this->pointee_size(lhs);
+        expr->step = this->pointee_size(lhs);
         return;
     }
     // それ以外の演算にポインタを使った場合
@@ -1202,7 +1229,7 @@ const struct_member_t &Analyzer::find_member(const std::string &struct_name, con
           + "' has no member '" + expr->sval + "' at " + loc_to_string(expr->loc);
 }
 
-// 関数の番地の型(その関数を指す関数ポインタ)を返す
+// 関数名を値として書いた式の型(その関数を指す関数ポインタの型)を返す
 type_t Analyzer::func_pointer_type(const std::string &name) const {
     type_t type;
     type.base = BASE_FUNC;
@@ -1217,14 +1244,14 @@ int Analyzer::pointee_size(const type_t &type) const {
 }
 
 // 値srcを型dstの格納先(変数・引数・戻り値)へ格納できるか検査する
-// ポインタと整数の間に暗黙の変換はない．ポインタどうしは指す先の型が一致する場合，またはnullptrのみ格納できる
+// 整数どうしは型が異なっても格納でき(格納先の型の幅で格納する)，ポインタが関わる場合のみ型を検査する
 void Analyzer::check_assignable(const type_t &dst, const node_t *src, const std::string &context) {
     const type_t &value = src->type;   // 格納する値の型
-    // 格納先がポインタの場合
+    // 格納先がポインタの場合 (指す先の型が一致するポインタか，nullptrのみ格納できる)
     if (is_pointer_value(dst)) {
         // nullptrの場合 (どのポインタにも格納できる)
         if (value.base == BASE_NULLPTR) return;
-        // 整数を格納しようとした場合 (0もヌルポインタとしては扱わない)
+        // 整数を格納しようとした場合 (ポインタと整数の間に暗黙の変換はなく，0もヌルポインタとしては扱わない)
         if (!is_pointer_value(value)) {
             throw std::string("compiler error: cannot convert '") + type_to_string(value) + "' to '"
                   + type_to_string(dst) + "' in " + context + " (use nullptr for a null pointer) at "
@@ -1237,7 +1264,7 @@ void Analyzer::check_assignable(const type_t &dst, const node_t *src, const std:
         }
         return;
     }
-    // 格納先が整数で，ポインタを格納しようとした場合
+    // 格納先が整数で，ポインタを格納しようとした場合 (ポインタと整数の間に暗黙の変換はない)
     if (is_pointer_like(value)) {
         throw std::string("compiler error: cannot convert '") + type_to_string(value) + "' to '"
               + type_to_string(dst) + "' in " + context + " at " + loc_to_string(src->loc);
@@ -1247,6 +1274,7 @@ void Analyzer::check_assignable(const type_t &dst, const node_t *src, const std:
 // 2つの型が(ポインタの指す先を含め)同じかを返す
 // 整数型は符号も含めて比べる(指す先の型で読み書きの幅と符号拡張が決まるため)
 bool Analyzer::is_same_type(const type_t &a, const type_t &b) {
+    // 基本型・ポインタの段数・配列かどうかのいずれかが異なる場合
     if (a.base != b.base || a.pointer_depth != b.pointer_depth || a.is_array != b.is_array) return false;
     // 構造体の場合
     if (a.base == BASE_STRUCT) return a.struct_name == b.struct_name;
@@ -1254,13 +1282,17 @@ bool Analyzer::is_same_type(const type_t &a, const type_t &b) {
     if (a.base == BASE_FUNC) {
         const func_sig_t &sig_a = *a.func_sig;   // aのシグネチャ
         const func_sig_t &sig_b = *b.func_sig;   // bのシグネチャ
+        // 戻り値型が異なる場合
         if (!Analyzer::is_same_type(sig_a.return_type, sig_b.return_type)) return false;
+        // 引数の個数が異なる場合
         if (sig_a.param_types.size() != sig_b.param_types.size()) return false;
+        // 引数の型を先頭から順に比べ，1つでも異なる場合
         for (size_t i = 0; i < sig_a.param_types.size(); i++) {
             if (!Analyzer::is_same_type(sig_a.param_types[i], sig_b.param_types[i])) return false;
         }
         return true;
     }
+    // 整数型の場合 (符号の有無も一致すること)
     return a.is_signed == b.is_signed;
 }
 
@@ -1334,7 +1366,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_VAR: {
             const symbol_t *sym = this->lookup_symbol(expr->sval);
             if (sym == nullptr) {
-                // 変数として見つからない関数名は，その関数の番地(関数ポインタ)として扱う
+                // 関数名の場合 (呼び出しの括弧を付けずに書いた関数名は，その関数の番地(関数ポインタ)として扱う)
                 if (this->func_names_.count(expr->sval)) {
                     // mainの場合 (プログラムの開始点であり，呼び出し元へ復帰できないため呼び出す手段を与えない)
                     if (expr->sval == "main") {
@@ -1368,14 +1400,12 @@ void Analyzer::analyze_expr(node_t *expr) {
         }
 
         // 番地の取得 &x: 対象が番地を持つ左辺値であることを確かめ，指す先をその型とするポインタの型を付ける
-        case ND_ADDR: {
+        case ND_ADDR_OF: {
             node_t *operand = expr->children[0];   // 番地を取る式
-            // 関数名の場合 (&を付けずに関数名を書いた場合と同じく，その関数の番地になる)
-            if (operand->kind == ND_VAR && this->lookup_symbol(operand->sval) == nullptr
-                && this->func_names_.count(operand->sval)) {
-                this->analyze_expr(operand);
-                *expr = *operand;
-                return;
+            // 関数名の場合 (関数の番地は&を付けずに関数名だけで書く．同じ値の書き方を1つにするため&は受け付けない)
+            if (operand->kind == ND_VAR && this->func_names_.count(operand->sval)) {
+                throw std::string("compiler error: cannot apply '&' to function '") + operand->sval
+                      + "'; write the function name alone to get its address at " + loc_to_string(expr->loc);
             }
             this->analyze_lvalue(operand);
             // ハードウェア変数・const変数の場合 (メモリ上の番地を持たないため)
@@ -1384,7 +1414,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot take the address of '") + operand->sval
                       + "' (it has no memory address) at " + loc_to_string(expr->loc);
             }
-            // 配列そのものの場合 (配列へのポインタは非対応．配列の名前がそのまま先頭要素の番地になる)
+            // 配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
+            // 要素の番地は&arr[i]で取れる)
             if (operand->type.is_array) {
                 throw std::string("compiler error: cannot take the address of an array; "
                                    "use the array itself or the address of its first element at ")
@@ -1405,12 +1436,13 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_DEREF: {
             node_t *pointer = expr->children[0];   // 間接参照するポインタの式
             this->analyze_value(pointer);
-            // 関数ポインタの場合 (C言語と同じく，*を付けても同じ関数ポインタとして扱い，(*fp)(x)をfp(x)と同じにする)
+            // 関数ポインタの場合 (指す先の関数は値として読み書きできず，呼び出しは関数ポインタのままfp(x)と書くため)
             if (is_func_pointer(pointer->type)) {
-                expr->type = pointer->type;
-                return;
+                throw std::string("compiler error: cannot dereference a function pointer; call it directly at ")
+                      + loc_to_string(expr->loc);
             }
-            // ポインタでない場合 (nullptrは型からは指す先が決まらない)
+            // ポインタの値でない場合 (整数・nullptr等．nullptrはどのポインタにも入れられる値であり，
+            // 指す先の型を持たないため間接参照できない)
             if (!is_pointer_value(pointer->type)) {
                 throw std::string("compiler error: cannot dereference '") + type_to_string(pointer->type)
                       + "' at " + loc_to_string(expr->loc);
@@ -1419,9 +1451,14 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 構造体メンバアクセス(a.b)の意味解析．最終的に確定させる情報はメンバの型(expr->type)と
-        // 読み書き先(expr->sym)の2つ．基底(a)がメンバの番地をコンパイル時定数にできるかどうかで
-        // 経路が分かれる(単一の構造体変数なら定数，構造体配列の要素・構造体ポインタの指す先なら実行時の値のため不定)
+        // 構造体メンバアクセス(a.b)の意味解析．メンバの型(expr->type)と，読み書き先を求めるための情報を確定させる
+        // 基底(a)の形で次の4つの経路に分かれる
+        //   (1) 単一の構造体変数 entry.member: 番地がコンパイル時に決まるため，メンバの番地を持つシンボル
+        //       (名前・型・番地・読み書き可否をまとめた，名前解決の結果)を合成する
+        //   (2) 構造体配列・構造体ポインタ変数の要素 arr[i].member・p[i].member
+        //   (3) 構造体ポインタの指す先 p->member・(*p).member
+        //   (4) 基底の式に添字を付けた要素 s.items[i].member・(*pp)[i].member
+        //   (2)〜(4)は番地が実行時に決まるため，メンバのオフセットを注釈し(ノードに書き込み)，番地はコード生成で求める
         case ND_MEMBER_ACCESS: {
             node_t *base = expr->children[0];   // メンバの前についている構造体変数・構造体配列要素・間接参照
 
@@ -1435,13 +1472,12 @@ void Analyzer::analyze_expr(node_t *expr) {
                 }
                 // メンバオフセット(ワード)を注釈する (番地はコード生成側で，ポインタの値から実行時計算する)
                 const struct_member_t &member = this->find_member(base->type.struct_name, expr);
-                expr->ival = member.offset_words;
+                expr->member_offset_words = member.offset_words;
                 expr->type = member.type;
                 return;
             }
 
             // (4) 基底の式に添字を付けた要素のメンバ: s.items[i].member，(*pp)[i].member
-            // (要素の番地は添字を付ける対象の値から実行時に求まるため，(3)と同じくメンバのオフセットだけを注釈する)
             if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 2) {
                 this->analyze_expr(base);
                 // 要素が構造体でない場合
@@ -1450,7 +1486,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                           + type_to_string(base->type) + "' at " + loc_to_string(expr->loc);
                 }
                 const struct_member_t &member = this->find_member(base->type.struct_name, expr);
-                expr->ival = member.offset_words;
+                expr->member_offset_words = member.offset_words;
                 expr->type = member.type;
                 return;
             }
@@ -1508,7 +1544,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (base->kind == ND_ARRAY_ACCESS) {
                 // (2) 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
                 expr->sym  = base_sym;
-                expr->ival = member.offset_words;
+                expr->member_offset_words = member.offset_words;
                 expr->type = member.type;
             } else {
                 // (1) 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
@@ -1547,8 +1583,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not readable at " + loc_to_string(lhs->loc);
             }
-            node_t *rhs = expr->children[1];   // 右辺
-            this->analyze_value(rhs);   // 右辺を検査する (void関数の戻り値(値を持たない)を代入することはできない)
+            node_t *rhs = expr->children[1];  // 右辺
+            this->analyze_value(rhs);         // 右辺を検査する (void関数の戻り値(値を持たない)を代入することはできない)
             // 単純代入の場合 (右辺を左辺の型の格納先へ格納できること)
             if (expr->sval == "=") {
                 Analyzer::check_assignable(lhs->type, rhs, "assignment");
@@ -1561,7 +1597,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                           + type_to_string(lhs->type) + "' and '" + type_to_string(rhs->type) + "') at "
                           + loc_to_string(expr->loc);
                 }
-                expr->ival = this->pointee_size(lhs->type);
+                expr->step = this->pointee_size(lhs->type);
             }
             // 整数への複合代入に，ポインタを使った場合
             else if (is_pointer_like(rhs->type)) {
@@ -1593,7 +1629,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 }
                 expr->type = operand->type;
                 // 1回で動かす量 (ポインタは指す先1個分のバイト数，整数は1)
-                expr->ival = is_pointer_value(operand->type) ? this->pointee_size(operand->type) : 1;
+                expr->step = is_pointer_value(operand->type) ? this->pointee_size(operand->type) : 1;
                 return;
             }
             // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
@@ -1707,14 +1743,14 @@ void Analyzer::analyze_expr(node_t *expr) {
                 base_type = sym->type;
             }
             // 要素の型を求める
-            // (構造体の配列・構造体へのポインタの要素は構造体そのものであり，メンバアクセスか&を介してのみ使える．
-            //  値として使った場合はanalyze_valueがエラーにする)
+            // (構造体の配列の要素・構造体へのポインタに添字を付けた要素(p[i])は構造体そのものであり，
+            //  メンバアクセスか&を介してのみ使える．値として使った場合はanalyze_valueがエラーにする)
             if (base_type.is_array) {
                 expr->type = base_type;
                 expr->type.is_array = false;
                 expr->type.array_size = 0;
             } else if (is_func_pointer(base_type)) {
-                // 関数ポインタの場合 (関数の番地は要素を並べた領域を指さないため)
+                // 関数ポインタに添字を付けた場合 (関数の番地は，要素を並べたメモリ上の領域を指さないため)
                 throw std::string("compiler error: function pointer cannot be indexed at ") + loc_to_string(expr->loc);
             } else if (is_pointer_value(base_type)) {
                 expr->type = pointee_type(base_type);
@@ -1724,9 +1760,9 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + " is not an array or pointer at " + loc_to_string(expr->loc);
             }
             // 要素1個のバイト数 (添字に掛けて先頭からの位置を求める)
-            expr->ival = this->type_size_bytes(expr->type);
-            // インデックス式を検査する (void値(戻り値のない関数呼び出し)・ポインタは配列インデックスに使えない)
-            node_t *index_expr = expr->children[0];
+            expr->step = this->type_size_bytes(expr->type);
+            // 添字の式を検査する (void値(戻り値のない関数呼び出し)・ポインタは添字に使えない)
+            node_t *index_expr = expr->children[0];   // 添字の式
             this->analyze_value(index_expr);
             if (is_pointer_like(index_expr->type)) {
                 throw std::string("compiler error: array index must be an integer at ")

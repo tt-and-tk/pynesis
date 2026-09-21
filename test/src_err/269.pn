@@ -1,0 +1,9 @@
+// 意味解析エラー: 関数ポインタは間接参照できない(呼び出しは*を付けずにf(x)と書く) (異常系)
+int twice(int a) {
+    return a * 2;
+}
+int r;
+void main(void) {
+    int (*f)(int) = twice;
+    r = (*f)(1);
+}

@@ -12,6 +12,8 @@
 const std::string RAX_REGISTER = "r30";
 // ハードウェア制約: スタックポインタ(SP)のアセンブリ表記 (6'h10)
 const std::string SP_REGISTER = "r16";
+// ヌルポインタの値 (アドレスバス幅を超える存在しえない番地のため，参照するとCPUが必ず停止する)
+const long long NULLPTR_VALUE = 0x80000000LL;
 
 // 注釈付きASTと意味解析の結果を受け取り，アセンブリコードを生成するジェネレータ
 class Generator {
@@ -52,10 +54,12 @@ private:
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
-    void gen_call(node_t *expr, int reg);  // 関数呼び出し (呼び出し先の評価・引数の評価と受け渡し・CALL)
-    // ポインタに整数を足し引きする演算・ポインタどうしの差をr{reg}に生成する (左辺はr{reg}・右辺はr{reg+1}に評価済み)
+    void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成し，戻り値をr{reg}に残す
+    // ポインタに整数を足し引きする演算・ポインタどうしの差の結果をr{reg}に求める
+    // 呼び出す前に，左辺をr{reg}・右辺をr{reg+1}へ評価しておくこと
     void gen_pointer_arith(node_t *expr, int reg);
-    // r{reg}の値を要素1個のバイト数bytes倍する (r{work_reg}を作業用に使う．エラーは式exprの位置で報告する)
+    // r{reg}の値(添字・ポインタに足し引きする整数)にbytesを掛け，番地のずれのバイト数に換算する
+    // (r{work_reg}を作業用に使う．エラーは式exprの位置で報告する)
     void gen_scale(int reg, int work_reg, long long bytes, const node_t *expr);
     // r{reg}の値を，arg_count個の引数のindex番目を渡す位置へ書き込む
     void gen_arg_store(int reg, const type_t &type, int arg_count, int index);
@@ -71,8 +75,9 @@ private:
     // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (符号付きchar/shortロード後に使用．r{work_reg}を作業用に使う)
     // 作業用レジスタが足りないエラーは，読み出す式の位置で報告する
     void gen_sign_extend(int reg, int bits, int work_reg, const loc_t &loc);
-    // 左辺値(変数・配列要素・構造体メンバ・間接参照)の番地をr{reg}に計算する．
-    // 保護するレジスタを指定すると，添字やポインタの評価中もそれらの値を保護する
+    // 左辺値(変数・配列要素・構造体メンバ・間接参照)が置かれているメモリ番地をr{reg}に求める．
+    // 呼び出し元が値を持っているレジスタをprotect_regsに指定すると，添字やポインタの式の評価で関数を呼ぶ場合に，
+    // その前後でそれらをメモリへ退避・復元して値を保つ
     void gen_lvalue_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
     // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
     void gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs = {});
@@ -85,6 +90,7 @@ private:
     void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // 基底の構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
     // (構造体ポインタの指す先のメンバ(p->member)・基底の式に添字を付けた要素のメンバ(s.items[i].member等))
+    // 呼び出し元が値を持っているレジスタを指定すると，基底の式の評価で関数を呼ぶ場合に，その前後で退避・復元して値を保つ
     void gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
     // 構造体配列要素のメンバ・ポインタの指す先等，実行時に計算したアドレスからスカラー値を読むときに使う．

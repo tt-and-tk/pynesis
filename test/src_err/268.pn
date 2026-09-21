@@ -1,0 +1,7 @@
+// 意味解析エラー: 関数の番地は関数名だけで書き，&を付けることはできない (異常系)
+int zero(void) {
+    return 0;
+}
+void main(void) {
+    int (*f)(void) = &zero;
+}

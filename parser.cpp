@@ -27,9 +27,11 @@ bool is_func_pointer(const type_t &type) {
     return type.base == BASE_FUNC && is_pointer_value(type);
 }
 
-// ポインタが指す先の型を返す (段数を1つ減らす)
+// ポインタが指す先の型を返す
+// 型はポインタの段数と，段数を除いた型(基本型・符号・構造体名等)で表すため，指す先の型は段数を1つ減らした型になる
+// (int **の指す先はint *，int *の指す先はint)
 type_t pointee_type(const type_t &type) {
-    type_t pointee = type;
+    type_t pointee = type;   // 指す先の型
     pointee.pointer_depth--;
     return pointee;
 }
@@ -38,7 +40,8 @@ type_t pointee_type(const type_t &type) {
 type_t decayed_type(const type_t &type) {
     // 配列でない場合 (値として使っても型は変わらない)
     if (!type.is_array) return type;
-    type_t pointer = type;
+    type_t pointer = type;   // 先頭要素へのポインタの型
+    // 配列であることを外し，要素の型を指すよう段数を1つ増やす
     pointer.is_array = false;
     pointer.array_size = 0;
     pointer.pointer_depth++;
@@ -138,8 +141,7 @@ node_t *Parser::new_node(node_kind_t kind) {
     return node;
 }
 
-// 型の先頭になりうるトークン種別かどうか返す
-// voidは関数の戻り値型のほか，戻り値のない関数ポインタの宣言(void (*f)(int))の先頭にもなる
+// 型の先頭になりうるトークン種別(型キーワード・修飾子)かどうか返す
 bool Parser::is_type_start(token_kind_t kind) {
     return kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_VOID
         || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT || kind == TK_CONST;
@@ -188,7 +190,7 @@ std::string Parser::token_kind_name(token_kind_t kind) {
 }
 
 // const修飾子・signed/unsigned修飾子と型キーワードに続けてポインタの*を読み，型情報を返す
-// 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
+// 関数戻り値型・引数型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
 // allow_voidがtrueのときのみvoid型を許可する(関数の戻り値型と，関数ポインタの戻り値型になりうる宣言の先頭で許可する)
 // constはどの文脈でも読んで型情報に記録し，許可するかどうかは呼び出し元が文脈に応じて判定する
 type_t Parser::parse_type(bool allow_void) {
@@ -204,7 +206,8 @@ type_t Parser::parse_type(bool allow_void) {
     if (type.base == BASE_VOID && type.pointer_depth > 0) {
         throw std::string("compiler error: void pointer is not supported at ") + loc_to_string(loc);
     }
-    // constとポインタを組み合わせた場合 (constは値をコンパイル時に埋め込む整数の定数にのみ使うため)
+    // constを付けた型へのポインタ(const int *p)の場合 (constは値をコンパイル時に埋め込む整数の定数にのみ使うため)
+    // *の後ろのconst(int *const p)は，変数名を読む位置に来るため識別子を期待する構文エラーになる
     if (type.is_const && type.pointer_depth > 0) {
         throw std::string("compiler error: pointer cannot be const at ") + loc_to_string(loc);
     }
@@ -273,10 +276,11 @@ node_t *Parser::parse_program() {
 
     // ファイル終端まで繰り返す
     while (!this->token_kind_is(TK_EOF)) {
-        // 構造体名の直後(無名構造体ならstructキーワードの直後)が'{'なら構造体定義
-        // (名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言のいずれも，parse_struct_declが一括して構文解析する)
         const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;   // struct の直後に構造体名があるか
+        // 構造体定義の場合 (構造体名の直後，無名構造体ならstructキーワードの直後が'{')
+        // 名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言のいずれも，parse_struct_declが一括して構文解析する
         if (this->token_kind_is(TK_STRUCT) && this->peek_kind_ahead(has_tag ? 2 : 1) == TK_LBRACE) {
+            // 構造体定義と，それと同時に宣言した変数の宣言を，順にプログラムの要素へ加える
             for (node_t *decl : this->parse_struct_decl()) {
                 node->children.push_back(decl);
             }
@@ -327,12 +331,12 @@ node_t *Parser::parse_func_def() {
     node->sval = this->get_token(TK_IDENT).value; // 関数名
     this->get_token(TK_LPAREN);                   // 開きカッコ
 
-    // パラメータリスト: (void) / () は引数なし，それ以外は型+名前のカンマ区切り
+    // 引数リスト: (void) / () は引数なし，それ以外は型+名前のカンマ区切り
     if (this->token_kind_is(TK_VOID) && this->peek_kind_ahead(1) == TK_RPAREN) {
         // (void) : 引数なし
         this->get_token();
     } else if (!this->token_kind_is(TK_RPAREN)) {
-        // パラメータを1つ以上パースする
+        // 引数を1つ以上パースする
         node->children.push_back(this->parse_param());
         while (!this->token_kind_is(TK_RPAREN)) {
             this->get_token(TK_COMMA);    // , を消費
@@ -682,31 +686,32 @@ node_t *Parser::parse_sizeof() {
     return node;
 }
 
-// 関数パラメータを解析してND_VAR_DECLを返す
+// 関数の引数を解析してND_VAR_DECLを返す
 // 構文: 型 変数名，または関数ポインタの宣言子 (初期化子・セミコロンなし)
 node_t *Parser::parse_param() {
     node_t *node = this->new_node(ND_VAR_DECL);
 
-    // パラメータの型 (voidは関数ポインタの戻り値型としてのみ書ける)
+    // 引数の型 (voidは関数ポインタの戻り値型としてのみ書ける)
     node->type = this->parse_type(true);
     // 構造体そのものの場合 (値をコピーする仕組みが無いため．構造体へのポインタは渡せる)
     if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
         throw std::string("compiler error: struct cannot be used as a function parameter type at ")
               + loc_to_string(node->loc);
     }
-    // パラメータの型にconstが付いている場合
+    // 引数の型にconstが付いている場合
     if (node->type.is_const) {
         throw std::string("compiler error: function parameter cannot be const at ")
               + loc_to_string(node->loc);
     }
 
-    // 関数ポインタのパラメータなら宣言子から名前を，そうでなければ名前を直接読む
+    // 引数名を読む．関数ポインタは引数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
+    // それ以外は型の直後の識別子を読む
     if (this->token_kind_is(TK_LPAREN)) {
         node->sval = this->parse_func_pointer_declarator(node->type, true);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
-    // void型のパラメータの場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
+    // void型の引数の場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
         throw std::string("compiler error: parameter cannot be void at ") + loc_to_string(node->loc);
     }
@@ -721,7 +726,8 @@ node_t *Parser::parse_param() {
     return node;
 }
 
-// 関数ポインタの宣言子 (*名前)(引数型...) を読み，型に戻り値型と引数型を結びつけて変数名を返す
+// 関数ポインタの宣言子 (*名前)(引数型...) を読み，宣言子の中の名前を返す
+// 呼び出し時点のtypeには宣言子の前に読んだ型(関数ポインタの戻り値型)を渡し，読み終えるとtypeを関数ポインタの型に置き換える
 // 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
 // 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
 // 名前を省いた宣言子は空の名前を返す．名前で参照する宣言ではname_requiredをtrueにする
@@ -802,16 +808,18 @@ std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_requir
 // 構文: [const] [signed|unsigned] 型 [*...] 変数名 [= 式] ;
 //       戻り値型 (*変数名)(引数型...) [= 式] ;   (関数ポインタ)
 // const変数はスカラー型のみで，初期化子を必須とする．
-// 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．構造体へのポインタは通常のスカラー変数と同じ扱い．
+// 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
 //   struct 構造体名 変数名;         (単一変数)
 //   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
+// 構造体へのポインタはこの制限を受けず，他の型のポインタと同じく初期化子を書ける．
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
     // 型を読む (voidは関数ポインタの戻り値型としてのみ書ける)
     node->type = this->parse_type(true);
 
-    // 関数ポインタなら宣言子から変数名を，そうでなければ変数名を直接読む
+    // 変数名を読む．関数ポインタは変数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
+    // それ以外は型の直後の識別子を読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
     if (is_func_pointer_decl) {
         node->sval = this->parse_func_pointer_declarator(node->type, true);
@@ -1072,17 +1080,18 @@ node_t *Parser::parse_binary(int min_prec) {
 // (!!x や +-x のような連続にも対応するため．また，前置演算子と後置演算子が両方ついていた場合に対応するため)
 node_t *Parser::parse_unary() {
     const token_kind_t kind = this->peek_token().kind;
-    // 間接参照*・番地の取得&は，値ではなく番地を扱う専用のノードにする
-    // (二項演算の*・&と同じトークンだが，式の先頭に現れるものは単項演算子として読む)
+    // 間接参照*・番地の取得&の場合 (値ではなく番地を扱う専用のノードにする)
+    // 二項演算の*・&と同じトークンだが，式の先頭に現れるものは単項演算子として読む．
+    // オペランドを再帰的に読むため，**ppや&*pのような連続も読める
     if (kind == TK_STAR || kind == TK_AMP) {
         const token_t op = this->get_token();
-        node_t *node = this->new_node(kind == TK_STAR ? ND_DEREF : ND_ADDR);
+        node_t *node = this->new_node(kind == TK_STAR ? ND_DEREF : ND_ADDR_OF);
         node->loc = op.loc;
         node->children = { this->parse_unary() };   // オペランドを再帰解析
         return node;
     }
-    // 前置単項演算子かどうか調べる
-    if (kind == TK_MINUS || kind == TK_PLUS
+    // 前置単項演算子の場合
+    else if (kind == TK_MINUS || kind == TK_PLUS
      || kind == TK_BANG  || kind == TK_TILDE
      || kind == TK_PLUSPLUS || kind == TK_MINUSMINUS) {
         const token_t op = this->get_token();
@@ -1155,11 +1164,12 @@ node_t *Parser::parse_postfix() {
             continue;
         }
 
-        // 関数呼び出し: 呼び出し先の式をchildren[0]に，引数の式をカンマ区切りでchildren[1]以降に格納する
-        // 呼び出し先は，関数名(直接呼び出し)と関数ポインタ(変数・メンバ・間接参照・配列要素)のどちらにもなる．
+        // 関数呼び出し: 呼び出す関数をchildren[0]に，引数の式をカンマ区切りでchildren[1]以降に格納する
+        // 呼び出す関数は，関数名(直接呼び出し)と関数ポインタの値を持つ式(変数・メンバ等)のどちらにもなる．
         // どちらであるかは，名前を関数と変数のどちらに解決するかで決まるため意味解析で判定する
         if (this->token_kind_is(TK_LPAREN)) {
-            // (の前は関数名・関数ポインタになりうる式でなければならない (例: (a+b)(1)は非対応)
+            // (の前が名前・メンバ・添字・間接参照のいずれの形でもない場合 (演算の結果((a+b)(1)等)は呼び出せない．
+            // 関数ポインタの値を持つかどうかは，型が決まる意味解析で確かめる)
             if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS
                 && node->kind != ND_DEREF && node->kind != ND_ARRAY_ACCESS) {
                 throw std::string("compiler error: expected function name before '(' at ")
@@ -1168,7 +1178,7 @@ node_t *Parser::parse_postfix() {
             this->get_token();                  // (
             node_t *call = this->new_node(ND_CALL);
             call->loc = node->loc;
-            call->children.push_back(node);     // 呼び出し先
+            call->children.push_back(node);     // 呼び出す関数
             // 引数がある場合はカンマ区切りでパースする
             if (!this->token_kind_is(TK_RPAREN)) {
                 call->children.push_back(this->parse_expr());
@@ -1185,8 +1195,9 @@ node_t *Parser::parse_postfix() {
         break;
     }
 
-    // 後置インクリメント・デクリメント (値を返すだけの式に続けて連鎖させる意味がないため，ここで式を閉じる．
-    // 対象が番地を持つ左辺値であるかは意味解析で確かめる)
+    // 後置インクリメント・デクリメントの場合 (ループで読んだ式を対象にする)
+    // 結果は増減前の値であり，メンバ・添字・呼び出し・後置++/--を続けても意味がないため，ループの外で1回だけ読む
+    // (x++[0]・x++++は構文エラーになる)．対象が番地を持つ左辺値であるかは意味解析で確かめる
     if (this->token_kind_is(TK_PLUSPLUS) || this->token_kind_is(TK_MINUSMINUS)) {
         const token_t op = this->get_token();
         node_t *post = this->new_node(ND_POST_UNOP);

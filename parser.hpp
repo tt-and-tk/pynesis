@@ -6,10 +6,14 @@
 #include "lexer.hpp"
 
 // 基本型種別
-// BASE_FUNCは関数ポインタが指す先(関数)を表し，シグネチャはtype_tのfunc_sigが持つ
-// BASE_NULLPTRは組み込み定数nullptrだけが持つ型で，どのポインタ型とも比較・代入できる
 typedef enum {
-    BASE_CHAR, BASE_SHORT, BASE_INT, BASE_VOID, BASE_STRUCT, BASE_FUNC, BASE_NULLPTR,
+    BASE_CHAR,      // char
+    BASE_SHORT,     // short
+    BASE_INT,       // int
+    BASE_VOID,      // void (関数の戻り値型にのみ使う)
+    BASE_STRUCT,    // 構造体 (構造体名はtype_tのstruct_nameが持つ)
+    BASE_FUNC,      // 関数 (関数ポインタが指す先．シグネチャはtype_tのfunc_sigが持つ)
+    BASE_NULLPTR,   // 組み込み定数nullptrの型 (どのポインタ型とも比較・代入できる)
 } base_type_t;
 
 // 関数ポインタのシグネチャ (実体は型情報の後で定義する．型情報が自身を含むため前方宣言する)
@@ -75,7 +79,7 @@ typedef enum {
     ND_CONTINUE,    // continue文
     ND_RETURN,      // return文
     // 式
-    ND_CALL,        // 関数呼び出し (children: [呼び出し先の式, 引数...])
+    ND_CALL,        // 関数呼び出し (children: [呼び出す関数(関数名または関数ポインタの値を持つ式), 引数...])
     ND_PRINT,       // 組み込み関数print (標準出力)
     ND_SCAN,        // 組み込み関数scan (標準入力)
     ND_STREQ,       // 組み込み関数streq (char配列2つの内容比較)
@@ -90,10 +94,10 @@ typedef enum {
     ND_CHAR_LIT,    // 文字リテラル
     ND_STRING_LIT,  // 文字列リテラル (svalに引用符なしの文字列内容を格納)
     ND_NULLPTR,     // 組み込み定数nullptr
-    ND_VAR,             // 変数参照
-    ND_FUNC_ADDR,       // 関数の番地 (svalに関数名．呼び出し以外の文脈で書かれた関数名を意味解析が置き換える)
-    ND_ADDR,            // 番地の取得 &x (children: [番地を取る式])
-    ND_DEREF,           // 間接参照 *p (children: [ポインタの式])
+    ND_VAR,         // 変数参照
+    ND_FUNC_ADDR,   // 関数の番地 (svalに関数名．式に書かれた関数名を意味解析が置き換える)
+    ND_ADDR_OF,     // 番地の取得 &x (children: [番地を取る式])
+    ND_DEREF,       // 間接参照 *p (children: [ポインタの式])
     // 配列要素アクセス a[i] (children: 配列変数・ポインタ変数ならsvalに名前を持ち[インデックス式]，
     // それ以外なら[インデックス式, 添字を付ける基底の式(ND_MEMBER_ACCESS・ND_DEREF・ND_ARRAY_ACCESS)])．
     // 要素が構造体の場合，要素a[i]は単独では値を持たず，ND_MEMBER_ACCESSの基底か&の対象としてのみ使われる
@@ -111,17 +115,16 @@ struct node_t {
     node_kind_t kind;               // ノード種別
     std::vector<node_t *> children; // 子ノード
     std::string sval;               // 文字列値 (識別子名・演算子文字列)
-    // 整数値．ノード種別ごとに次の値を持つ (リテラル・sizeof・caseの値以外は意味解析が確定させる)
-    //   リテラル・sizeof・case: その値
-    //   番地が実行時に決まるメンバアクセス: 構造体先頭からのメンバのオフセット(ワード単位)
-    //   配列要素アクセス: 要素1個のバイト数
-    //   ポインタの加減算・差，ポインタへの+=/-=，++/--: 1増減するごとに動かすバイト数 (整数の++/--は1)
-    long long ival;
+    long long ival;                 // 整数値 (リテラル・sizeof・caseの値)
+    // 番地を1要素ずらす量 (意味解析後に確定)．配列要素アクセスでは要素1個のバイト数，ポインタの加減算・差，
+    // ポインタへの+=/-=・++/--では指す先1個のバイト数，整数の++/--では1
+    long long step = 0;
+    int member_offset_words = 0;    // メンバアクセスの，構造体先頭からのメンバのオフセット(ワード単位．意味解析後に確定)
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
     const symbol_t *sym = nullptr;  // 名前解決の結果 (ND_VAR等がどの宣言を指すか，意味解析後に確定)
-    // 配列を値として使う式か (意味解析後に確定)．立っている場合，typeは先頭要素へのポインタになっており，
-    // コード生成は配列の中身を読む代わりに先頭の番地を値として求める
+    // 配列を値の位置(代入の右辺・引数等)に書いた式か (意味解析後に確定)
+    // trueならtypeは先頭要素へのポインタであり，コード生成は先頭の番地を値として求める．falseなら式の値そのものを求める
     bool is_decayed = false;
 };
 
@@ -149,19 +152,16 @@ private:
     token_t get_token(token_kind_t kind);                  // 指定種別のトークンを取得して進める，違えばエラー
     node_t *new_node(node_kind_t kind);                    // 現在のトークンの位置でASTノードを生成する
     static bool is_type_start(token_kind_t kind);          // 型の先頭になりうるトークン種別かどうか返す
-    int count_type_tokens() const;                         // 現在位置から始まる型が占めるトークン数を返す
+    int count_type_tokens() const;                         // 現在位置から始まる型名(unsigned int *等)のトークン数を返す (消費しない)
     static bool is_assign_op(token_kind_t kind);           // 代入演算子のトークン種別かどうか返す
     static std::string token_kind_name(token_kind_t kind); // トークン種別をエラーメッセージ用の文字列に変換する
     static long long parse_int_literal(const token_t &token);      // 整数リテラルのトークンを数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
-    // const修飾子・signed/unsigned修飾子と型キーワード(int/char/short/struct，allow_voidならvoidも)に
-    // 続けてポインタの`*`を読み，型情報を返す
-    // 関数戻り値型・パラメータ型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
-    type_t parse_type(bool allow_void);
-    type_t parse_base_type(bool allow_void);   // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
-    // 関数ポインタの宣言子 (*名前)(引数型...) を読み，型に戻り値型と引数型を結びつけて変数名を返す
-    // 呼び出し時点のtypeは戻り値型を表しており，読み終えたtypeは関数ポインタ型になる
+    type_t parse_type(bool allow_void);                    // 型名を読み，型情報を返す (allow_voidならvoidも受け付ける)
+    type_t parse_base_type(bool allow_void);               // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
+    // 関数ポインタの宣言子 (*名前)(引数型...) を読み，宣言子の中の名前を返す
+    // 呼び出し時点のtypeには宣言子の前に読んだ型(関数ポインタの戻り値型)を渡し，読み終えるとtypeは関数ポインタの型になる
     // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合は空の名前を返す
     std::string parse_func_pointer_declarator(type_t &type, bool name_required);
 
@@ -186,7 +186,7 @@ private:
     node_t *parse_default();    // default節
     node_t *parse_break();      // break文
     node_t *parse_continue();   // continue文
-    node_t *parse_param();      // 関数パラメータ (型 名前)
+    node_t *parse_param();      // 関数の引数 (型 名前)
     node_t *parse_print();      // 組み込み関数print(char配列)
     node_t *parse_scan();       // 組み込み関数scan(char配列)
     node_t *parse_streq();      // 組み込み関数streq(char配列, char配列)
@@ -206,6 +206,7 @@ private:
     node_t *parse_binary(int min_prec); // 二項演算子を含む式 (優先順位min_prec以上を処理)
     node_t *parse_unary();              // 前置単項演算子を含む式
     node_t *parse_postfix();            // 後置演算子・メンバアクセス・配列添字・関数呼び出しを含む式
-    node_t *parse_member_name(node_t *base);   // .・->の直後のメンバ名を読み，baseを基底とするメンバアクセスを返す
+    // .・->の直後のメンバ名を読み，baseを基底とするメンバアクセスを返す
+    node_t *parse_member_name(node_t *base);
     node_t *parse_primary();    // 基本式 (リテラル・nullptr・変数参照・括弧式)
 };
