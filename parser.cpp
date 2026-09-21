@@ -726,12 +726,12 @@ node_t *Parser::parse_param() {
     return node;
 }
 
-// 関数ポインタの宣言子 (*名前)(引数型...) を読み，return_typeを戻り値型とする関数ポインタの型を返す
-// return_typeには宣言子の前に読んだ型を渡し，宣言子の中の名前はnameに書き込む
+// 関数ポインタの宣言子 (*名前)(引数型...) を読み，関数ポインタの型を返す
+// pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡す．宣言子の中の名前はnameに書き込む
 // 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
 // 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
 // 名前を省いた宣言子はnameを空にする．名前で参照する宣言ではname_requiredをtrueにする
-type_t Parser::parse_func_pointer_declarator(const type_t &return_type, bool name_required, std::string &name) {
+type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, bool name_required, std::string &name) {
     const loc_t loc = this->peek_token().loc;   // 宣言子の先頭の位置 (エラー報告用)
     // 関数ポインタを返す関数ポインタ・関数ポインタへのポインタは読まない
     // (戻り値型に*が付く場合はポインタを返す関数へのポインタとして扱う．宣言子の中の*は1個に限る)
@@ -745,7 +745,7 @@ type_t Parser::parse_func_pointer_declarator(const type_t &return_type, bool nam
     this->get_token(TK_RPAREN);
 
     auto sig = std::make_shared<func_sig_t>();   // 関数ポインタのシグネチャ
-    sig->return_type = return_type;
+    sig->return_type = pointee_return_type;
     // 構造体そのものを返す関数へのポインタの場合 (関数の戻り値に構造体を使えないのと同じ理由)
     if (sig->return_type.base == BASE_STRUCT && sig->return_type.pointer_depth == 0) {
         throw std::string("compiler error: struct cannot be used as a function return type at ")

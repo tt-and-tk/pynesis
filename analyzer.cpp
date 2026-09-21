@@ -41,14 +41,13 @@ static bool is_signed_literal(long long value) {
 }
 
 // 整数昇格後の型が符号付き(int)かどうかを返す
-// 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
+// 演算のオペランドは意味解析で値として検査済みのため，整数かポインタ(配列は先頭要素へのポインタに変換済み)に限られる
 bool is_promoted_signed(const type_t &type) {
     // ポインタ・nullptrでないこと (番地は符号なしの値として比較する)
     return !is_pointer_like(type)
         // かつ，次のいずれかであること
-        && (type.is_signed            // 符号付きの型 (signed int等)
-            || type.base != BASE_INT  // char/short (符号の有無によらずintへ昇格する)
-            || type.is_array);        // 配列 (整数の値ではないため，符号なしの演算の対象にしない)
+        && (type.is_signed              // 符号付きの型 (signed int等)
+            || type.base != BASE_INT);  // char/short (符号の有無によらずintへ昇格する)
 }
 
 // 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
