@@ -1,0 +1,17 @@
+// ポインタどうしの比較: 大小比較は番地を符号なしの値として比べ，条件分岐では否定した符号なしの分岐命令を使う
+// nullptrは比較の左辺にも書ける
+int arr[4];
+int r1;
+int r2;
+
+void main(void) {
+    int *p = arr;
+    int *q = &arr[2];
+    r1 = p == q;              // 0
+    if (q >= p) {
+        r2 = 1;
+    }
+    if (nullptr != q) {
+        r2 = r2 + 1;          // 2
+    }
+}
