@@ -630,7 +630,7 @@ int Analyzer::calc_array_words(const type_t &type) {
 // 型の論理バイト数を返す (sizeof用．C言語準拠で実メモリのワード境界は考慮しない)
 // 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
 int Analyzer::type_size_bytes(const type_t &type) const {
-    // ポインタ(構造体へのポインタ・関数ポインタを含む)とその配列の場合 (要素は番地を保持する4バイト)
+    // ポインタとその配列の場合 (指す先の型によらず，要素は番地を保持する4バイト．構造体型より先に判定する)
     if (type.pointer_depth > 0) {
         return type.is_array ? 4 * type.array_size : 4;
     }
