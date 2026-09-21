@@ -162,7 +162,8 @@ private:
     type_t parse_base_type(bool allow_void);   // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
     // 関数ポインタの宣言子 (*名前)(引数型...) を読み，型に戻り値型と引数型を結びつけて変数名を返す
     // 呼び出し時点のtypeは戻り値型を表しており，読み終えたtypeは関数ポインタ型になる
-    std::string parse_func_pointer_declarator(type_t &type);
+    // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合は空の名前を返す
+    std::string parse_func_pointer_declarator(type_t &type, bool name_required);
 
     // 構文解析メソッド (parse_で始まる)
     node_t *parse_program();    // プログラム全体

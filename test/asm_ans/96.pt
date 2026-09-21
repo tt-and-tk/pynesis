@@ -1,0 +1,48 @@
+.global twice, apply, main
+
+main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 apply
+    wmr fh r16 r0 0
+    rmr fh r16 r0 0
+    mov fh r0 r1 twice
+    wmr fh r16 r1 -12
+    mov fh r0 r1 5
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+twice:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 2
+    mul r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+apply:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret

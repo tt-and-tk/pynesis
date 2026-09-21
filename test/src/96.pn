@@ -1,0 +1,16 @@
+// 関数ポインタを引数に取る関数も関数ポインタで指せる
+// 関数ポインタの宣言子の引数には，名前を省いた関数ポインタの宣言子((*)(引数型))を書ける
+int twice(int x) {
+    return x * 2;
+}
+
+int apply(int (*f)(int), int x) {
+    return f(x);
+}
+
+int r;
+
+void main(void) {
+    int (*runner)(int (*)(int), int) = apply;
+    r = runner(twice, 5);         // 10
+}
