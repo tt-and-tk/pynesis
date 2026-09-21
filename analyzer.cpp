@@ -1698,7 +1698,10 @@ void Analyzer::analyze_expr(node_t *expr) {
                 expr->type = base_type;
                 expr->type.is_array = false;
                 expr->type.array_size = 0;
-            } else if (is_pointer_value(base_type) && !is_func_pointer(base_type)) {
+            } else if (is_func_pointer(base_type)) {
+                // 関数ポインタの場合 (関数の番地は要素を並べた領域を指さないため)
+                throw std::string("compiler error: function pointer cannot be indexed at ") + loc_to_string(expr->loc);
+            } else if (is_pointer_value(base_type)) {
                 expr->type = pointee_type(base_type);
             } else {
                 const std::string name = expr->sval.empty() ? "expression" : "'" + expr->sval + "'";   // エラーメッセージに書く対象
