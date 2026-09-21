@@ -28,10 +28,10 @@ bool is_func_pointer(const type_t &type) {
 }
 
 // ポインタが指す先の型を返す
-// 型はポインタの段数と，段数を除いた型(基本型・符号・構造体名等)で表すため，指す先の型は段数を1つ減らした型になる
-// (int **の指す先はint *，int *の指す先はint)
 type_t pointee_type(const type_t &type) {
     type_t pointee = type;   // 指す先の型
+    // 型はポインタの段数と，段数を除いた型(基本型・符号・構造体名等)で表すため，指す先の型は段数を1つ減らした型になる
+    // (int **の指す先はint *，int *の指す先はint)
     pointee.pointer_depth--;
     return pointee;
 }
@@ -207,7 +207,7 @@ type_t Parser::parse_type(bool allow_void) {
         throw std::string("compiler error: void pointer is not supported at ") + loc_to_string(loc);
     }
     // constを付けた型へのポインタ(const int *p)の場合 (constは値をコンパイル時に埋め込む整数の定数にのみ使うため)
-    // *の後ろのconst(int *const p)は，変数名を読む位置に来るため識別子を期待する構文エラーになる
+    // *の後ろのconst(int *const p)は，変数名を読む位置で構文エラーになるため，ここでは検査しない
     if (type.is_const && type.pointer_depth > 0) {
         throw std::string("compiler error: pointer cannot be const at ") + loc_to_string(loc);
     }
@@ -707,7 +707,7 @@ node_t *Parser::parse_param() {
     // 引数名を読む．関数ポインタは引数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
     // それ以外は型の直後の識別子を読む
     if (this->token_kind_is(TK_LPAREN)) {
-        node->sval = this->parse_func_pointer_declarator(node->type, true);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
@@ -726,27 +726,26 @@ node_t *Parser::parse_param() {
     return node;
 }
 
-// 関数ポインタの宣言子 (*名前)(引数型...) を読み，宣言子の中の名前を返す
-// 呼び出し時点のtypeには宣言子の前に読んだ型(関数ポインタの戻り値型)を渡し，読み終えるとtypeを関数ポインタの型に置き換える
+// 関数ポインタの宣言子 (*名前)(引数型...) を読み，return_typeを戻り値型とする関数ポインタの型を返す
+// return_typeには宣言子の前に読んだ型を渡し，宣言子の中の名前はnameに書き込む
 // 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
 // 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
-// 名前を省いた宣言子は空の名前を返す．名前で参照する宣言ではname_requiredをtrueにする
-std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_required) {
+// 名前を省いた宣言子はnameを空にする．名前で参照する宣言ではname_requiredをtrueにする
+type_t Parser::parse_func_pointer_declarator(const type_t &return_type, bool name_required, std::string &name) {
     const loc_t loc = this->peek_token().loc;   // 宣言子の先頭の位置 (エラー報告用)
     // 関数ポインタを返す関数ポインタ・関数ポインタへのポインタは読まない
     // (戻り値型に*が付く場合はポインタを返す関数へのポインタとして扱う．宣言子の中の*は1個に限る)
     this->get_token(TK_LPAREN);
     this->get_token(TK_STAR);
-    // 名前が必要な宣言か，名前が書かれている場合は名前を読む
-    std::string name;   // 変数名 (省いた場合は空)
+    // 名前が必要な宣言か，名前が書かれている場合は名前を読む (省いた場合は空にする)
+    name.clear();
     if (name_required || this->token_kind_is(TK_IDENT)) {
         name = this->get_token(TK_IDENT).value;
     }
     this->get_token(TK_RPAREN);
 
-    // 読み終えるまでの型は戻り値型を表している
     auto sig = std::make_shared<func_sig_t>();   // 関数ポインタのシグネチャ
-    sig->return_type = type;
+    sig->return_type = return_type;
     // 構造体そのものを返す関数へのポインタの場合 (関数の戻り値に構造体を使えないのと同じ理由)
     if (sig->return_type.base == BASE_STRUCT && sig->return_type.pointer_depth == 0) {
         throw std::string("compiler error: struct cannot be used as a function return type at ")
@@ -771,7 +770,8 @@ std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_requir
             type_t param_type = this->parse_type(true);       // 引数の型 (voidは，引数を関数ポインタにする場合の戻り値型としてのみ書ける)
             // 関数ポインタの引数の場合 (宣言子の名前は読み捨てる)
             if (this->token_kind_is(TK_LPAREN)) {
-                this->parse_func_pointer_declarator(param_type, false);
+                std::string ignored_name;   // 読み捨てる宣言子の名前
+                param_type = this->parse_func_pointer_declarator(param_type, false, ignored_name);
             }
             // void型の引数の場合 (値を持たない型のため)
             if (param_type.base == BASE_VOID) {
@@ -796,12 +796,12 @@ std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_requir
     }
     this->get_token(TK_RPAREN);
 
-    // 型を関数ポインタにする (戻り値型はシグネチャへ移した)
-    type = type_t{};
+    // シグネチャを持つ関数ポインタの型を組み立てる
+    type_t type;   // 関数ポインタの型
     type.base = BASE_FUNC;
     type.pointer_depth = 1;
     type.func_sig = sig;
-    return name;
+    return type;
 }
 
 // 変数宣言を解析してND_VAR_DECLを返す
@@ -822,7 +822,7 @@ node_t *Parser::parse_var_decl() {
     // それ以外は型の直後の識別子を読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
     if (is_func_pointer_decl) {
-        node->sval = this->parse_func_pointer_declarator(node->type, true);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
@@ -924,7 +924,7 @@ node_t *Parser::parse_struct_member() {
     // 関数ポインタのメンバなら宣言子からメンバ名を，そうでなければメンバ名を直接読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
     if (is_func_pointer_decl) {
-        node->sval = this->parse_func_pointer_declarator(node->type, true);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }

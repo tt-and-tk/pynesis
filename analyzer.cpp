@@ -43,8 +43,12 @@ static bool is_signed_literal(long long value) {
 // 整数昇格後の型が符号付き(int)かどうかを返す
 // 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
 bool is_promoted_signed(const type_t &type) {
-    // ポインタ・nullptr(番地は符号なしの値として比較する)でなく，符号付きint・intへ昇格するchar/short・配列なら符号付き
-    return !is_pointer_like(type) && (type.is_signed || type.base != BASE_INT || type.is_array);
+    // ポインタ・nullptrでないこと (番地は符号なしの値として比較する)
+    return !is_pointer_like(type)
+        // かつ，次のいずれかであること
+        && (type.is_signed            // 符号付きの型 (signed int等)
+            || type.base != BASE_INT  // char/short (符号の有無によらずintへ昇格する)
+            || type.is_array);        // 配列 (整数の値ではないため，符号なしの演算の対象にしない)
 }
 
 // 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
@@ -505,7 +509,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
     if (expr->kind == ND_SIZEOF) {
         if (expr->children.empty()) {
             // sizeof(型名)
-            return {this->type_size_bytes(expr->type), true};
+            return {type_size_bytes(expr->type, this->struct_defs_), true};
         }
         // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
         const node_t *inner = expr->children[0];
@@ -517,7 +521,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         const symbol_t *sym = this->lookup_symbol(inner->sval);
         // シンボル表に登録済みの変数の場合
         if (sym != nullptr) {
-            return {this->type_size_bytes(sym->type), true};
+            return {type_size_bytes(sym->type, this->struct_defs_), true};
         }
         // まだ登録されていないグローバルの宣言は，宣言ノードから型を確定させてサイズを求める
         const auto it = this->global_var_decls_.find(inner->sval);
@@ -527,7 +531,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
                   + "' at " + loc_to_string(inner->loc);
         }
         this->resolve_decl_type(it->second);
-        return {this->type_size_bytes(it->second->type), true};
+        return {type_size_bytes(it->second->type, this->struct_defs_), true};
     }
 
     // 前置単項演算
@@ -630,9 +634,9 @@ int Analyzer::calc_array_words(const type_t &type) {
     }
 }
 
-// 型の論理バイト数を返す (sizeof用．C言語準拠で実メモリのワード境界は考慮しない)
-// 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
-int Analyzer::type_size_bytes(const type_t &type) const {
+// 型の論理バイト数を返す (sizeof・ポインタ演算の単位用．C言語準拠で実メモリのワード境界は考慮しない)
+// 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(構造体定義の参照が必要)
+int type_size_bytes(const type_t &type, const std::map<std::string, struct_def_t> &struct_defs) {
     // ポインタとその配列の場合 (指す先の型によらず，要素は番地を保持する4バイト．構造体型より先に判定する)
     if (type.pointer_depth > 0) {
         return type.is_array ? 4 * type.array_size : 4;
@@ -642,7 +646,7 @@ int Analyzer::type_size_bytes(const type_t &type) const {
         // 使われないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
         // typeのstruct_nameは常に登録済みであり，探索に失敗することはない．
         // 構造体配列は「構造体1個分のバイト数×要素数」を返す
-        const int struct_bytes = this->struct_defs_.at(type.struct_name).total_words * 4;
+        const int struct_bytes = struct_defs.at(type.struct_name).total_words * 4;
         return type.is_array ? struct_bytes * type.array_size : struct_bytes;
     }
     int elem_bytes;
@@ -679,7 +683,7 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
 // 値は整数のように畳み込まず，他の初期化子と同じくmainの先頭で番地を求めて書き込む
 void Analyzer::check_global_pointer_inits() {
     for (node_t *decl : this->root_->children) {
-        // 初期化子を持つポインタ型のグローバル変数の宣言でない場合
+        // 変数宣言でない・ポインタ型でない・初期化子を持たない，のいずれかに当てはまる場合は検査しない
         if (decl->kind != ND_VAR_DECL || !is_pointer_value(decl->type) || decl->children.empty()) continue;
         node_t *init = decl->children[0];   // 初期化子の式
         // 初期化子を値として検査し，名前解決と型注釈を行う
@@ -713,15 +717,15 @@ bool Analyzer::is_address_constant(const node_t *expr) {
         // &の場合 (対象の番地がコンパイル時に決まる左辺値ならよい)
         case ND_ADDR_OF:
             return Analyzer::is_static_lvalue(expr->children[0]);
-        // ポインタに整数定数を足し引きした式の場合 (ポインタ側がこの関数の条件を満たし，整数側が整数定数ならよい)
+        // ポインタに整数定数を足し引きした式の場合
         case ND_BINOP: {
             const node_t *lhs = expr->children[0];   // 左辺
             const node_t *rhs = expr->children[1];   // 右辺
-            // 整数定数+ポインタの場合
+            // 整数定数+ポインタの場合 (ポインタ側の番地がコンパイル時に決まればよい)
             if (expr->sval == "+" && Analyzer::is_integer_constant(lhs)) {
                 return Analyzer::is_address_constant(rhs);
             }
-            // ポインタ±整数定数の場合
+            // ポインタ±整数定数の場合 (ポインタ側の番地がコンパイル時に決まり，整数側が整数定数ならよい)
             return (expr->sval == "+" || expr->sval == "-")
                 && Analyzer::is_address_constant(lhs) && Analyzer::is_integer_constant(rhs);
         }
@@ -1054,7 +1058,8 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
     }
 }
 
-// 値(整数・ポインタのように1つのレジスタに読み込めるもの)を求める位置に書かれた式を検査する
+// 評価した結果の値(整数・ポインタ)を使う式を検査する
+// (代入の右辺・引数・戻り値・演算のオペランド等．書き込み先や&の対象として使う式はanalyze_lvalueで検査する)
 // 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む
 // (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
 void Analyzer::analyze_value(node_t *expr) {
@@ -1200,19 +1205,17 @@ void Analyzer::analyze_binop(node_t *expr) {
     // ポインタに整数を足し引きする場合 (ポインタ+整数・整数+ポインタ・ポインタ-整数)
     const bool is_pointer_offset =
         (op == "+" || op == "-") && is_pointer_value(lhs) && !is_func_pointer(lhs) && !is_rhs_pointer;   // ポインタ±整数か
-    // (加算は交換できるためC言語と同じく整数+ポインタも許す．整数-ポインタは意味を持たないため許さない)
+    // (加算は左右を入れ替えても結果が同じ(n + pとp + nは同じ番地)ため，C言語と同じく整数+ポインタも許す．
+    //  整数-ポインタは意味を持たないため許さない)
     const bool is_offset_pointer =
         op == "+" && !is_lhs_pointer && is_pointer_value(rhs) && !is_func_pointer(rhs);                  // 整数+ポインタか
     if (is_pointer_offset || is_offset_pointer) {
-        const type_t &pointer = is_pointer_offset ? lhs : rhs;   // 足し引きされるポインタの型
-        expr->type = pointer;
-        expr->step = this->pointee_size(pointer);
+        expr->type = is_pointer_offset ? lhs : rhs;   // 結果は足し引きされるポインタの型
         return;
     }
     // ポインタどうしの差の場合 (同じ配列を指す同じ型のポインタどうしで，間の要素数をintで返す)
     if (op == "-" && is_pointer_value(lhs) && !is_func_pointer(lhs) && Analyzer::is_same_type(lhs, rhs)) {
         expr->type = type_t{BASE_INT, true};
-        expr->step = this->pointee_size(lhs);
         return;
     }
     // それ以外の演算にポインタを使った場合
@@ -1238,13 +1241,9 @@ type_t Analyzer::func_pointer_type(const std::string &name) const {
     return type;
 }
 
-// ポインタが指す先の型のバイト数を返す (ポインタに整数を足し引きする際に，1あたり動かす量)
-int Analyzer::pointee_size(const type_t &type) const {
-    return this->type_size_bytes(pointee_type(type));
-}
-
-// 値srcを型dstの格納先(変数・引数・戻り値)へ格納できるか検査する
-// 整数どうしは型が異なっても格納でき(格納先の型の幅で格納する)，ポインタが関わる場合のみ型を検査する
+// 式srcの値を，型dstの格納先(代入・初期化する変数，関数の引数，戻り値)へ格納できるか検査する
+// 整数どうしは型が異なっても格納でき(格納先の型の幅で格納する)，格納先と値のどちらかがポインタ(nullptrを含む)の
+// 場合のみ，ポインタと整数の取り違えと指す先の型の違いを検査する
 void Analyzer::check_assignable(const type_t &dst, const node_t *src, const std::string &context) {
     const type_t &value = src->type;   // 格納する値の型
     // 格納先がポインタの場合 (指す先の型が一致するポインタか，nullptrのみ格納できる)
@@ -1278,7 +1277,7 @@ bool Analyzer::is_same_type(const type_t &a, const type_t &b) {
     if (a.base != b.base || a.pointer_depth != b.pointer_depth || a.is_array != b.is_array) return false;
     // 構造体の場合
     if (a.base == BASE_STRUCT) return a.struct_name == b.struct_name;
-    // 関数の場合 (戻り値型と引数型の並びが一致すること)
+    // 関数ポインタの場合 (戻り値型と引数型の並びが一致すること)
     if (a.base == BASE_FUNC) {
         const func_sig_t &sig_a = *a.func_sig;   // aのシグネチャ
         const func_sig_t &sig_b = *b.func_sig;   // bのシグネチャ
@@ -1338,7 +1337,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             int size;
             if (expr->children.empty()) {
                 // sizeof(型名): パーサがexpr->typeに型を格納済み
-                size = this->type_size_bytes(expr->type);
+                size = type_size_bytes(expr->type, this->struct_defs_);
             } else {
                 // sizeof(変数名): 値ではなく型だけが必要なのでND_VARのみ許可する
                 // (analyze_exprではなくlookup_symbolで直接型を取得する．readable=falseの
@@ -1355,7 +1354,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 }
                 inner->sym  = sym;
                 inner->type = sym->type;
-                size = this->type_size_bytes(sym->type);
+                size = type_size_bytes(sym->type, this->struct_defs_);
             }
             expr->ival = size;
             expr->type = type_t{BASE_INT, true};   // sizeofの結果はint
@@ -1458,7 +1457,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         //   (2) 構造体配列・構造体ポインタ変数の要素 arr[i].member・p[i].member
         //   (3) 構造体ポインタの指す先 p->member・(*p).member
         //   (4) 基底の式に添字を付けた要素 s.items[i].member・(*pp)[i].member
-        //   (2)〜(4)は番地が実行時に決まるため，メンバのオフセットを注釈し(ノードに書き込み)，番地はコード生成で求める
+        //   (2)〜(4)は番地が実行時に決まるため，番地はコード生成が構造体定義から求めたメンバのオフセットを使って求める
         case ND_MEMBER_ACCESS: {
             node_t *base = expr->children[0];   // メンバの前についている構造体変数・構造体配列要素・間接参照
 
@@ -1470,10 +1469,8 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: member access requires a pointer to struct, but got '")
                           + type_to_string(base->children[0]->type) + "' at " + loc_to_string(expr->loc);
                 }
-                // メンバオフセット(ワード)を注釈する (番地はコード生成側で，ポインタの値から実行時計算する)
-                const struct_member_t &member = this->find_member(base->type.struct_name, expr);
-                expr->member_offset_words = member.offset_words;
-                expr->type = member.type;
+                // メンバの型を注釈する (番地はコード生成側で，ポインタの値とメンバのオフセットから実行時計算する)
+                expr->type = this->find_member(base->type.struct_name, expr).type;
                 return;
             }
 
@@ -1485,9 +1482,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: member access requires a struct, but got '")
                           + type_to_string(base->type) + "' at " + loc_to_string(expr->loc);
                 }
-                const struct_member_t &member = this->find_member(base->type.struct_name, expr);
-                expr->member_offset_words = member.offset_words;
-                expr->type = member.type;
+                expr->type = this->find_member(base->type.struct_name, expr).type;
                 return;
             }
 
@@ -1542,9 +1537,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             const struct_member_t &member = this->find_member(base_sym->type.struct_name, expr);
 
             if (base->kind == ND_ARRAY_ACCESS) {
-                // (2) 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
+                // (2) 配列全体のシンボルとメンバの型を注釈する (番地はコード生成側で，メンバのオフセットから実行時計算する)
                 expr->sym  = base_sym;
-                expr->member_offset_words = member.offset_words;
                 expr->type = member.type;
             } else {
                 // (1) 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
@@ -1597,7 +1591,6 @@ void Analyzer::analyze_expr(node_t *expr) {
                           + type_to_string(lhs->type) + "' and '" + type_to_string(rhs->type) + "') at "
                           + loc_to_string(expr->loc);
                 }
-                expr->step = this->pointee_size(lhs->type);
             }
             // 整数への複合代入に，ポインタを使った場合
             else if (is_pointer_like(rhs->type)) {
@@ -1628,8 +1621,6 @@ void Analyzer::analyze_expr(node_t *expr) {
                           + "' is not readable and writable at " + loc_to_string(expr->loc);
                 }
                 expr->type = operand->type;
-                // 1回で動かす量 (ポインタは指す先1個分のバイト数，整数は1)
-                expr->step = is_pointer_value(operand->type) ? this->pointee_size(operand->type) : 1;
                 return;
             }
             // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
@@ -1759,8 +1750,6 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: ") + name
                       + " is not an array or pointer at " + loc_to_string(expr->loc);
             }
-            // 要素1個のバイト数 (添字に掛けて先頭からの位置を求める)
-            expr->step = this->type_size_bytes(expr->type);
             // 添字の式を検査する (void値(戻り値のない関数呼び出し)・ポインタは添字に使えない)
             node_t *index_expr = expr->children[0];   // 添字の式
             this->analyze_value(index_expr);

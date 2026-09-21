@@ -67,11 +67,14 @@ struct struct_def_t {
     int total_words;                       // 構造体全体が占めるワード数
 };
 
+// 型の論理バイト数を返す (配列は要素数×要素のバイト数．構造体はstruct_defsのメンバ構成から求める)
+int type_size_bytes(const type_t &type, const std::map<std::string, struct_def_t> &struct_defs);
+
 // 意味解析の結果 (コード生成が参照する情報をまとめたもの．各表はアナライザが保持する実体を指す)
 struct analysis_result_t {
     // 関数名→引数のシンボル列 (コード生成で引数の書き込み先の位置に使う)
     const std::map<std::string, std::vector<const symbol_t *>> &func_params;
-    // 構造体名→メンバ構成 (コード生成が，構造体配列の要素1個分が占めるバイト数を計算するのに使う．
+    // 構造体名→メンバ構成 (コード生成が，構造体の要素1個分が占めるバイト数とメンバのオフセットを求めるのに使う．
     //  構造体配列は，このバイト数×添字ぶんだけ先頭からずらして各要素の位置を求める)
     const std::map<std::string, struct_def_t> &struct_defs;
     // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
@@ -126,8 +129,6 @@ private:
     static const_value_t eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r);
     static long long const_symbol_value(const symbol_t *sym);   // const変数のシンボルが保持する値を型に応じて解釈して返す
     static int calc_array_words(const type_t &type);        // 配列が占有するワード数を計算する
-    // 型のバイト数を返す (sizeof用．配列は要素数×要素サイズ)．構造体はstruct_defs_からメンバ構成を引いて計算する
-    int type_size_bytes(const type_t &type) const;
     // 宣言ノードの型を確定させる (構造体型なら構造体定義を解決し，配列なら要素数を計算して畳み込む．確定済みなら何もしない)
     // 後方の宣言も解決できるよう，宣言順によらず必要になった時点で呼ばれる
     void resolve_decl_type(node_t *decl);
@@ -163,8 +164,8 @@ private:
     void analyze_switch(node_t *stmt);                      // switch文を検査する
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
-    // 値(整数・ポインタのように1つのレジスタに読み込めるもの)を求める位置(代入の右辺・引数・演算のオペランド等)に
-    // 書かれた式を検査する (値を持たないvoid・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む)
+    // 評価した結果の値(整数・ポインタ)を使う式(代入の右辺・引数・戻り値・演算のオペランド等)を検査する
+    // (値を持たないvoid・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む)
     void analyze_value(node_t *expr);
     // 書き込み先・番地の取得対象になる式(左辺値)を検査し名前解決・型注釈する (値を読む側の検査は行わない)
     void analyze_lvalue(node_t *expr);
@@ -172,11 +173,10 @@ private:
     void analyze_binop(node_t *expr);                       // 二項演算を検査し，結果の型を注釈する
     // 構造体のメンバを名前から探す (見つからなければexprの位置でエラー)
     const struct_member_t &find_member(const std::string &struct_name, const node_t *expr) const;
-    // 関数名を値として書いた式の型(その関数を指す関数ポインタの型)を返す
-    type_t func_pointer_type(const std::string &name) const;
-    int pointee_size(const type_t &type) const;             // ポインタが指す先の型のバイト数を返す (ポインタ演算の単位)
-    // 値srcを型dstの格納先(変数・引数・戻り値)へ格納できるか，ポインタが関わる場合の型を検査する
-    // (contextはエラーメッセージ用の格納の種類)
+    type_t func_pointer_type(const std::string &name) const;  // その関数を指す関数ポインタの型を返す
+    // 式srcの値を，型dstの格納先(代入・初期化する変数，関数の引数，戻り値)へ格納できるか検査する
+    // 格納先の型と値の型のどちらかがポインタ(nullptrを含む)の場合に，ポインタと整数の取り違えと，
+    // 指す先の型の違いをエラーにする(整数どうしは型が異なっても格納できる)．contextはエラーメッセージ用の格納の種類
     static void check_assignable(const type_t &dst, const node_t *src, const std::string &context);
     static bool is_same_type(const type_t &a, const type_t &b);   // 2つの型が(ポインタの指す先を含め)同じかを返す
     // print/streq/strcopyに共通する引数検査を行う (builtin_nameはエラーメッセージ用の関数名)

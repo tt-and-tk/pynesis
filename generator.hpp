@@ -54,13 +54,17 @@ private:
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
-    void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成し，戻り値をr{reg}に残す
+    void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成する (戻り値がある場合はr{reg}に残す)
     // ポインタに整数を足し引きする演算・ポインタどうしの差の結果をr{reg}に求める
     // 呼び出す前に，左辺をr{reg}・右辺をr{reg+1}へ評価しておくこと
     void gen_pointer_arith(node_t *expr, int reg);
-    // r{reg}の値(添字・ポインタに足し引きする整数)にbytesを掛け，番地のずれのバイト数に換算する
-    // (r{work_reg}を作業用に使う．エラーは式exprの位置で報告する)
+    // r{reg}の値(添字・ポインタに足し引きする整数)にbytes(要素1個のバイト数)を掛け，番地のずれのバイト数に換算する
+    // (a[i]ならiを i×要素1個のバイト数 にする．先頭番地に足すのは呼び出し元が行う)
+    // r{work_reg}を作業用に使い，エラーは式exprの位置で報告する
     void gen_scale(int reg, int work_reg, long long bytes, const node_t *expr);
+    int pointee_bytes(const type_t &type) const;   // ポインタの指す先1個分のバイト数を返す (ポインタ演算の単位)
+    // メンバアクセスの，構造体先頭からのメンバのオフセット(バイト)を構造体定義から求める
+    int member_offset_bytes(const node_t *member_access) const;
     // r{reg}の値を，arg_count個の引数のindex番目を渡す位置へ書き込む
     void gen_arg_store(int reg, const type_t &type, int arg_count, int index);
     // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
@@ -75,9 +79,9 @@ private:
     // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (符号付きchar/shortロード後に使用．r{work_reg}を作業用に使う)
     // 作業用レジスタが足りないエラーは，読み出す式の位置で報告する
     void gen_sign_extend(int reg, int bits, int work_reg, const loc_t &loc);
-    // 左辺値(変数・配列要素・構造体メンバ・間接参照)が置かれているメモリ番地をr{reg}に求める．
-    // 呼び出し元が値を持っているレジスタをprotect_regsに指定すると，添字やポインタの式の評価で関数を呼ぶ場合に，
-    // その前後でそれらをメモリへ退避・復元して値を保つ
+    // 左辺値(変数・配列要素・構造体メンバ・間接参照)が置かれているメモリ番地をr{reg}に求める
+    // 番地を求めるために添字やポインタの式を評価し，その中で関数を呼ぶと呼び出し先がレジスタを使い直すため，
+    // 呼び出し元が値を持っているレジスタをprotect_regsに指定すると，その呼び出しの前後でメモリへ退避・復元する
     void gen_lvalue_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
     // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
     void gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs = {});
@@ -88,9 +92,9 @@ private:
     // 先頭番地は，構造体の配列なら配列の番地，構造体へのポインタなら指している番地．
     // 保護するレジスタを指定すると，インデックス式の評価中もそれらの値を保護する(既に確定した値を持つとき使う)
     void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
-    // メンバの前に書いた式(基底)が表す構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
-    // (構造体ポインタの指す先のメンバ(p->member)・基底の式に添字を付けた要素のメンバ(s.items[i].member等))
-    // 呼び出し元が値を持っているレジスタを指定すると，基底の式の評価で関数を呼ぶ場合に，その前後で退避・復元して値を保つ
+    // 番地が実行時に決まる構造体(ポインタの指す先・添字を付けた要素)のメンバのメモリ番地をr{reg}に求める
+    // (p->member・s.items[i].member等)．メンバの前に書いた式(基底)から構造体が置かれている番地を求め，
+    // メンバのオフセットを足す．protect_regsの扱いは，左辺値の番地を求める関数と同じ
     void gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
     // 構造体配列要素のメンバ・ポインタの指す先等，実行時に計算したアドレスからスカラー値を読むときに使う．

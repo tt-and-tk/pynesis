@@ -115,11 +115,9 @@ struct node_t {
     node_kind_t kind;               // ノード種別
     std::vector<node_t *> children; // 子ノード
     std::string sval;               // 文字列値 (識別子名・演算子文字列)
-    long long ival;                 // 整数値 (リテラル・sizeof・caseの値)
-    // 番地を1要素ずらす量 (意味解析後に確定)．配列要素アクセスでは要素1個のバイト数，ポインタの加減算・差，
-    // ポインタへの+=/-=・++/--では指す先1個のバイト数，整数の++/--では1
-    long long step = 0;
-    int member_offset_words = 0;    // メンバアクセスの，構造体先頭からのメンバのオフセット(ワード単位．意味解析後に確定)
+    // コンパイル時に決まる整数値．整数・文字リテラルはその値，sizeof式は結果のバイト数(意味解析が確定させる)，
+    // case節はcaseの値(意味解析が畳み込む)．それ以外のノードでは使わない
+    long long ival;
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
     const symbol_t *sym = nullptr;  // 名前解決の結果 (ND_VAR等がどの宣言を指すか，意味解析後に確定)
@@ -160,10 +158,10 @@ private:
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
     type_t parse_type(bool allow_void);                    // 型名を読み，型情報を返す (allow_voidならvoidも受け付ける)
     type_t parse_base_type(bool allow_void);               // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
-    // 関数ポインタの宣言子 (*名前)(引数型...) を読み，宣言子の中の名前を返す
-    // 呼び出し時点のtypeには宣言子の前に読んだ型(関数ポインタの戻り値型)を渡し，読み終えるとtypeは関数ポインタの型になる
-    // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合は空の名前を返す
-    std::string parse_func_pointer_declarator(type_t &type, bool name_required);
+    // 関数ポインタの宣言子 (*名前)(引数型...) を読み，return_type(宣言子の前に読んだ型)を戻り値型とする
+    // 関数ポインタの型を返す．宣言子の中の名前はnameに書き込む
+    // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合はnameを空にする
+    type_t parse_func_pointer_declarator(const type_t &return_type, bool name_required, std::string &name);
 
     // 構文解析メソッド (parse_で始まる)
     node_t *parse_program();    // プログラム全体
@@ -206,7 +204,6 @@ private:
     node_t *parse_binary(int min_prec); // 二項演算子を含む式 (優先順位min_prec以上を処理)
     node_t *parse_unary();              // 前置単項演算子を含む式
     node_t *parse_postfix();            // 後置演算子・メンバアクセス・配列添字・関数呼び出しを含む式
-    // .・->の直後のメンバ名を読み，baseを基底とするメンバアクセスを返す
-    node_t *parse_member_name(node_t *base);
+    node_t *parse_member_name(node_t *base);   // .・->の直後のメンバ名を読み，baseを基底とするメンバアクセスを返す
     node_t *parse_primary();    // 基本式 (リテラル・nullptr・変数参照・括弧式)
 };

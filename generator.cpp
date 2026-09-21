@@ -720,6 +720,8 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
     }
     node_t *target = expr->children[0];                       // 対象 (変数・配列要素・構造体メンバ・間接参照)
     const std::string op = (expr->sval == "++") ? "+" : "-";  // ++→加算, --→減算
+    // 1回で動かす量 (ポインタは指す先1個分のバイト数，整数は1)
+    const int amount = is_pointer_value(target->type) ? this->pointee_bytes(target->type) : 1;
 
     // 番地が実行時に決まる対象の場合 (番地を一度だけ求め，読み出しと書き戻しの両方に使い回す．
     //  添字に関数呼び出しなどの副作用があっても，求め直すと2回評価してしまうため)
@@ -736,7 +738,7 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
         (*this->out_) << "    mov fh r" << (reg + 1) << " r" << reg << "\n";           // r{reg} = 番地
         // 現在値をr{reg}へ読み込む (char/shortの符号拡張は，r{reg+1}の番地を壊さないようr{reg+2}を作業用に使う)
         this->gen_load_indirect(reg, target->type, reg + 2, target->loc);              // r{reg} = x
-        (*this->out_) << "    mov fh r0 r" << (reg + 2) << " " << expr->step << "\n";  // r{reg+2} = 増減量
+        (*this->out_) << "    mov fh r0 r" << (reg + 2) << " " << amount << "\n";      // r{reg+2} = 増減量
         // 増減した値を書き戻す．加減算は符号によって命令が変わらないため，
         // 加減算の命令生成には符号付きかどうかを常に真として渡す
         if (is_prefix) {
@@ -753,7 +755,7 @@ void Generator::gen_incdec(node_t *expr, int reg, bool is_prefix) {
 
     // 番地が固定の対象(変数・構造体変数のメンバ)の場合: 現在値を読み，増減量を載せる
     this->gen_load(reg, target->sym, target->loc);                                  // r{reg} = x
-    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << expr->step << "\n";   // r{reg+1} = 増減量
+    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << amount << "\n";       // r{reg+1} = 増減量
 
     // 増減した値を書き戻す．加減算は符号によって命令が変わらないため，
     // 加減算の命令生成には符号付きかどうかを常に真として渡す
@@ -1209,7 +1211,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
         case ND_DEREF:
             // 指す先の番地(ポインタ変数等に入っている値)をr{reg}に求める
             this->gen_lvalue_addr(expr, reg);
-            // その番地のメモリから，指す先の型の幅で値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
+            // その番地のメモリから，指す先の型の幅(char *なら1バイト)で値をr{reg}へ読み込む (符号拡張の作業用にr{reg+1}を使う)
             this->gen_load_indirect(reg, expr->type, reg + 1, expr->loc);
             break;
 
@@ -1321,7 +1323,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     // 右辺をr{reg+2}に評価する
                     this->gen_expr_protecting(expr->children[1], reg + 2, {reg, reg + 1}); // 右辺 → r{reg+2}
                     // ポインタへの+=/-=の場合 (右辺を指す先のバイト数倍する)
-                    if (is_pointer_compound) this->gen_scale(reg + 2, reg + 3, expr->step, expr);
+                    if (is_pointer_compound) this->gen_scale(reg + 2, reg + 3, this->pointee_bytes(lhs->type), expr);
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
                     this->gen_binop_instr(op, is_signed, reg, reg, reg + 2);
                 }
@@ -1341,7 +1343,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
                     const std::string op = expr->sval.substr(0, expr->sval.size() - 1);   // "+=" → "+"
                     const bool is_signed = is_signed_operation(op, lhs->type, expr->children[1]->type);   // 符号付きで演算するか
                     // ポインタへの+=/-=の場合 (右辺を指す先のバイト数倍する)
-                    if (is_pointer_compound) this->gen_scale(reg + 1, reg + 2, expr->step, expr);
+                    if (is_pointer_compound) this->gen_scale(reg + 1, reg + 2, this->pointee_bytes(lhs->type), expr);
                     // 現在値と右辺を演算子で畳み，結果をr{reg}に置く
                     this->gen_binop_instr(op, is_signed, reg, reg, reg + 1);
                 }
@@ -1365,12 +1367,13 @@ void Generator::gen_expr(node_t *expr, int reg) {
     }
 }
 
-// 関数呼び出しを生成し，戻り値(戻り値のある関数の場合)をr{reg}に残す
+// 関数呼び出しを生成する．戻り値がある場合は，戻り値をr{reg}に残す
 // r{reg}以降のレジスタだけを使い，呼び出し元がr{reg}未満のレジスタに置いている値(二項演算の左辺等)を壊さない
 void Generator::gen_call(node_t *expr, int reg) {
     // 手順:
     //   1. 関数ポインタを通した呼び出しなら，呼び出す関数の先頭番地をr{reg}に読み込む
-    //   2. 書き込みを後回しにする引数の個数を決める
+    //   2. 書き込みを後回しにする引数の個数を決める (引数の中で関数を呼ぶと，先に書き込んだ引数が呼び出し先に
+    //      壊されるため，そこまでの引数は評価してもすぐには書き込まず，値をレジスタに残して後でまとめて書き込む)
     //   3. 後回しにする引数をレジスタに残すのに必要な本数が足りるか確かめる
     //   4. 引数を順に評価する(引数の中で関数を呼ぶ場合は，評価済みの引数と呼び出す関数の番地を退避・復元する)
     //      後回しにしない引数は，評価した時点で書き込む
@@ -1434,10 +1437,11 @@ void Generator::gen_call(node_t *expr, int reg) {
         this->gen_arg_store(arg_reg_base + i, sig.param_types[i], arg_count, i);
     }
 
-    // 6. 呼び出す (関数ポインタを通した呼び出しは，r{reg}の値を呼び出す関数の先頭番地とする)
+    // 6. 呼び出す
     if (is_direct) {
         (*this->out_) << "    call " << expr->sval << "\n";
     } else {
+        // 関数ポインタを通した呼び出しの場合 (r{reg}の値を呼び出す関数の先頭番地とする)
         (*this->out_) << "    call r" << reg << "\n";
     }
     // 戻り値を返す関数の場合 (RAXに置かれた戻り値を式の結果のレジスタへ取り出す)
@@ -1447,11 +1451,11 @@ void Generator::gen_call(node_t *expr, int reg) {
 }
 
 // ポインタに整数を足し引きする演算・ポインタどうしの差をr{reg}に生成する (左辺はr{reg}・右辺はr{reg+1}に評価済み)
-// 1増減するごとに動かすバイト数(指す先のバイト数)はアナライザがstepに注釈済み
 void Generator::gen_pointer_arith(node_t *expr, int reg) {
     const bool is_lhs_pointer = is_pointer_value(expr->children[0]->type);   // 左辺がポインタか
     const bool is_rhs_pointer = is_pointer_value(expr->children[1]->type);   // 右辺がポインタか
-    const long long bytes = expr->step;                                      // 指す先1個分のバイト数
+    // 指す先1個分のバイト数 (ポインタどうしの差は同じ型のため，どちらのポインタから求めても同じ)
+    const long long bytes = this->pointee_bytes(expr->children[is_lhs_pointer ? 0 : 1]->type);
 
     // ポインタどうしの差の場合 (番地の差を指す先のバイト数で割り，間の要素数にする)
     if (is_lhs_pointer && is_rhs_pointer) {
@@ -1561,9 +1565,9 @@ void Generator::gen_array_elem_addr(node_t *expr, int reg, const std::vector<int
     // r{reg} = index (r{reg+1}はまだ未使用)
     this->gen_expr_protecting(expr->children[0], reg, protect_regs);
 
-    // オフセット = index * 要素1個のバイト数 (意味解析が注釈済み．サイズ1のcharはシフト不要)
+    // オフセット = index * 要素1個のバイト数 (サイズ1のcharはシフト不要)
     // 実行後: r{reg} = index * サイズ(バイトオフセット), r{reg+1} = シフト量(破棄可)
-    this->gen_scale(reg, reg + 1, expr->step, expr);
+    this->gen_scale(reg, reg + 1, type_size_bytes(expr->type, this->analysis_.struct_defs), expr);
 
     // 実行後: r{reg+1} = 先頭番地 (実行時計算の場合は，求めたオフセットのr{reg}も保護する)
     // 添字を付ける対象(基底)を式として持つ場合 (配列変数・ポインタ変数の名前以外に添字を付けた場合)
@@ -1609,7 +1613,7 @@ void Generator::gen_var_addr(int reg, const symbol_t *sym) {
 }
 
 // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する
-// アドレス = 先頭番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にmember_offset_wordsへ保存済み)
+// アドレス = 先頭番地 + メンバオフセット(コンパイル時定数．構造体定義から求める)
 //          + インデックス(実行時，member_access->children[0]->children[0]) × 構造体1要素分のバイト数
 // 先頭番地は，構造体の配列なら配列の番地(コンパイル時定数にメンバオフセットを畳み込む)，
 // 構造体へのポインタ(p[i].member)なら指している番地(実行時に読み出す)
@@ -1622,8 +1626,9 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
     const symbol_t *arr_sym = member_access->sym;          // 配列全体・構造体ポインタのシンボル(先頭の位置・構造体名)
     node_t *array_access = member_access->children[0];     // arr[i] (children[0]=インデックス式)
     const int stride_bytes = this->analysis_.struct_defs.at(arr_sym->type.struct_name).total_words * 4;
-    const bool is_pointer = is_pointer_value(arr_sym->type);   // 構造体へのポインタか
-    const bool is_global = arr_sym->location == LOC_GLOBAL;    // 先頭が絶対番地で決まるか
+    const int member_offset = this->member_offset_bytes(member_access);  // 構造体先頭からのメンバのオフセット(バイト)
+    const bool is_pointer = is_pointer_value(arr_sym->type);             // 構造体へのポインタか
+    const bool is_global = arr_sym->location == LOC_GLOBAL;              // 先頭が絶対番地で決まるか
     // 構造体の配列で，グローバル変数でもローカル変数でもない置き場所の場合 (構造体配列は他の置き場所を持たない)
     if (!is_pointer && !is_global && arr_sym->location != LOC_LOCAL) {
         throw std::string("compiler error: '") + arr_sym->name
@@ -1642,8 +1647,8 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
         this->gen_load(reg + 1, arr_sym, member_access->loc);
         (*this->out_) << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
         // 先頭以外のメンバの場合 (メンバのオフセットを足す)
-        if (member_access->member_offset_words != 0) {
-            (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << (member_access->member_offset_words * 4) << "\n";
+        if (member_offset != 0) {
+            (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << member_offset << "\n";
             (*this->out_) << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
         }
         return;
@@ -1651,7 +1656,7 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
 
     // 配列の先頭の位置(グローバル変数は絶対番地，ローカル変数はフレーム内オフセット)にメンバのオフセットを足す
     const int base_const = (is_global ? arr_sym->address : this->calc_frame_offset(arr_sym))
-                           + static_cast<int>(member_access->member_offset_words) * 4;
+                           + member_offset;
     // r{reg+1} = 配列先頭+メンバオフセット(コンパイル時定数)
     (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << base_const << "\n";
     // r{reg} = 実アドレス
@@ -1663,23 +1668,41 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
 }
 
 // メンバの前に書いた式(基底)が表す構造体の番地を実行時に求め，メンバのオフセットを足してメンバの実アドレスをr{reg}に計算する
-// アドレス = 基底の構造体の番地 + メンバオフセット(コンパイル時定数，member_accessが合成時にmember_offset_wordsへ保存済み)
+// アドレス = 基底の構造体の番地 + メンバオフセット(コンパイル時定数．構造体定義から求める)
 // 基底の構造体の番地は，構造体ポインタの指す先(p->member)ならポインタの値，
 // 基底の式に添字を付けた要素(s.items[i].member)ならその要素の番地
 // レジスタ使用: r{reg}=基底の番地→アドレス, r{reg+1}=メンバオフセット(作業用．先頭のメンバなら使わない)
 void Generator::gen_offset_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs) {
     // r{reg} = 基底の構造体の番地 (保護するレジスタが指定されていれば，それらの値を評価中も保護する)
     this->gen_lvalue_addr(member_access->children[0], reg, protect_regs);
+    const int member_offset = this->member_offset_bytes(member_access);   // 構造体先頭からのメンバのオフセット(バイト)
     // 先頭のメンバの場合 (基底の番地がそのままメンバの番地になるため，これ以上何もしない)
-    if (member_access->member_offset_words == 0) return;
+    if (member_offset == 0) return;
     // 作業用のr{reg+1}が上限(r15)を超えないことを確認する
     if (reg + 1 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers) at ")
               + loc_to_string(member_access->loc);
     }
     // r{reg} = 基底の番地 + メンバのオフセット
-    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << (member_access->member_offset_words * 4) << "\n";
+    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << member_offset << "\n";
     (*this->out_) << "    add r" << reg << " r" << (reg + 1) << " r" << reg << "\n";
+}
+
+// ポインタの指す先1個分のバイト数を返す (ポインタ演算の単位)
+int Generator::pointee_bytes(const type_t &type) const {
+    return type_size_bytes(pointee_type(type), this->analysis_.struct_defs);
+}
+
+// メンバアクセスの，構造体先頭からのメンバのオフセット(バイト)を構造体定義から求める
+// 構造体名はメンバの前に書いた式(基底)の型から取る (構造体・構造体の配列・構造体へのポインタのいずれも構造体名を持つ)
+int Generator::member_offset_bytes(const node_t *member_access) const {
+    const std::string &struct_name = member_access->children[0]->type.struct_name;   // メンバが属する構造体の名前
+    // 構造体定義のメンバから，名前が一致するものを探す (存在は意味解析で確かめ済み)
+    for (const struct_member_t &member : this->analysis_.struct_defs.at(struct_name).members) {
+        if (member.name == member_access->sval) return member.offset_words * 4;
+    }
+    throw std::string("compiler error: struct '") + struct_name + "' has no member '" + member_access->sval
+          + "' at " + loc_to_string(member_access->loc);
 }
 
 // グローバル変数とスタックがメモリ容量に収まるか検査する
