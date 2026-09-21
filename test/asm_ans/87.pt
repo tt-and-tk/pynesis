@@ -74,7 +74,7 @@ pick:
     add r0 r1 r0
     jmp .L1
 .L0:
-    mov fh r0 r0 FFFFFFFFh
+    mov fh r0 r0 80000000h
 .L1:
     mov fh r0 r30
     mov fh r0 r0 4

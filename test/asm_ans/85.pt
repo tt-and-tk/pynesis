@@ -53,7 +53,7 @@ main:
     mov fh r30 r0
     wm fh r0 r0 16
     rmr fh r16 r0 0
-    mov fh r0 r1 FFFFFFFFh
+    mov fh r0 r1 80000000h
     eq r0 r1 .L0
     rm fh r0 r0 16
     wmr fh r16 r0 8

@@ -1,7 +1,7 @@
 .global zero, main
 
 main:
-    mov fh r0 r0 FFFFFFFFh
+    mov fh r0 r0 80000000h
     wm fh r0 r0 0
     mov fh r0 r0 28
     wm fh r0 r0 4
