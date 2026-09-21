@@ -1,0 +1,6 @@
+// 意味解析エラー: 戻り値型が異なる関数の番地は，関数ポインタへ代入できない (void (*)(int) → int (*)(int)) (異常系)
+void nothing(int a) {
+}
+void main(void) {
+    int (*f)(int) = nothing;
+}
