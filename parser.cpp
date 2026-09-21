@@ -762,7 +762,7 @@ std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_requir
     else if (!this->token_kind_is(TK_RPAREN)) {
         while (true) {
             const loc_t param_loc = this->peek_token().loc;   // 引数の型の位置 (エラー報告用)
-            type_t param_type = this->parse_type(true);       // 引数の型 (voidは関数ポインタの戻り値型としてのみ書ける)
+            type_t param_type = this->parse_type(true);       // 引数の型 (voidは，引数を関数ポインタにする場合の戻り値型としてのみ書ける)
             // 関数ポインタの引数の場合 (宣言子の名前は読み捨てる)
             if (this->token_kind_is(TK_LPAREN)) {
                 this->parse_func_pointer_declarator(param_type, false);
