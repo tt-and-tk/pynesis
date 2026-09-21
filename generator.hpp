@@ -59,7 +59,7 @@ private:
     // 呼び出す前に，左辺をr{reg}・右辺をr{reg+1}へ評価しておくこと
     void gen_pointer_arith(node_t *expr, int reg);
     // r{reg}の値(添字・ポインタに足し引きする整数)にbytes(要素1個のバイト数)を掛け，番地のずれのバイト数に換算する
-    // (a[i]ならiを i×要素1個のバイト数 にする．先頭番地に足すのは呼び出し元が行う)
+    // (値nを n×要素1個のバイト数 にする．番地に足し引きするのは呼び出し元が行う)
     // r{work_reg}を作業用に使い，エラーは式exprの位置で報告する
     void gen_scale(int reg, int work_reg, long long bytes, const node_t *expr);
     int pointee_bytes(const type_t &type) const;   // ポインタの指す先1個分のバイト数を返す (ポインタ演算の単位)
