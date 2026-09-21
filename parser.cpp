@@ -724,7 +724,7 @@ node_t *Parser::parse_param() {
 // 関数ポインタの宣言子 (*名前)(引数型...) を読み，型に戻り値型と引数型を結びつけて変数名を返す
 // 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
 // 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
-// 名前を省いた宣言子は空の名前を返す．名前が必要な宣言(変数・引数・メンバ)ではname_requiredをtrueにする
+// 名前を省いた宣言子は空の名前を返す．名前で参照する宣言ではname_requiredをtrueにする
 std::string Parser::parse_func_pointer_declarator(type_t &type, bool name_required) {
     const loc_t loc = this->peek_token().loc;   // 宣言子の先頭の位置 (エラー報告用)
     // 関数ポインタを返す関数ポインタ・関数ポインタへのポインタは読まない
