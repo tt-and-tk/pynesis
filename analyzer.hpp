@@ -20,7 +20,8 @@ const int MAX_REG = 16;
 
 // ハードウェア制約を利用したヌルポインタの値 (32ビットの最大値)
 // アドレスバス幅を超える上位ビットが立っているため，どの変数の番地とも関数のindexとも一致せず，
-// 参照するとCPUが停止する(詳細は ../specification/memory.md を参照)
+// そのまま参照するとCPUが停止する(詳細は ../specification/memory.md を参照)．
+// ただしメンバ・添字でずらした番地は32ビットの加算で折り返し，0番地付近の有効な番地になりうる
 const long long NULLPTR_VALUE = 0xFFFFFFFFLL;
 
 // 整数昇格後の型が符号付き(int)かどうかを返す
