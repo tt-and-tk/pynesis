@@ -1,0 +1,9 @@
+// 意味解析エラー: 構造体へのポインタのメンバは.ではなく->で参照する (異常系)
+struct Tag {
+    int x;
+};
+struct Tag t;
+void main(void) {
+    struct Tag *p = &t;
+    p.x = 1;
+}

@@ -1,0 +1,6 @@
+// 構文解析エラー: 引数を配列の形(int a[])で宣言することはできない．ポインタ(int *a)で宣言する (異常系)
+int first(int a[]) {
+    return a[0];
+}
+void main(void) {
+}

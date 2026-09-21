@@ -1,0 +1,20 @@
+// char・shortへのポインタ: 指す先の型の幅で読み書きし，符号付きは符号拡張，符号なしはゼロ拡張して読む
+// ポインタ自体は番地のため，指す先の型によらず4バイトで読み書きし符号拡張しない
+char cs[4];
+unsigned char us[4];
+short ss[2];
+int r1;
+int r2;
+int r3;
+
+void main(void) {
+    char *cp = cs;
+    unsigned char *up = &us[1];
+    short *sp = ss;
+    *cp = 200;        // 下位8ビット(0xC8)だけを書き込む
+    *up = 200;
+    sp[1] = -2;
+    r1 = *cp;         // 符号拡張して-56
+    r2 = *up;         // ゼロ拡張して200
+    r3 = sp[1];       // -2
+}

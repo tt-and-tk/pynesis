@@ -1,0 +1,143 @@
+.global add_to_sum, count, other, main
+
+main:
+    mov fh r0 r0 12
+    sub r16 r0 r16
+    mov fh r0 r0 6513249
+    wm fh r0 r0 16
+    mov fh r0 r0 add_to_sum
+    wmr fh r16 r0 0
+    mov fh r0 r0 0
+    wmr fh r16 r0 4
+    mov fh r0 r0 16
+    wmr fh r16 r0 -8
+    call count
+    mov fh r30 r0
+    wm fh r0 r0 20
+    mov fh r0 r0 other
+    wmr fh r16 r0 8
+    mov fh r0 r0 1
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 0
+    add r0 r1 r0
+    mov fh r0 r1 0
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 4
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 FFFFFFFFh
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 4
+    add r1 r2 r1
+    wm fh r1 r0
+    rmr fh r16 r0 8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r1 0
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 4
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+.L0:
+    rmr fh r16 r0 4
+    mov fh r0 r1 FFFFFFFFh
+    eq r0 r1 .L1
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    rm fh r1 r1
+    wmr fh r16 r1 -8
+    call r0
+    rmr fh r16 r0 4
+    mov fh r0 r1 4
+    add r0 r1 r0
+    rm fh r0 r0
+    wmr fh r16 r0 4
+    jmp .L0
+.L1:
+    mov fh r0 r0 1
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 0
+    add r0 r1 r0
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 4
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r1 1
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 4
+    add r1 r2 r1
+    mov fh r1 r0
+    rm fh r0 r0
+    mov fh r0 r2 1
+    mov fh r0 r3 8
+    mul r2 r3 r2
+    sub r0 r2 r0
+    wm fh r1 r0
+    mov fh r0 r0 12
+    add r16 r0 r16
+    ret
+
+add_to_sum:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rm fh r0 r0 24
+    rmr fh r16 r1 0
+    add r0 r1 r0
+    wm fh r0 r0 24
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+count:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    mov fh r0 r0 0
+    wmr fh r16 r0 0
+.L2:
+    rmr fh r16 r0 4
+    rm 1h r0 r0
+    mov fh r0 r1 24
+    sll r0 r1 r0
+    sra r0 r1 r0
+    mov fh r0 r1 0
+    eq r0 r1 .L3
+    rmr fh r16 r0 4
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wmr fh r16 r1 4
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wmr fh r16 r1 0
+    jmp .L2
+.L3:
+    rmr fh r16 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+other:
+    mov fh r0 r0 3
+    mov fh r0 r30
+    ret
+    ret

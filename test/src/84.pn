@@ -1,0 +1,31 @@
+// 番地が実行時に決まる対象への++/--: 配列要素・構造体配列要素のメンバ・ポインタの指す先を増減する
+// 番地は一度だけ求めて読み出しと書き戻しの両方に使うため，添字の関数呼び出しは1回しか行われない
+// 前置は増減後の値，後置は増減前の値が式の値になる．ポインタのメンバは指す先1個分ずつ動く
+struct Cell {
+    int count;
+    short *cursor;
+};
+
+int arr[4];
+short sa[4];
+struct Cell cells[2];
+int calls;
+int r1;
+int r2;
+
+int index(void) {
+    calls++;
+    return 1;
+}
+
+void main(void) {
+    int i = 1;
+    struct Cell *p = &cells[1];
+    r1 = arr[i]++;            // 増減前の値
+    r2 = ++cells[i].count;    // 増減後の値
+    arr[index()]--;           // indexは1回だけ呼ばれる
+    (*p).count++;
+    p->cursor = sa;
+    p->cursor++;              // shortの1個分(2バイト)進む
+    --*p->cursor;             // cursorが指すshortを1減らす
+}

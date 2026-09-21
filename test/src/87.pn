@@ -1,0 +1,27 @@
+// ポインタを返す関数・ポインタの配列・ポインタへのポインタ・三項演算子
+// ポインタの配列の要素はポインタのため，names[i][j]は要素のポインタが指す文字列の文字になる
+// ポインタへのポインタは*を重ねて指す先をたどる．三項演算子は同じ型のポインタとnullptrとで使える
+// ポインタのsizeofは指す先の型によらず4
+char first[] = "ab";
+char second[] = "cd";
+char *names[2];
+int values[2];
+int *vp;
+int r1;
+int r2;
+int r3;
+
+int *pick(int i) {
+    return i ? &values[1] : nullptr;
+}
+
+void main(void) {
+    int **pp = &vp;
+    names[0] = first;
+    names[1] = second;
+    r1 = names[1][0];                 // 'c'
+    vp = pick(1);
+    **pp = 5;                         // values[1] = 5
+    r2 = (*pp)[0];                    // 5
+    r3 = sizeof(int *) + sizeof(pp);  // 8
+}

@@ -52,7 +52,11 @@ private:
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
-    void gen_call(node_t *expr, int reg);  // 関数呼び出し (引数の評価・受け渡しとCALL)
+    void gen_call(node_t *expr, int reg);  // 関数呼び出し (呼び出し先の評価・引数の評価と受け渡し・CALL)
+    // ポインタに整数を足し引きする演算・ポインタどうしの差をr{reg}に生成する (左辺はr{reg}・右辺はr{reg+1}に評価済み)
+    void gen_pointer_arith(node_t *expr, int reg);
+    // r{reg}の値を要素1個のバイト数bytes倍する (r{work_reg}を作業用に使う．エラーは式exprの位置で報告する)
+    void gen_scale(int reg, int work_reg, long long bytes, const node_t *expr);
     // r{reg}の値を，arg_count個の引数のindex番目を渡す位置へ書き込む
     void gen_arg_store(int reg, const type_t &type, int arg_count, int index);
     // 式を評価し結果を指定レジスタに残す．評価前後で，別に指定したレジスタ(複数可)の値をメモリへ退避・復元する
@@ -67,24 +71,22 @@ private:
     // r{reg}の下位bitsビットを符号として32ビットに符号拡張する (符号付きchar/shortロード後に使用．r{work_reg}を作業用に使う)
     // 作業用レジスタが足りないエラーは，読み出す式の位置で報告する
     void gen_sign_extend(int reg, int bits, int work_reg, const loc_t &loc);
+    // 左辺値(変数・配列要素・構造体メンバ・間接参照)の番地をr{reg}に計算する．
+    // 保護するレジスタを指定すると，添字やポインタの評価中もそれらの値を保護する
+    void gen_lvalue_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
     // 配列要素の実アドレスをr{reg}に計算する．保護するレジスタを指定すると，添字の評価中もそれらの値を保護する
     void gen_array_elem_addr(node_t *expr, int reg, const std::vector<int> &protect_regs = {});
-    // 番地が実行時に決まる代入先(配列要素または構造体配列要素のメンバ)の実アドレスをr{reg}に計算する
-    void gen_runtime_addr(node_t *target, int reg, const std::vector<int> &protect_regs = {});
-    // 配列の先頭アドレスをr{reg}に載せる
-    // (グローバルの配列は即値，フレーム上の配列はSPにフレーム内オフセットを足した値，
-    //  配列パラメータは呼び出し元が書き込んだ先頭アドレスの間接読み出し)
-    void gen_array_base_addr(int reg, const symbol_t *sym);
-    // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する．
-    // アドレス = 配列先頭番地 + メンバオフセット(コンパイル時定数) + インデックス(実行時)×構造体1要素分のバイト数．
+    // 変数の番地をr{reg}に載せる (グローバル変数は即値，フレーム上の変数はSPにフレーム内オフセットを足した値)
+    void gen_var_addr(int reg, const symbol_t *sym);
+    // 構造体配列要素のメンバ(arr[i].member，構造体ポインタの添字p[i].memberを含む)の実アドレスをr{reg}に計算する．
+    // アドレス = 先頭番地 + メンバオフセット(コンパイル時定数) + インデックス(実行時)×構造体1要素分のバイト数．
+    // 先頭番地は，構造体の配列なら配列の番地，構造体へのポインタなら指している番地．
     // 保護するレジスタを指定すると，インデックス式の評価中もそれらの値を保護する(既に確定した値を持つとき使う)
     void gen_struct_array_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
-    // 構造体メンバ配列アクセス(children.size()==2のND_ARRAY_ACCESS)の配列先頭アドレスをr{addr_reg}に載せる．
-    // 通常の単一構造体変数のメンバ配列はコンパイル時アドレス確定(gen_array_base_addr)，
-    // 構造体配列要素のメンバ配列は実行時アドレス計算(gen_struct_array_member_addr)に振り分ける
-    void gen_member_array_base(node_t *expr, int addr_reg, const std::vector<int> &protect_regs = {});
+    // 構造体ポインタの指す先のメンバ(p->member)の実アドレスをr{reg}に計算する (ポインタの値にメンバのオフセットを足す)
+    void gen_deref_member_addr(node_t *member_access, int reg, const std::vector<int> &protect_regs = {});
     // r{reg}が指すメモリ番地から，型に応じたマスクでr{reg}へ読み込む(レジスタ間接アドレッシング)．
-    // 構造体配列要素のメンバ等，実行時に計算したアドレスからスカラー値を読むときに使う．
+    // 構造体配列要素のメンバ・ポインタの指す先等，実行時に計算したアドレスからスカラー値を読むときに使う．
     // 符号付きchar/shortの符号拡張ではr{work_reg}を作業用に使い，エラーは読み出す式の位置で報告する
     void gen_load_indirect(int reg, const type_t &type, int work_reg, const loc_t &loc);
     // r{val_reg}の値を，r{addr_reg}が指すメモリ番地へ型に応じたマスクで書き込む(レジスタ間接アドレッシング)
@@ -106,8 +108,8 @@ private:
     std::string new_label();         // 一意な局所ラベル (.Ln) を生成する
 
     // 補助メソッド (gen_ 本体からは独立した，AST走査などの下請け処理)
-    // AST全体(全関数の本体)を再帰的に走査し，式中に現れる文字列リテラル(匿名グローバル配列)を集める
-    // 変数宣言の初期化子として使われた文字列リテラルはsymを持たないため対象外
+    // 指定したノード(関数定義・変数宣言)以下を再帰的に走査し，式中に現れる文字列リテラル(匿名グローバル配列)を集める
+    // char配列の初期化子として使われた文字列リテラル(char msg[] = "hi")は配列自体へ書き込むためsymを持たず，対象外
     void collect_string_literals(node_t *node, std::vector<node_t *> &out);
     // フレーム上の変数(ローカル変数・引数)の，フレームの基準から数えたオフセットを返す
     int calc_frame_offset(const symbol_t *sym) const;

@@ -1,0 +1,5 @@
+// 意味解析エラー: 指す先の型が異なるポインタ(int * → char *)は代入できない (異常系)
+int i;
+void main(void) {
+    char *c = &i;
+}

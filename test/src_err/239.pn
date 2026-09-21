@@ -1,0 +1,8 @@
+// 意味解析エラー: 関数ポインタへのポインタは非対応のため，関数ポインタ変数の番地は取れない (異常系)
+int zero(void) {
+    return 0;
+}
+void main(void) {
+    int (*f)(void) = zero;
+    int x = &f;
+}

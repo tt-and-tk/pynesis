@@ -1,5 +1,5 @@
-// 意味解析エラー: printは配列パラメータ(サイズ不明)には対応しない (異常系)
-void show(char arr[]) {
+// 意味解析エラー: printはポインタ(指す先の配列のサイズ不明)には対応しない (異常系)
+void show(char *arr) {
     print(arr);
 }
 void main(void) {

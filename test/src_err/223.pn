@@ -1,0 +1,7 @@
+// 意味解析エラー: 引数の型が異なる関数の番地は，関数ポインタへ代入できない (int (*)(char) → int (*)(int)) (異常系)
+int first(char c) {
+    return c;
+}
+void main(void) {
+    int (*f)(int) = first;
+}

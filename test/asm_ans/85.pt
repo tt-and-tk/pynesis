@@ -1,0 +1,118 @@
+.global plus, minus, run, main
+
+main:
+    mov fh r0 r0 12
+    sub r16 r0 r16
+    mov fh r0 r0 plus
+    wmr fh r16 r0 0
+    mov fh r0 r0 1
+    wmr fh r16 r0 4
+    rmr fh r16 r0 0
+    mov fh r0 r1 2
+    wmr fh r16 r1 -12
+    mov fh r0 r1 3
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    wm fh r0 r0 8
+    mov fh r0 r0 minus
+    wmr fh r16 r0 0
+    rmr fh r16 r0 0
+    wmr fh r16 r0 8
+    rmr fh r16 r1 0
+    mov fh r0 r2 9
+    wmr fh r16 r2 -12
+    mov fh r0 r2 4
+    wmr fh r16 r2 -8
+    call r1
+    mov fh r30 r1
+    rmr fh r16 r0 8
+    mov fh r0 r2 2
+    wmr fh r16 r2 -8
+    wmr fh r16 r1 -12
+    call r0
+    mov fh r30 r0
+    wm fh r0 r0 12
+    mov fh r0 r0 plus
+    rmr fh r16 r1 4
+    mov fh r0 r2 4
+    mul r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+    rmr fh r16 r0 4
+    mov fh r0 r1 4
+    mul r0 r1 r0
+    mov fh r0 r1 0
+    add r0 r1 r0
+    rm fh r0 r0
+    wmr fh r16 r0 -12
+    mov fh r0 r0 7
+    wmr fh r16 r0 -8
+    call run
+    mov fh r30 r0
+    wm fh r0 r0 16
+    rmr fh r16 r0 0
+    mov fh r0 r1 FFFFFFFFh
+    eq r0 r1 .L0
+    rm fh r0 r0 16
+    wmr fh r16 r0 8
+    mov fh r0 r1 minus
+    wmr fh r16 r1 -12
+    mov fh r0 r1 1
+    wmr fh r16 r1 -8
+    call run
+    mov fh r30 r1
+    rmr fh r16 r0 8
+    add r0 r1 r0
+    wm fh r0 r0 16
+.L0:
+    mov fh r0 r0 12
+    add r16 r0 r16
+    ret
+
+plus:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+minus:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    sub r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+run:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    wmr fh r16 r1 -12
+    mov fh r0 r1 1
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret

@@ -1,0 +1,47 @@
+// 関数名を隠すローカルの関数ポインタ・戻り値のない関数ポインタ・ポインタを進めながらのループ・連結リストのたどり方
+// 同じ名前でも，ローカル変数の宣言より前では関数を直接呼び，宣言より後では変数(関数ポインタ)を通して呼ぶ
+// 条件式のポインタはnullptrで偽になるため，末尾のnextがnullptrのリストをwhile (node)でたどれる
+// 番地が実行時に決まる対象への-=も，指す先1個分を単位にずらす
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+struct Node nodes[2];
+char text[] = "abc";
+int length;
+int sum;
+
+void add_to_sum(int v) {
+    sum += v;
+}
+
+int count(char *s) {
+    int n = 0;
+    while (*s) {
+        s++;
+        n++;
+    }
+    return n;
+}
+
+int other(void) {
+    return 3;
+}
+
+void main(void) {
+    void (*visit)(int) = add_to_sum;
+    struct Node *node = nodes;
+    length = count(text);             // 関数countを直接呼ぶ (3)
+    int (*count)(void) = other;
+    nodes[0].next = &nodes[1];
+    nodes[1].next = nullptr;
+    nodes[0].value = count();         // ローカル変数countを通してotherを呼ぶ (3)
+    nodes[1].value = 4;
+    while (node) {
+        visit(node->value);           // sum = 3 + 4
+        node = node->next;
+    }
+    nodes[1].next = &nodes[1];
+    nodes[1].next -= 1;               // nodes[0]を指す
+}

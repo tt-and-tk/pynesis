@@ -1,0 +1,7 @@
+// 意味解析エラー: nullptrとは大小を比較できない(一致・不一致のみ) (異常系)
+int arr[4];
+int r;
+void main(void) {
+    int *p = arr;
+    r = p < nullptr;
+}

@@ -1,0 +1,9 @@
+// 意味解析エラー: 関数ポインタを通した呼び出しも，引数をシグネチャの型へ格納できなければならない (ポインタ → int) (異常系)
+int g;
+int twice(int a) {
+    return a * 2;
+}
+void main(void) {
+    int (*f)(int) = twice;
+    f(&g);
+}

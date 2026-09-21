@@ -1,0 +1,55 @@
+.global second, main
+
+main:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    mov fh r0 r0 1
+    wmr fh r16 r0 0
+    mov fh r0 r0 24
+    wmr fh r16 r0 -8
+    call second
+    mov fh r30 r0
+    wm fh r0 r0 28
+    rm fh r0 r0 28
+    wmr fh r16 r0 4
+    mov fh r0 r1 4
+    wmr fh r16 r1 -8
+    call second
+    mov fh r30 r1
+    rmr fh r16 r0 4
+    add r0 r1 r0
+    wm fh r0 r0 28
+    rm fh r0 r0 28
+    wmr fh r16 r0 4
+    rmr fh r16 r1 0
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 12
+    add r1 r2 r1
+    wmr fh r16 r1 -8
+    call second
+    mov fh r30 r1
+    rmr fh r16 r0 4
+    add r0 r1 r0
+    wm fh r0 r0 28
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+second:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 1
+    rmr fh r16 r1 0
+    add r0 r1 r0
+    rm 1h r0 r0
+    mov fh r0 r1 24
+    sll r0 r1 r0
+    sra r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret

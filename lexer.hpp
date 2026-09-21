@@ -15,6 +15,7 @@ typedef enum {
     TK_BREAK, TK_CONTINUE, TK_RETURN,
     // その他キーワード
     TK_SIZEOF,
+    TK_NULLPTR,     // どのポインタも指していないことを表す定数
     // 組み込み関数キーワード (ユーザー定義の変数・関数名との衝突を防ぐため予約語にする)
     TK_PRINT, TK_SCAN,
     TK_STREQ, TK_STRCOPY,
@@ -76,6 +77,7 @@ typedef enum {
     TK_SEMICOLON,   // ;
     TK_COMMA,       // ,
     TK_DOT,         // .
+    TK_ARROW,       // ->
     // ファイル末尾
     TK_EOF,
 } token_kind_t;

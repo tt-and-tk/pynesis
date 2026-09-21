@@ -1,0 +1,4 @@
+// 構文解析エラー: constとポインタは組み合わせられない (異常系)
+const int *p = nullptr;
+void main(void) {
+}

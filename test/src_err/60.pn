@@ -1,5 +1,5 @@
-// 意味解析エラー: scanは配列パラメータ(サイズ不明)には対応しない (異常系)
-void read_line(char arr[]) {
+// 意味解析エラー: scanはポインタ(指す先の配列のサイズ不明)には対応しない (異常系)
+void read_line(char *arr) {
     scan(arr);
 }
 void main(void) {

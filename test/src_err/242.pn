@@ -1,0 +1,7 @@
+// 意味解析エラー: ポインタに単項マイナスは使えない (異常系)
+int arr[4];
+int *q;
+void main(void) {
+    int *p = arr;
+    q = -p;
+}

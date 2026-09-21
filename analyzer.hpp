@@ -18,9 +18,18 @@ const int MAX_INSTRUCTION_COUNT = 4096;
 // ハードウェア制約: 汎用レジスタの本数 (r0〜r15の16本)
 const int MAX_REG = 16;
 
+// ハードウェア制約を利用したヌルポインタの値 (32ビットの最大値)
+// アドレスバス幅を超える上位ビットが立っているため，どの変数の番地とも関数のindexとも一致せず，
+// 参照するとCPUが停止する(詳細は ../specification/memory.md を参照)
+const long long NULLPTR_VALUE = 0xFFFFFFFFLL;
+
 // 整数昇格後の型が符号付き(int)かどうかを返す
-// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーのみ)
+// (char/shortは符号の有無によらずintへ昇格するため，符号付きでないのはunsigned intのスカラーと，
+//  番地を符号なしの値として比較するポインタ・nullptrのみ)
 bool is_promoted_signed(const type_t &type);
+// 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
+// (条件式でnullptrを偽とする判定や，整数との取り違えの検査に使う)
+bool is_pointer_like(const type_t &type);
 // 二項演算を符号付きで行うかどうかを返す
 // (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
 bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
@@ -72,7 +81,8 @@ struct analysis_result_t {
     const std::map<std::string, struct_def_t> &struct_defs;
     // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
     const std::map<std::string, int> &func_local_sizes;
-    // 関数名→直接呼び出す関数名の集合 (コード生成が最大スタック使用量を求めるのに使う)
+    // 関数名→呼び出しうる関数名の集合 (コード生成が最大スタック使用量を求めるのに使う．
+    //  関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された全関数を呼びうるものとして含める)
     const std::map<std::string, std::set<std::string>> &call_graph;
     int global_size;   // グローバル変数・文字列リテラルが占めるバイト数
 };
@@ -92,11 +102,15 @@ private:
     std::map<std::string, std::vector<const symbol_t *>> func_params_;  // 関数名→引数のシンボル列
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
     std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
-    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→直接呼び出す関数名の集合
+    std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→呼び出しうる関数名の集合
     int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地 (割り当て後はグローバル領域のバイト数)
 
     // 解析の途中で使う情報
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
+    std::map<std::string, std::shared_ptr<func_sig_t>> func_sigs_;  // 関数名→シグネチャ (関数の番地の型と呼び出しの引数検査に使う)
+    std::set<std::string> addr_taken_funcs_;             // 番地を取得された関数名 (関数ポインタを通して呼ばれうる関数)
+    std::set<std::string> indirect_callers_;             // 関数ポインタを通して関数を呼び出す関数名
+    std::vector<node_t *> pointer_global_decls_;         // 初期化子を持つポインタ型のグローバル変数宣言 (全グローバル変数の番地が決まってから検査する)
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
@@ -138,15 +152,38 @@ private:
     // const変数の初期化子を定数式として計算し，値を持つシンボル(置き場所LOC_CONST)を生成して返す
     // (register_struct_varと同じく，シンボル表への格納はグローバル/ローカルの区別を知る呼び出し元が行う)
     symbol_t *register_const_var(const node_t *decl);
+    // 型に現れる構造体名(ポインタの指す先・関数ポインタの引数と戻り値を含む)が定義済みであることを確かめる
+    void check_type_exists(const type_t &type, const loc_t &loc) const;
+    // ポインタ型のグローバル変数の初期化子を検査する (番地が意味解析で確定する式であることを確かめる)
+    void check_global_pointer_inits();
+    // 式が，グローバル変数・関数の番地に整数定数を足し引きした，番地が意味解析で確定する式かを返す
+    static bool is_address_constant(const node_t *expr);
+    // 式が，番地が意味解析で確定する左辺値(グローバル変数・その要素やメンバ)かを返す
+    static bool is_static_lvalue(const node_t *expr);
+    // 式が，値が意味解析で確定する整数の式かを返す (名前解決・定数の埋め込みを終えた式を対象にする)
+    static bool is_integer_constant(const node_t *expr);
     void analyze_functions();                               // 3パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
+    // 値として使う式を検査する (値を持たないvoid・構造体をエラーにし，配列は先頭要素へのポインタとして型を注釈する)
+    void analyze_value(node_t *expr);
+    // 書き込み先・番地の取得対象になる式(左辺値)を検査し名前解決・型注釈する (値を読む側の検査は行わない)
+    void analyze_lvalue(node_t *expr);
+    void analyze_call(node_t *expr);                        // 関数呼び出し(直接・関数ポインタ経由)を検査する
+    void analyze_binop(node_t *expr);                       // 二項演算を検査し，結果の型を注釈する
+    // 構造体のメンバを名前から探す (見つからなければexprの位置でエラー)
+    const struct_member_t &find_member(const std::string &struct_name, const node_t *expr) const;
+    type_t func_pointer_type(const std::string &name) const;   // 関数の番地の型(その関数を指す関数ポインタ)を返す
+    int pointee_size(const type_t &type) const;             // ポインタが指す先の型のバイト数を返す (ポインタ演算の単位)
+    // 値srcを型dstの格納先(変数・引数・戻り値)へ格納できるか検査する (contextはエラーメッセージ用の格納の種類)
+    static void check_assignable(const type_t &dst, const node_t *src, const std::string &context);
+    static bool is_same_type(const type_t &a, const type_t &b);   // 2つの型が(ポインタの指す先を含め)同じかを返す
     // print/streq/strcopyに共通する引数検査を行う (builtin_nameはエラーメッセージ用の関数名)
     void check_char_array_operand(node_t *target, const std::string &builtin_name);
-    // 演算の対象がスカラーであることを検査する (operationはエラーメッセージ用の演算名)
+    // 演算の対象がスカラー(整数またはポインタ)であることを検査する (operationはエラーメッセージ用の演算名)
     static void check_scalar_operand(const node_t *target, const std::string &operation);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
     // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す

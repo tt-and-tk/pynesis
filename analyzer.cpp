@@ -43,7 +43,14 @@ static bool is_signed_literal(long long value) {
 // 整数昇格後の型が符号付き(int)かどうかを返す
 // 配列・構造体は整数の値ではないため，要素型によらず符号なしの演算の対象にしない
 bool is_promoted_signed(const type_t &type) {
+    // ポインタ・nullptrの場合 (番地は符号なしの値として比較する)
+    if (is_pointer_like(type)) return false;
     return type.is_signed || type.base != BASE_INT || type.is_array;
+}
+
+// 値がポインタ(関数ポインタ・nullptrを含む)として扱われるかどうかを返す
+bool is_pointer_like(const type_t &type) {
+    return is_pointer_value(type) || type.base == BASE_NULLPTR;
 }
 
 // 二項演算を符号付きで行うかどうかを，各オペランドの昇格後の型が符号付きかどうかから返す
@@ -73,6 +80,8 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 
     // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
+    // ポインタ型のグローバル変数の初期化子を検査する (後方で宣言された変数・関数の番地も使えるよう，全グローバル変数の登録後に行う)
+    this->check_global_pointer_inits();
 
     // プログラムの開始点となるmain関数が必要
     if (this->func_names_.find("main") == this->func_names_.end()) {
@@ -83,6 +92,12 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
+
+    // 関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された全関数を呼びうるものとして
+    // 呼び出しグラフに加える (スタック使用量を少なく見積もらないため)
+    for (const std::string &caller : this->indirect_callers_) {
+        this->call_graph_[caller].insert(this->addr_taken_funcs_.begin(), this->addr_taken_funcs_.end());
+    }
 
     // グローバル変数・文字列リテラルだけでメモリを使い切っていないか確認する
     // (スタックはメモリの上端から下へ伸びるため，残りがなければ関数を1つも呼び出せない．
@@ -158,13 +173,12 @@ void Analyzer::index_global_decls() {
 // 宣言ノードの型を確定させる (確定済みなら何もしない)
 // 構造体型なら構造体定義を解決し，配列なら要素数を文字列リテラルの長さ，または定数式から計算して畳み込む
 void Analyzer::resolve_decl_type(node_t *decl) {
-    // 構造体型の場合 (メンバ構成が確定しないとサイズを求められないため，先に構造体定義を解決する)
-    if (decl->type.base == BASE_STRUCT) {
-        // 宣言されている構造体が定義済みか確認する
-        if (!this->struct_decl_nodes_.count(decl->type.struct_name)) {
-            throw std::string("compiler error: use of undeclared struct '") + decl->type.struct_name
-                  + "' at " + loc_to_string(decl->loc);
-        }
+    // 型に現れる構造体が定義済みか確認する
+    this->check_type_exists(decl->type, decl->loc);
+    // 構造体そのものの場合 (メンバ構成が確定しないとサイズを求められないため，先に構造体定義を解決する．
+    //  構造体へのポインタは1ワードの番地であり，指す先の定義は解決しない．解決すると，自身を指すメンバ
+    //  (struct Node *next)を持つ構造体の定義が自身に依存する循環になるため)
+    if (decl->type.base == BASE_STRUCT && decl->type.pointer_depth == 0) {
         this->resolve_struct_def(decl->type.struct_name);
     }
     // スカラー，または要素数が確定済みの配列の場合
@@ -175,8 +189,8 @@ void Analyzer::resolve_decl_type(node_t *decl) {
     // 文字列リテラルで初期化されている場合 (要素数は文字列長から決まるため，定数式を計算しない)
     if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
         // 文字列リテラルによる初期化: char msg[] = "hello";
-        // char以外の配列の場合
-        if (decl->type.base != BASE_CHAR) {
+        // char以外の配列(charへのポインタの配列を含む)の場合
+        if (decl->type.base != BASE_CHAR || decl->type.pointer_depth > 0) {
             throw std::string("compiler error: string literal can only initialize char array at ")
                   + loc_to_string(decl->children[0]->loc);
         }
@@ -361,11 +375,22 @@ void Analyzer::collect_globals() {
             if (child->type.is_const) {
                 // const変数: 値を確定させて登録する (メモリ番地は割り当てない)
                 this->resolve_global_const(child->sval);
-            } else if (child->type.base == BASE_STRUCT) {
+            } else if (child->type.base == BASE_STRUCT && child->type.pointer_depth == 0) {
                 // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
                 symbol_t *sym = this->register_struct_var(child, LOC_GLOBAL);
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
+            } else if (is_pointer_value(child->type)) {
+                // ポインタ変数: 指す先の構造体が定義済みか確かめ，1ワードを割り当てて登録する
+                this->check_type_exists(child->type, child->loc);
+                symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
+                                             this->alloc_var(4, LOC_GLOBAL), true, true};
+                this->symbols_[child->sval] = sym;
+                child->sym = sym;
+                // 初期化子は，全グローバル変数の番地が決まってから検査する (後方で宣言された変数の番地も使えるようにするため)
+                if (!child->children.empty()) {
+                    this->pointer_global_decls_.push_back(child);
+                }
             } else if (child->type.is_array) {
                 // 配列の要素数を確定させる (先に参照されて解決済みなら何もしない)
                 this->resolve_decl_type(child);
@@ -395,14 +420,20 @@ void Analyzer::collect_globals() {
                 child->sym = sym;   // 宣言ノード自身もシンボルを指す (コード生成でアドレス参照に使う)
             }
         }
-        // 関数定義: パラメータのシンボルを登録する (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
-        // 呼び出し側の引数検査(analyze_expr の ND_CALL)は3パス目より前に全関数のパラメータが必要なため，
+        // 関数定義: パラメータのシンボルとシグネチャを登録する (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
+        // 呼び出し側の引数検査(analyze_call)は3パス目より前に全関数のシグネチャが必要なため，
         // パラメータのオフセット割り当てもここ(2パス目)で行う．3パス目(analyze_functions)はここで作った
         // シンボルをスコープに積んで本体を検査するだけになる
         else if (child->kind == ND_FUNC_DEF) {
+            // 戻り値型に現れる構造体が定義済みか確かめる
+            this->check_type_exists(child->type, child->loc);
+            auto sig = std::make_shared<func_sig_t>();   // この関数のシグネチャ
+            sig->return_type = child->type;
             std::vector<const symbol_t *> params;
             for (size_t i = 0; i + 1 < child->children.size(); i++) {
                 node_t *param = child->children[i];
+                // パラメータの型に現れる構造体が定義済みか確かめる
+                this->check_type_exists(param->type, param->loc);
 
                 // 同一関数内でのパラメータ名重複はエラー
                 for (const symbol_t *p : params) {
@@ -418,13 +449,15 @@ void Analyzer::collect_globals() {
                           + "' at " + loc_to_string(param->loc);
                 }
 
-                // パラメータは配列(先頭番地を保持する)も含め1つにつき1ワードを宣言順に占める
+                // パラメータはポインタ(番地を保持する)も含め1つにつき1ワードを宣言順に占める
                 symbol_t *sym = new symbol_t{param->sval, param->type, LOC_PARAM,
                                              static_cast<int>(params.size()) * 4, true, true};
                 param->sym = sym;
                 params.push_back(sym);
+                sig->param_types.push_back(param->type);
             }
             this->func_params_[child->sval] = params;
+            this->func_sigs_[child->sval] = sig;
         }
     }
 }
@@ -482,11 +515,6 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         const symbol_t *sym = this->lookup_symbol(inner->sval);
         // シンボル表に登録済みの変数の場合
         if (sym != nullptr) {
-            // 関数引数の配列が使用される可能性もあるのでそれをチェック
-            if (sym->type.is_array && sym->type.array_size == 0) {
-                throw std::string("compiler error: sizeof of an array parameter (size unknown) at ")
-                      + loc_to_string(inner->loc);
-            }
             return {this->type_size_bytes(sym->type), true};
         }
         // まだ登録されていないグローバルの宣言は，宣言ノードから型を確定させてサイズを求める
@@ -585,9 +613,11 @@ const_value_t Analyzer::eval_const_binop(const node_t *expr, const const_value_t
     return {wrap32(result, is_signed), is_signed};
 }
 
-// 配列が占有するワード数を計算する (int=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
+// 配列が占有するワード数を計算する (int・ポインタ=1要素1ワード, short=2要素1ワード, char=4要素1ワード)
 int Analyzer::calc_array_words(const type_t &type) {
     const int n = type.array_size;
+    // ポインタの配列の場合 (要素は番地を保持する1ワード)
+    if (type.pointer_depth > 0) return n;
     switch (type.base) {
         case BASE_INT:   return n;             // 32ビット: 1要素=1ワード
         case BASE_SHORT: return (n + 1) / 2;   // 16ビット: 2要素=1ワード
@@ -600,6 +630,10 @@ int Analyzer::calc_array_words(const type_t &type) {
 // 型の論理バイト数を返す (sizeof用．C言語準拠で実メモリのワード境界は考慮しない)
 // 配列は「要素数 × 要素型のバイト数」を返す．構造体はメンバの合計ワード数から求める(struct_defs_の参照が必要)
 int Analyzer::type_size_bytes(const type_t &type) const {
+    // ポインタ(構造体へのポインタ・関数ポインタを含む)とその配列の場合 (要素は番地を保持する4バイト)
+    if (type.pointer_depth > 0) {
+        return type.is_array ? 4 * type.array_size : 4;
+    }
     if (type.base == BASE_STRUCT) {
         // BASE_STRUCT型の型情報はresolve_decl_typeが構造体の存在を検証して定義を解決した後にしか
         // 使われないため(未定義の構造体はそこで既にコンパイルエラーになる)，ここに渡ってくる
@@ -617,6 +651,123 @@ int Analyzer::type_size_bytes(const type_t &type) const {
             throw std::string("compiler error: sizeof of unsupported type");
     }
     return type.is_array ? elem_bytes * type.array_size : elem_bytes;
+}
+
+// 型に現れる構造体名が定義済みであることを確かめる
+// ポインタの指す先の構造体は宣言時に定義を解決しないため，名前が存在することだけをここで確かめる
+void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
+    // 構造体型(構造体へのポインタを含む)の場合
+    if (type.base == BASE_STRUCT && !this->struct_decl_nodes_.count(type.struct_name)) {
+        throw std::string("compiler error: use of undeclared struct '") + type.struct_name
+              + "' at " + loc_to_string(loc);
+    }
+    // 関数ポインタの場合 (戻り値型・引数型にも構造体へのポインタが現れうる)
+    if (type.base == BASE_FUNC) {
+        this->check_type_exists(type.func_sig->return_type, loc);
+        for (const type_t &param_type : type.func_sig->param_types) {
+            this->check_type_exists(param_type, loc);
+        }
+    }
+}
+
+// ポインタ型のグローバル変数の初期化子を検査する
+// グローバル変数の初期化子は，mainより前に実行される処理が存在しないため値が意味解析で確定する式に限る．
+// ポインタの場合は整数の定数式の代わりに，グローバル変数・関数の番地(に整数定数を足し引きした式)とnullptrを許す．
+// 値は整数のように畳み込まず，他の初期化子と同じくmainの先頭で番地を求めて書き込む
+void Analyzer::check_global_pointer_inits() {
+    for (node_t *decl : this->pointer_global_decls_) {
+        node_t *init = decl->children[0];   // 初期化子の式
+        this->analyze_value(init);
+        Analyzer::check_assignable(decl->type, init, "initialization");
+        // 番地が意味解析で確定しない式の場合 (変数の値の参照・関数呼び出し・間接参照等)
+        if (!Analyzer::is_address_constant(init)) {
+            throw std::string("compiler error: initializer of global pointer '") + decl->sval
+                  + "' must be nullptr or an address of a global variable or function at "
+                  + loc_to_string(init->loc);
+        }
+    }
+}
+
+// 式が，番地が意味解析で確定するポインタの式かを返す
+// (nullptr・関数の番地・グローバル配列や文字列リテラルの先頭・&グローバルの左辺値と，それらに整数定数を足し引きした式)
+bool Analyzer::is_address_constant(const node_t *expr) {
+    switch (expr->kind) {
+        case ND_NULLPTR:
+        case ND_FUNC_ADDR:
+        case ND_STRING_LIT:
+            return true;
+        // 配列の先頭の番地として使われる変数 (グローバルスコープにはグローバル変数しかない)
+        case ND_VAR:
+            return expr->is_decayed;
+        // メンバ配列の先頭の番地として使われるメンバ
+        case ND_MEMBER_ACCESS:
+            return expr->is_decayed && Analyzer::is_static_lvalue(expr);
+        case ND_ADDR:
+            return Analyzer::is_static_lvalue(expr->children[0]);
+        // ポインタに整数定数を足し引きした式
+        case ND_BINOP: {
+            const node_t *lhs = expr->children[0];   // 左辺
+            const node_t *rhs = expr->children[1];   // 右辺
+            // 整数定数+ポインタの場合
+            if (expr->sval == "+" && Analyzer::is_integer_constant(lhs)) {
+                return Analyzer::is_address_constant(rhs);
+            }
+            return (expr->sval == "+" || expr->sval == "-")
+                && Analyzer::is_address_constant(lhs) && Analyzer::is_integer_constant(rhs);
+        }
+        default:
+            return false;
+    }
+}
+
+// 式が，番地が意味解析で確定する左辺値かを返す
+// (グローバル変数と，その配列要素(添字が整数定数)・メンバ．グローバルスコープにはグローバル変数しかない)
+bool Analyzer::is_static_lvalue(const node_t *expr) {
+    switch (expr->kind) {
+        case ND_VAR:
+            return true;
+        // 配列の要素の場合 (ポインタの指す先は実行時に決まるため，配列そのものの要素に限る)
+        case ND_ARRAY_ACCESS: {
+            const bool has_const_index = Analyzer::is_integer_constant(expr->children[0]);   // 添字が整数定数か
+            // 配列変数の要素の場合
+            if (expr->children.size() == 1) {
+                return has_const_index && expr->sym->type.is_array;
+            }
+            // メンバ配列の要素の場合
+            const node_t *base = expr->children[1];   // 添字を付ける基底の式
+            return has_const_index && base->kind == ND_MEMBER_ACCESS && base->type.is_array
+                && Analyzer::is_static_lvalue(base);
+        }
+        // 構造体のメンバの場合 (構造体変数か，構造体配列の要素のメンバに限る)
+        case ND_MEMBER_ACCESS: {
+            const node_t *base = expr->children[0];   // メンバが属する構造体の式
+            return base->kind == ND_VAR
+                || (base->kind == ND_ARRAY_ACCESS && Analyzer::is_static_lvalue(base));
+        }
+        default:
+            return false;
+    }
+}
+
+// 式が，値が意味解析で確定する整数の式かを返す
+// const変数は名前解決の時点で値のリテラルに置き換わっているため，リテラルと演算子だけを調べればよい
+bool Analyzer::is_integer_constant(const node_t *expr) {
+    switch (expr->kind) {
+        case ND_INT_LIT:
+        case ND_CHAR_LIT:
+        case ND_SIZEOF:
+            return true;
+        // 単項演算 (++/--は変数を書き換えるため除く)
+        case ND_UNOP:
+            return expr->sval != "++" && expr->sval != "--" && Analyzer::is_integer_constant(expr->children[0]);
+        case ND_BINOP:
+            return Analyzer::is_integer_constant(expr->children[0]) && Analyzer::is_integer_constant(expr->children[1]);
+        case ND_TERNARY:
+            return Analyzer::is_integer_constant(expr->children[0]) && Analyzer::is_integer_constant(expr->children[1])
+                && Analyzer::is_integer_constant(expr->children[2]);
+        default:
+            return false;
+    }
 }
 
 // 3パス目: 各関数本体を検査する
@@ -683,12 +834,14 @@ void Analyzer::analyze_stmt(node_t *stmt) {
                 throw std::string("compiler error: void function '") + this->current_function_
                       + "' cannot return a value at " + loc_to_string(stmt->loc);
             }
-            this->analyze_expr(stmt->children[0]);
+            this->analyze_value(stmt->children[0]);
+            // 戻り値型と値の型がポインタと整数で食い違う場合 (整数どうしは幅への切り詰めも行わずそのまま返す)
+            Analyzer::check_assignable(this->current_return_type_, stmt->children[0], "return");
         }
     }
     // if文 (children: 条件, then節, [else節])
     else if (stmt->kind == ND_IF) {
-        this->analyze_expr(stmt->children[0]);     // 条件
+        this->analyze_value(stmt->children[0]);    // 条件
         this->analyze_stmt(stmt->children[1]);     // then節
         if (stmt->children.size() == 3) {
             this->analyze_stmt(stmt->children[2]); // else節
@@ -696,7 +849,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
     }
     // while文 (children: 条件, 本体)
     else if (stmt->kind == ND_WHILE) {
-        this->analyze_expr(stmt->children[0]);     // 条件
+        this->analyze_value(stmt->children[0]);    // 条件
         this->loop_depth_++;
         this->analyze_stmt(stmt->children[1]);     // 本体
         this->loop_depth_--;
@@ -706,7 +859,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         // for全体で1つのスコープを張る (初期化部で宣言した変数を条件・更新・本体から見えるようにする)
         this->scopes_.push_back({});
         if (stmt->children[0]) this->analyze_stmt(stmt->children[0]);  // 初期化
-        if (stmt->children[1]) this->analyze_expr(stmt->children[1]);  // 条件
+        if (stmt->children[1]) this->analyze_value(stmt->children[1]); // 条件
         if (stmt->children[2]) this->analyze_expr(stmt->children[2]);  // 更新
         this->loop_depth_++;
         this->analyze_stmt(stmt->children[3]);                         // 本体
@@ -718,7 +871,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         this->loop_depth_++;
         this->analyze_stmt(stmt->children[0]);     // 本体
         this->loop_depth_--;
-        this->analyze_expr(stmt->children[1]);     // 条件
+        this->analyze_value(stmt->children[1]);    // 条件
     }
     // switch文
     else if (stmt->kind == ND_SWITCH) {
@@ -746,7 +899,12 @@ void Analyzer::analyze_stmt(node_t *stmt) {
 
 // switch文を検査する (children: 条件式, 本体の文とcase/defaultラベルが平坦に並ぶ)
 void Analyzer::analyze_switch(node_t *stmt) {
-    this->analyze_expr(stmt->children[0]);   // 条件式
+    this->analyze_value(stmt->children[0]);   // 条件式
+    // 条件式がポインタの場合 (case値の整数定数と比べる意味がないため)
+    if (is_pointer_like(stmt->children[0]->type)) {
+        throw std::string("compiler error: switch condition must be an integer at ")
+              + loc_to_string(stmt->children[0]->loc);
+    }
 
     this->switch_depth_++;            // switchの中ではbreakが許される
     this->scopes_.push_back({});      // switch本体のスコープ
@@ -808,7 +966,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         symbol_t *sym = this->register_const_var(decl);
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
-    } else if (decl->type.base == BASE_STRUCT) {
+    } else if (decl->type.base == BASE_STRUCT && decl->type.pointer_depth == 0) {
         // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
         symbol_t *sym = this->register_struct_var(decl, LOC_LOCAL);
         this->scopes_.back()[decl->sval] = sym;
@@ -823,14 +981,12 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
     } else {
-        // スカラー変数: 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
+        // スカラー変数(ポインタを含む): 指す先の構造体が定義済みか確かめる
+        this->check_type_exists(decl->type, decl->loc);
+        // 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
         if (!decl->children.empty()) {
-            this->analyze_expr(decl->children[0]);
-            // void関数の戻り値(値を持たない)で初期化することはできない
-            if (decl->children[0]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot initialize with void value at ")
-                      + loc_to_string(decl->loc);
-            }
+            this->analyze_value(decl->children[0]);
+            Analyzer::check_assignable(decl->type, decl->children[0], "initialization");
         }
         // フレーム内のオフセットを割り当てて登録する (型に関係なく1変数=1ワード(4バイト)使う)
         symbol_t *sym = new symbol_t{decl->sval, decl->type, LOC_LOCAL,
@@ -843,34 +999,269 @@ void Analyzer::analyze_local_decl(node_t *decl) {
 // scan以外の組み込み関数の引数をチェックする(print/streq/strcopy)
 // scanは構文上，対象を識別子1個(TK_IDENT)に限定しているため構造体メンバ配列(arr[i].name)が
 // 現れず，書き込み可能性・最小サイズ等の固有要件も持つため，この共通検査ではなく専用の検査を別途行う
+// 引数は配列のまま検査する(先頭要素へのポインタとして扱うと，打ち切りに使う宣言サイズが分からなくなるため)
 void Analyzer::check_char_array_operand(node_t *target, const std::string &builtin_name) {
     this->analyze_expr(target);
-    // char型の配列でない場合はエラー
-    if (!target->type.is_array || target->type.base != BASE_CHAR) {
+    // ポインタの場合 (指す先の配列の大きさが分からず，打ち切りの判定ができないため)
+    if (is_pointer_like(target->type)) {
+        throw std::string("compiler error: ") + builtin_name
+              + " does not support pointers (the array size is unknown) at " + loc_to_string(target->loc);
+    }
+    // char型の配列でない場合はエラー (charへのポインタの配列は，要素が文字ではないため対象外)
+    if (!target->type.is_array || target->type.base != BASE_CHAR || target->type.pointer_depth > 0) {
         throw std::string("compiler error: ") + builtin_name + " requires a char array at "
               + loc_to_string(target->loc);
     }
-    // 関数の配列引数(サイズ不明，array_size==0)の場合はエラー
-    if (target->type.array_size == 0) {
-        throw std::string("compiler error: ") + builtin_name
-              + " does not support array parameters (size unknown) at " + loc_to_string(target->loc);
-    }
-    // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，コード生成が前提とする
+    // 番地が実行時に決まる構造体のメンバ配列(arr[i].name・p->name)は，コード生成が前提とする
     // 「コンパイル時に確定したアドレス」と相容れないためエラー
-    if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind == ND_ARRAY_ACCESS) {
-        throw std::string("compiler error: ") + builtin_name + " does not support an array member of "
-              "a struct array element at " + loc_to_string(target->loc);
+    if (target->kind == ND_MEMBER_ACCESS && target->children[0]->kind != ND_VAR) {
+        throw std::string("compiler error: ") + builtin_name + " does not support an array member whose "
+              "address is determined at run time at " + loc_to_string(target->loc);
     }
 }
 
-// 演算の対象(名前解決・型注釈済み)がスカラーであることを検査する
+// 演算の対象(名前解決・型注釈済み)がスカラー(整数またはポインタ)であることを検査する
 // 配列・構造体を丸ごと読み書きするコード生成の仕組みは無く，そのまま通すと先頭ワードだけを
 // 読み書きするコードになる(構造体は内部エラーになる)ため，意味解析の段階でエラーにする
 void Analyzer::check_scalar_operand(const node_t *target, const std::string &operation) {
-    if (target->type.is_array || target->type.base == BASE_STRUCT) {
+    if (target->type.is_array || (target->type.base == BASE_STRUCT && target->type.pointer_depth == 0)) {
         throw std::string("compiler error: ") + operation + " is not supported for array or struct at "
               + loc_to_string(target->loc);
     }
+}
+
+// 値として使う式を検査する
+// 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を注釈する
+// (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
+void Analyzer::analyze_value(node_t *expr) {
+    this->analyze_expr(expr);
+    // void値の場合
+    if (expr->type.base == BASE_VOID) {
+        throw std::string("compiler error: cannot use void value in expression at ") + loc_to_string(expr->loc);
+    }
+    // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
+    if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
+        throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
+              + loc_to_string(expr->loc);
+    }
+    // 配列の場合 (先頭要素へのポインタとして扱う)
+    if (expr->type.is_array) {
+        expr->type = decayed_type(expr->type);
+        expr->is_decayed = true;
+    }
+}
+
+// 書き込み先・番地の取得対象になる式(左辺値)を検査し，名前解決と型注釈を行う
+// 値を読む側の検査(const変数の値への置き換え・読み取り可否)は当てない．書き込み先に当てると誤るため
+void Analyzer::analyze_lvalue(node_t *expr) {
+    // 変数の場合
+    if (expr->kind == ND_VAR) {
+        const symbol_t *sym = this->lookup_symbol(expr->sval);   // 変数のシンボル
+        // 変数として見つからない場合 (関数名なら書き換えられない旨を，それ以外は未宣言である旨を示す)
+        if (sym == nullptr) {
+            const std::string reason = this->func_names_.count(expr->sval)
+                                           ? "' is a function and cannot be modified at "
+                                           : "' is not declared at ";   // エラーの理由
+            throw std::string("compiler error: '") + expr->sval + reason + loc_to_string(expr->loc);
+        }
+        expr->sym  = sym;
+        expr->type = sym->type;
+        return;
+    }
+    // 配列要素・構造体メンバ・間接参照の場合 (それぞれのアクセスの検査に名前解決させる)
+    if (expr->kind == ND_ARRAY_ACCESS || expr->kind == ND_MEMBER_ACCESS || expr->kind == ND_DEREF) {
+        this->analyze_expr(expr);
+        return;
+    }
+    // それ以外(リテラル・演算や関数呼び出しの結果等)は番地を持たない
+    throw std::string("compiler error: expression is not a variable, array element, struct member or dereference at ")
+          + loc_to_string(expr->loc);
+}
+
+// 関数呼び出しを検査する (children: [呼び出し先の式, 引数...])
+// 呼び出し先が関数名そのもの(同名の変数に隠されていないもの)なら直接呼び出し，それ以外は関数ポインタを通した呼び出しとし，
+// どちらも呼び出し先の型が持つシグネチャで引数と戻り値を検査する
+void Analyzer::analyze_call(node_t *expr) {
+    node_t *callee = expr->children[0];   // 呼び出し先の式
+    const bool is_direct = callee->kind == ND_VAR && this->lookup_symbol(callee->sval) == nullptr;   // 関数名による直接呼び出しか
+    // 直接呼び出しの場合
+    if (is_direct) {
+        // 変数でも関数でもない名前の場合
+        if (!this->func_names_.count(callee->sval)) {
+            throw std::string("compiler error: call to undefined function '")
+                  + callee->sval + "' at " + loc_to_string(expr->loc);
+        }
+        // 呼び出す関数の番地として注釈し，呼び出しグラフに記録する (番地を値として取得したわけではないため，
+        // 関数ポインタを通して呼ばれうる関数には加えない)
+        callee->kind = ND_FUNC_ADDR;
+        callee->type = this->func_pointer_type(callee->sval);
+        expr->sval = callee->sval;
+        this->call_graph_[this->current_function_].insert(callee->sval);
+    }
+    // 関数ポインタを通した呼び出しの場合
+    else {
+        this->analyze_value(callee);
+        // 関数ポインタでないものを呼び出した場合
+        if (!is_func_pointer(callee->type)) {
+            throw std::string("compiler error: called object is not a function or function pointer at ")
+                  + loc_to_string(expr->loc);
+        }
+        this->indirect_callers_.insert(this->current_function_);
+    }
+
+    // 引数の数がパラメータの数と一致するか検証する
+    const func_sig_t &sig = *callee->type.func_sig;   // 呼び出し先のシグネチャ
+    const size_t arg_count = expr->children.size() - 1;   // 引数の個数
+    if (arg_count != sig.param_types.size()) {
+        const std::string callee_name = is_direct ? "function '" + expr->sval + "'" : "function pointer";   // エラーメッセージに書く呼び出し先
+        throw std::string("compiler error: ") + callee_name + " expects "
+              + std::to_string(sig.param_types.size()) + " argument(s) but got "
+              + std::to_string(arg_count) + " at " + loc_to_string(expr->loc);
+    }
+    // 各引数を，パラメータの型の格納先へ格納できるか検査する
+    // (整数どうしは型が異なっても受け付け，パラメータの型で格納する．値の変換規則が決まっているため，型の一致は検査しない)
+    for (size_t i = 0; i < arg_count; i++) {
+        node_t *arg = expr->children[i + 1];   // i番目の引数
+        this->analyze_value(arg);
+        Analyzer::check_assignable(sig.param_types[i], arg, "argument " + std::to_string(i + 1));
+    }
+    expr->type = sig.return_type;
+}
+
+// 二項演算を検査し，結果の型を注釈する
+// 整数どうしは整数昇格の規則に従い，ポインタを含む演算は加減算・比較・論理演算のみを許す
+void Analyzer::analyze_binop(node_t *expr) {
+    this->analyze_value(expr->children[0]);
+    this->analyze_value(expr->children[1]);
+    const type_t &lhs = expr->children[0]->type;   // 左辺の型
+    const type_t &rhs = expr->children[1]->type;   // 右辺の型
+    const std::string &op = expr->sval;            // 演算子
+    const bool is_lhs_pointer = is_pointer_like(lhs);   // 左辺がポインタ(nullptrを含む)か
+    const bool is_rhs_pointer = is_pointer_like(rhs);   // 右辺がポインタ(nullptrを含む)か
+    // 比較・論理演算か (結果は0/1のint)
+    const bool is_boolean = op == "==" || op == "!=" || op == "<" || op == ">"
+                         || op == "<=" || op == ">=" || op == "&&" || op == "||";
+
+    // 整数どうしの場合 (演算の符号で，符号付きで演算するならint，符号なしならunsigned int)
+    if (!is_lhs_pointer && !is_rhs_pointer) {
+        expr->type = type_t{BASE_INT, is_boolean || is_signed_operation(op, lhs, rhs)};
+        return;
+    }
+    // 論理演算の場合 (ポインタはnullptrを偽として真偽を判定する)
+    if (op == "&&" || op == "||") {
+        expr->type = type_t{BASE_INT, true};
+        return;
+    }
+    // 一致の比較の場合 (同じ型のポインタどうしか，ポインタとnullptrに限る)
+    if (op == "==" || op == "!=") {
+        const bool has_nullptr = lhs.base == BASE_NULLPTR || rhs.base == BASE_NULLPTR;   // nullptrとの比較か
+        if (!is_lhs_pointer || !is_rhs_pointer || (!has_nullptr && !Analyzer::is_same_type(lhs, rhs))) {
+            throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
+                  + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
+        }
+        expr->type = type_t{BASE_INT, true};
+        return;
+    }
+    // 大小比較の場合 (同じ配列を指す同じ型のポインタどうしに限る．関数の番地とnullptrは大小に意味を持たない)
+    if (is_boolean) {
+        if (!is_pointer_value(lhs) || is_func_pointer(lhs) || !Analyzer::is_same_type(lhs, rhs)) {
+            throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
+                  + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
+        }
+        expr->type = type_t{BASE_INT, true};
+        return;
+    }
+    // ポインタに整数を足し引きする場合 (ポインタ+整数・整数+ポインタ・ポインタ-整数)
+    const bool is_pointer_offset =
+        (op == "+" || op == "-") && is_pointer_value(lhs) && !is_func_pointer(lhs) && !is_rhs_pointer;   // ポインタ±整数か
+    const bool is_offset_pointer =
+        op == "+" && !is_lhs_pointer && is_pointer_value(rhs) && !is_func_pointer(rhs);                  // 整数+ポインタか
+    if (is_pointer_offset || is_offset_pointer) {
+        const type_t &pointer = is_pointer_offset ? lhs : rhs;   // 足し引きされるポインタの型
+        expr->type = pointer;
+        expr->ival = this->pointee_size(pointer);
+        return;
+    }
+    // ポインタどうしの差の場合 (同じ配列を指す同じ型のポインタどうしで，間の要素数をintで返す)
+    if (op == "-" && is_pointer_value(lhs) && !is_func_pointer(lhs) && Analyzer::is_same_type(lhs, rhs)) {
+        expr->type = type_t{BASE_INT, true};
+        expr->ival = this->pointee_size(lhs);
+        return;
+    }
+    // それ以外の演算にポインタを使った場合
+    throw std::string("compiler error: invalid operands to binary '") + op + "' ('" + type_to_string(lhs)
+          + "' and '" + type_to_string(rhs) + "') at " + loc_to_string(expr->loc);
+}
+
+// 構造体のメンバを名前から探す (見つからなければexprの位置でエラー)
+const struct_member_t &Analyzer::find_member(const std::string &struct_name, const node_t *expr) const {
+    for (const struct_member_t &member : this->struct_defs_.at(struct_name).members) {
+        if (member.name == expr->sval) return member;
+    }
+    throw std::string("compiler error: struct '") + struct_name
+          + "' has no member '" + expr->sval + "' at " + loc_to_string(expr->loc);
+}
+
+// 関数の番地の型(その関数を指す関数ポインタ)を返す
+type_t Analyzer::func_pointer_type(const std::string &name) const {
+    type_t type;
+    type.base = BASE_FUNC;
+    type.pointer_depth = 1;
+    type.func_sig = this->func_sigs_.at(name);
+    return type;
+}
+
+// ポインタが指す先の型のバイト数を返す (ポインタに整数を足し引きする際に，1あたり動かす量)
+int Analyzer::pointee_size(const type_t &type) const {
+    return this->type_size_bytes(pointee_type(type));
+}
+
+// 値srcを型dstの格納先(変数・引数・戻り値)へ格納できるか検査する
+// ポインタと整数の間に暗黙の変換はない．ポインタどうしは指す先の型が一致する場合，またはnullptrのみ格納できる
+void Analyzer::check_assignable(const type_t &dst, const node_t *src, const std::string &context) {
+    const type_t &value = src->type;   // 格納する値の型
+    // 格納先がポインタの場合
+    if (is_pointer_value(dst)) {
+        // nullptrの場合 (どのポインタにも格納できる)
+        if (value.base == BASE_NULLPTR) return;
+        // 整数を格納しようとした場合 (0もヌルポインタとしては扱わない)
+        if (!is_pointer_value(value)) {
+            throw std::string("compiler error: cannot convert '") + type_to_string(value) + "' to '"
+                  + type_to_string(dst) + "' in " + context + " (use nullptr for a null pointer) at "
+                  + loc_to_string(src->loc);
+        }
+        // 指す先の型が異なる場合
+        if (!Analyzer::is_same_type(dst, value)) {
+            throw std::string("compiler error: incompatible pointer types in ") + context + ": expected '"
+                  + type_to_string(dst) + "' but got '" + type_to_string(value) + "' at " + loc_to_string(src->loc);
+        }
+        return;
+    }
+    // 格納先が整数で，ポインタを格納しようとした場合
+    if (is_pointer_like(value)) {
+        throw std::string("compiler error: cannot convert '") + type_to_string(value) + "' to '"
+              + type_to_string(dst) + "' in " + context + " at " + loc_to_string(src->loc);
+    }
+}
+
+// 2つの型が(ポインタの指す先を含め)同じかを返す
+// 整数型は符号も含めて比べる(指す先の型で読み書きの幅と符号拡張が決まるため)
+bool Analyzer::is_same_type(const type_t &a, const type_t &b) {
+    if (a.base != b.base || a.pointer_depth != b.pointer_depth || a.is_array != b.is_array) return false;
+    // 構造体の場合
+    if (a.base == BASE_STRUCT) return a.struct_name == b.struct_name;
+    // 関数の場合 (戻り値型と引数型の並びが一致すること)
+    if (a.base == BASE_FUNC) {
+        const func_sig_t &sig_a = *a.func_sig;   // aのシグネチャ
+        const func_sig_t &sig_b = *b.func_sig;   // bのシグネチャ
+        if (!Analyzer::is_same_type(sig_a.return_type, sig_b.return_type)) return false;
+        if (sig_a.param_types.size() != sig_b.param_types.size()) return false;
+        for (size_t i = 0; i < sig_a.param_types.size(); i++) {
+            if (!Analyzer::is_same_type(sig_a.param_types[i], sig_b.param_types[i])) return false;
+        }
+        return true;
+    }
+    return a.is_signed == b.is_signed;
 }
 
 // 式を検査し，名前解決と型注釈を行う
@@ -879,6 +1270,7 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
 //   変数参照・代入・インクリメント/デクリメント・関数呼び出し: それぞれ固有の検査を行う
 //   二項演算・三項演算など(default): 固有の検査はなく，子を再帰検査するだけ
 // 式文(a + b; のような文)もanalyze_stmtからこの関数で検査される
+// 配列は配列の型のまま注釈する．値として使う文脈では，呼び出し側がanalyze_valueで先頭要素へのポインタとして扱う
 void Analyzer::analyze_expr(node_t *expr) {
     switch (expr->kind) {
         // リテラル: 検査は不要だが，後段のコード生成のため型を注釈する
@@ -888,6 +1280,13 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         case ND_CHAR_LIT:
             expr->type = type_t{BASE_CHAR, true};   // 文字リテラルはchar(符号付き)
+            return;
+        // nullptr: どのポインタ型とも比較・代入できる専用の型を持つ
+        case ND_NULLPTR:
+            expr->type = type_t{BASE_NULLPTR};
+            return;
+        // 関数の番地: 型は注釈済み (直接呼び出しの呼び出し先として置き換えた後に，再び検査される場合)
+        case ND_FUNC_ADDR:
             return;
 
         // 文字列リテラル: 匿名のグローバルchar配列としてメモリを確保する
@@ -935,6 +1334,18 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_VAR: {
             const symbol_t *sym = this->lookup_symbol(expr->sval);
             if (sym == nullptr) {
+                // 変数として見つからない関数名は，その関数の番地(関数ポインタ)として扱う
+                if (this->func_names_.count(expr->sval)) {
+                    // mainの場合 (プログラムの開始点であり，呼び出し元へ復帰できないため呼び出す手段を与えない)
+                    if (expr->sval == "main") {
+                        throw std::string("compiler error: cannot take the address of 'main' at ")
+                              + loc_to_string(expr->loc);
+                    }
+                    expr->kind = ND_FUNC_ADDR;
+                    expr->type = this->func_pointer_type(expr->sval);
+                    this->addr_taken_funcs_.insert(expr->sval);
+                    return;
+                }
                 throw std::string("compiler error: use of undeclared identifier '")
                       + expr->sval + "' at " + loc_to_string(expr->loc);
             }
@@ -956,33 +1367,103 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
+        // 番地の取得 &x: 対象が番地を持つ左辺値であることを確かめ，指す先をその型とするポインタの型を付ける
+        case ND_ADDR: {
+            node_t *operand = expr->children[0];   // 番地を取る式
+            // 関数名の場合 (&を付けずに関数名を書いた場合と同じく，その関数の番地になる)
+            if (operand->kind == ND_VAR && this->lookup_symbol(operand->sval) == nullptr
+                && this->func_names_.count(operand->sval)) {
+                this->analyze_expr(operand);
+                *expr = *operand;
+                return;
+            }
+            this->analyze_lvalue(operand);
+            // ハードウェア変数・const変数の場合 (メモリ上の番地を持たないため)
+            if (operand->kind == ND_VAR && operand->sym->location != LOC_GLOBAL
+                && operand->sym->location != LOC_LOCAL && operand->sym->location != LOC_PARAM) {
+                throw std::string("compiler error: cannot take the address of '") + operand->sval
+                      + "' (it has no memory address) at " + loc_to_string(expr->loc);
+            }
+            // 配列そのものの場合 (配列へのポインタは非対応．配列の名前がそのまま先頭要素の番地になる)
+            if (operand->type.is_array) {
+                throw std::string("compiler error: cannot take the address of an array; "
+                                   "use the array itself or the address of its first element at ")
+                      + loc_to_string(expr->loc);
+            }
+            // 関数ポインタの場合 (関数ポインタへのポインタは非対応)
+            if (is_func_pointer(operand->type)) {
+                throw std::string("compiler error: pointer to function pointer is not supported at ")
+                      + loc_to_string(expr->loc);
+            }
+            expr->type = operand->type;
+            expr->type.is_const = false;
+            expr->type.pointer_depth++;
+            return;
+        }
+
+        // 間接参照 *p: ポインタの指す先を表す (読み書きの対象は指す先の型になる)
+        case ND_DEREF: {
+            node_t *pointer = expr->children[0];   // 間接参照するポインタの式
+            this->analyze_value(pointer);
+            // 関数ポインタの場合 (C言語と同じく，*を付けても同じ関数ポインタとして扱い，(*fp)(x)をfp(x)と同じにする)
+            if (is_func_pointer(pointer->type)) {
+                expr->type = pointer->type;
+                return;
+            }
+            // ポインタでない場合 (nullptrは型からは指す先が決まらない)
+            if (!is_pointer_value(pointer->type)) {
+                throw std::string("compiler error: cannot dereference '") + type_to_string(pointer->type)
+                      + "' at " + loc_to_string(expr->loc);
+            }
+            expr->type = pointee_type(pointer->type);
+            return;
+        }
+
         // 構造体メンバアクセス(a.b)の意味解析．最終的に確定させる情報はメンバの型(expr->type)と
         // 読み書き先(expr->sym)の2つ．基底(a)がメンバの番地をコンパイル時定数にできるかどうかで
-        // 経路が2つに分かれる(単一の構造体変数なら定数，構造体配列の要素なら添字が実行時の値のため不定)
+        // 経路が分かれる(単一の構造体変数なら定数，構造体配列の要素・構造体ポインタの指す先なら実行時の値のため不定)
         case ND_MEMBER_ACCESS: {
-            node_t *base = expr->children[0];   // メンバの前についている構造体変数または構造体配列要素
-            const symbol_t *base_sym;           // 基底(構造体変数または構造体配列全体)のシンボル
+            node_t *base = expr->children[0];   // メンバの前についている構造体変数・構造体配列要素・間接参照
 
+            // (3) 構造体ポインタの指す先のメンバ: p->member，(*p).member
+            if (base->kind == ND_DEREF) {
+                this->analyze_expr(base);
+                // 指す先が構造体でない場合
+                if (base->type.base != BASE_STRUCT || base->type.pointer_depth != 0) {
+                    throw std::string("compiler error: member access requires a pointer to struct, but got '")
+                          + type_to_string(base->children[0]->type) + "' at " + loc_to_string(expr->loc);
+                }
+                // メンバオフセット(ワード)を注釈する (番地はコード生成側で，ポインタの値から実行時計算する)
+                const struct_member_t &member = this->find_member(base->type.struct_name, expr);
+                expr->ival = member.offset_words;
+                expr->type = member.type;
+                return;
+            }
+
+            const symbol_t *base_sym;           // 基底(構造体変数・構造体配列全体・構造体ポインタ)のシンボル
             if (base->kind == ND_ARRAY_ACCESS) {
-                // (2) 構造体配列の要素へのメンバアクセス: arr[i].member
+                // (2) 構造体配列の要素へのメンバアクセス: arr[i].member (構造体ポインタの添字p[i].memberを含む)
                 base_sym = this->lookup_symbol(base->sval);   // 配列全体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + base->sval + "' at " + loc_to_string(base->loc);
                 }
-                // 構造体の配列でない変数へのarr[i].member形式のアクセスは禁止する
-                if (!base_sym->type.is_array || base_sym->type.base != BASE_STRUCT) {
+                // 構造体の配列でも構造体へのポインタでもない変数へのarr[i].member形式のアクセスは禁止する
+                const bool is_struct_array = base_sym->type.is_array && base_sym->type.base == BASE_STRUCT
+                                          && base_sym->type.pointer_depth == 0;   // 構造体の配列か
+                const bool is_struct_pointer = is_pointer_value(base_sym->type) && base_sym->type.base == BASE_STRUCT
+                                            && base_sym->type.pointer_depth == 1;   // 構造体へのポインタか
+                if (!is_struct_array && !is_struct_pointer) {
                     throw std::string("compiler error: '") + base->sval
                           + "' is not an array of struct at " + loc_to_string(base->loc);
                 }
                 base->sym  = base_sym;         // 配列全体のシンボルを結びつける
                 base->type = base_sym->type;   // 型を注釈する
-                // 添字(実行時に評価される)を検査する
+                // 添字(実行時に評価される)を検査する (void値・ポインタは添字に使えない)
                 node_t *index_expr = base->children[0];
-                this->analyze_expr(index_expr);
-                // void値(戻り値のない関数呼び出し)は添字に使えない
-                if (index_expr->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot use void value in expression at ")
+                this->analyze_value(index_expr);
+                if (is_pointer_like(index_expr->type)) {
+                    throw std::string("compiler error: array index must be an integer at ")
                           + loc_to_string(index_expr->loc);
                 }
             } else {
@@ -992,8 +1473,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + base->sval + "' at " + loc_to_string(base->loc);
                 }
+                // 構造体へのポインタの場合 (指す先のメンバは->で参照する)
+                if (base_sym->type.base == BASE_STRUCT && is_pointer_value(base_sym->type)) {
+                    throw std::string("compiler error: '") + base->sval
+                          + "' is a pointer to struct; use '->' to access its member at " + loc_to_string(base->loc);
+                }
                 // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
-                if (base_sym->type.base != BASE_STRUCT) {
+                if (base_sym->type.base != BASE_STRUCT || base_sym->type.pointer_depth != 0) {
                     throw std::string("compiler error: '") + base->sval
                           + "' is not a struct at " + loc_to_string(base->loc);
                 }
@@ -1001,82 +1487,71 @@ void Analyzer::analyze_expr(node_t *expr) {
                 base->type = base_sym->type;   // 型を注釈する
             }
 
-            // 構造体定義からメンバ名が一致するものを探す
-            const struct_def_t &def = this->struct_defs_.at(base_sym->type.struct_name);
-            const struct_member_t *member = nullptr;
-            for (const struct_member_t &m : def.members) {
-                if (m.name == expr->sval) { member = &m; break; }
-            }
-            // 定義に存在しないメンバ名を指定した場合はエラー
-            if (member == nullptr) {
-                throw std::string("compiler error: struct '") + base_sym->type.struct_name
-                      + "' has no member '" + expr->sval + "' at " + loc_to_string(expr->loc);
-            }
+            // 構造体定義からメンバ名が一致するものを探す (定義に存在しないメンバ名を指定した場合はエラー)
+            const struct_member_t &member = this->find_member(base_sym->type.struct_name, expr);
 
             if (base->kind == ND_ARRAY_ACCESS) {
                 // (2) 配列全体のシンボルとメンバオフセット(ワード)を注釈する (番地はコード生成側で実行時計算する)
                 expr->sym  = base_sym;
-                expr->ival = member->offset_words;
-                expr->type = member->type;
+                expr->ival = member.offset_words;
+                expr->type = member.type;
             } else {
                 // (1) 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
                 // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
                 symbol_t *sym = new symbol_t{
                     base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
-                    member->type,                                  // メンバの型 (スカラーまたは固定長配列)
+                    member.type,                                   // メンバの型 (スカラー・ポインタまたは固定長配列)
                     base_sym->location,
-                    base_sym->address + member->offset_words * 4,  // 番地 = 構造体変数の番地 + メンバのオフセット
+                    base_sym->address + member.offset_words * 4,   // 番地 = 構造体変数の番地 + メンバのオフセット
                     base_sym->readable,
                     base_sym->writable,
                 };
                 expr->sym  = sym;
-                expr->type = member->type;
+                expr->type = member.type;
             }
             return;
         }
 
-        // 代入: 左辺は書き込み可能なスカラーの変数・構造体メンバまたは配列要素でなければならない
+        // 代入: 左辺は書き込み可能なスカラー(整数またはポインタ)の左辺値でなければならない
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];   // 代入先(左辺)
             // 左辺を名前解決する
-            if (lhs->kind == ND_VAR) {
-                // 変数はanalyze_exprを通さず直接名前解決する
-                // (analyze_exprの変数参照は値を読み出す側の検査であり，const変数を値のリテラルに置き換え，
-                //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
-                //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
-                const symbol_t *sym = this->lookup_symbol(lhs->sval);   // 左辺の変数のシンボル
-                // 宣言されていない変数の場合
-                if (sym == nullptr) {
-                    throw std::string("compiler error: use of undeclared identifier '")
-                          + lhs->sval + "' at " + loc_to_string(lhs->loc);
-                }
-                // 名前解決の結果と型を左辺に注釈する
-                lhs->sym  = sym;
-                lhs->type = sym->type;
-            } else if (lhs->kind == ND_ARRAY_ACCESS || lhs->kind == ND_MEMBER_ACCESS) {
-                // 配列要素・構造体メンバはそれぞれのアクセスの検査に名前解決させる
-                this->analyze_expr(lhs);
-            } else {
-                // 変数・配列要素・構造体メンバ以外(リテラルや式の結果)には代入できない
-                throw std::string("compiler error: left side of assignment must be a variable at ")
-                      + loc_to_string(expr->loc);
-            }
+            // (変数はanalyze_exprの変数参照を通さない．値を読み出す側の検査であり，const変数を値のリテラルに置き換え，
+            //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
+            //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
+            this->analyze_lvalue(lhs);
             // 配列・構造体そのものへの代入を禁止する
             Analyzer::check_scalar_operand(lhs, "assignment");
-            // 書き込みできない左辺には代入できない
-            if (!lhs->sym->writable) {
+            // 書き込みできない左辺には代入できない (シンボルを持たないポインタの指す先は，常に書き込める)
+            if (lhs->sym != nullptr && !lhs->sym->writable) {
                 throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not writable at " + loc_to_string(lhs->loc);
             }
             // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
-            if (expr->sval != "=" && !lhs->sym->readable) {
+            if (expr->sval != "=" && lhs->sym != nullptr && !lhs->sym->readable) {
                 throw std::string("compiler error: '") + lhs->sym->name
                       + "' is not readable at " + loc_to_string(lhs->loc);
             }
-            this->analyze_expr(expr->children[1]);   // 右辺を検査する
-            // void関数の戻り値(値を持たない)を代入することはできない
-            if (expr->children[1]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot assign void value at ")
+            node_t *rhs = expr->children[1];   // 右辺
+            this->analyze_value(rhs);   // 右辺を検査する (void関数の戻り値(値を持たない)を代入することはできない)
+            // 単純代入の場合 (右辺を左辺の型の格納先へ格納できること)
+            if (expr->sval == "=") {
+                Analyzer::check_assignable(lhs->type, rhs, "assignment");
+            }
+            // ポインタへの複合代入の場合 (整数の+=/-=で指す先をずらすことのみ許す)
+            else if (is_pointer_value(lhs->type)) {
+                if ((expr->sval != "+=" && expr->sval != "-=") || is_func_pointer(lhs->type)
+                    || is_pointer_like(rhs->type)) {
+                    throw std::string("compiler error: invalid operands to '") + expr->sval + "' ('"
+                          + type_to_string(lhs->type) + "' and '" + type_to_string(rhs->type) + "') at "
+                          + loc_to_string(expr->loc);
+                }
+                expr->ival = this->pointee_size(lhs->type);
+            }
+            // 整数への複合代入に，ポインタを使った場合
+            else if (is_pointer_like(rhs->type)) {
+                throw std::string("compiler error: invalid operands to '") + expr->sval + "' ('"
+                      + type_to_string(lhs->type) + "' and '" + type_to_string(rhs->type) + "') at "
                       + loc_to_string(expr->loc);
             }
             // 代入式の値の型は左辺の型とする
@@ -1084,129 +1559,43 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // インクリメント・デクリメント: 対象は読み書き両方可能なスカラーの変数または構造体メンバでなければならない
+        // インクリメント・デクリメント: 対象は読み書き両方可能なスカラー(整数またはポインタ)の左辺値でなければならない
         case ND_UNOP:
         case ND_POST_UNOP:
             if (expr->sval == "++" || expr->sval == "--") {
                 node_t *operand = expr->children[0];
-                const symbol_t *sym;
-                if (operand->kind == ND_VAR) {
-                    // 普通の変数: 名前解決する
-                    sym = this->lookup_symbol(operand->sval);
-                    if (sym == nullptr) {
-                        throw std::string("compiler error: use of undeclared identifier '")
-                              + operand->sval + "' at " + loc_to_string(operand->loc);
-                    }
-                    operand->sym  = sym;
-                    operand->type = sym->type;
-                } else if (operand->kind == ND_MEMBER_ACCESS) {
-                    // 構造体配列要素のメンバ(arr[i].member)への++/--は非対応
-                    // (実行時に計算したアドレスへの++/--は追加のレジスタ計算が必要になるため．
-                    //  後置は既にparse_postfixで弾いているが，前置(++arr[i].member)はここでしか検出できない)
-                    if (operand->children[0]->kind == ND_ARRAY_ACCESS) {
-                        throw std::string("compiler error: '++'/'--' on array element is not supported at ")
-                              + loc_to_string(expr->loc);
-                    }
-                    // 構造体メンバ: メンバアクセスの検査(analyze_exprのND_MEMBER_ACCESSケース)に解決させる
-                    this->analyze_expr(operand);
-                    sym = operand->sym;
-                } else {
-                    // それ以外(配列要素・リテラル・式の結果等)には++/--を適用できない
-                    throw std::string("compiler error: operand of '") + expr->sval
-                          + "' must be a variable at " + loc_to_string(expr->loc);
-                }
+                this->analyze_lvalue(operand);
                 Analyzer::check_scalar_operand(operand, "'" + expr->sval + "'");
-                if (!sym->readable || !sym->writable) {
-                    throw std::string("compiler error: '") + sym->name
+                // 関数ポインタの場合 (関数の番地をずらす意味がないため)
+                if (is_func_pointer(operand->type)) {
+                    throw std::string("compiler error: '") + expr->sval
+                          + "' is not supported for function pointer at " + loc_to_string(expr->loc);
+                }
+                // 読み書きできない対象の場合 (シンボルを持たないポインタの指す先は，常に読み書きできる)
+                if (operand->sym != nullptr && (!operand->sym->readable || !operand->sym->writable)) {
+                    throw std::string("compiler error: '") + operand->sym->name
                           + "' is not readable and writable at " + loc_to_string(expr->loc);
                 }
-                expr->type = sym->type;
+                expr->type = operand->type;
+                // 1回で動かす量 (ポインタは指す先1個分のバイト数，整数は1)
+                expr->ival = is_pointer_value(operand->type) ? this->pointee_size(operand->type) : 1;
                 return;
             }
             // その他の前置単項演算子(-, +, !, ~): 子を検査し，void値の使用を禁止する
-            this->analyze_expr(expr->children[0]);
-            if (expr->children[0]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at ")
-                      + loc_to_string(expr->loc);
+            this->analyze_value(expr->children[0]);
+            // ポインタの場合 (!はnullptrかどうかの判定として許し，-・+・~は値に意味がないためエラー)
+            if (expr->sval != "!" && is_pointer_like(expr->children[0]->type)) {
+                throw std::string("compiler error: invalid operand to unary '") + expr->sval + "' ('"
+                      + type_to_string(expr->children[0]->type) + "') at " + loc_to_string(expr->loc);
             }
             // !の結果は0/1のint，それ以外はオペランドを整数昇格した型
             expr->type = type_t{BASE_INT, expr->sval == "!" || is_promoted_signed(expr->children[0]->type)};
             return;
 
-        // 関数呼び出し: 関数の定義確認・引数数の検証・各引数式の検査・戻り値型の設定
-        case ND_CALL: {
-            auto it = this->func_names_.find(expr->sval);
-            if (it == this->func_names_.end()) {
-                throw std::string("compiler error: call to undefined function '")
-                      + expr->sval + "' at " + loc_to_string(expr->loc);
-            }
-            // 呼び出しグラフに記録する (スタック使用量の見積もり用)
-            this->call_graph_[this->current_function_].insert(expr->sval);
-            // 引数の数がパラメータの数と一致するか検証する
-            const auto &params = this->func_params_[expr->sval];
-            if (expr->children.size() != params.size()) {
-                throw std::string("compiler error: function '") + expr->sval + "' expects "
-                      + std::to_string(params.size()) + " argument(s) but got "
-                      + std::to_string(expr->children.size())
-                      + " at " + loc_to_string(expr->loc);
-            }
-            // 各引数式を検査する
-            for (size_t i = 0; i < expr->children.size(); i++) {
-                this->analyze_expr(expr->children[i]);
-                // void値(戻り値のない関数呼び出し)は引数に使えない
-                if (expr->children[i]->type.base == BASE_VOID) {
-                    throw std::string("compiler error: cannot use void value in expression at ")
-                          + loc_to_string(expr->children[i]->loc);
-                }
-                // 構造体はフルコピーの仕組みが無いため，引数として渡すこと自体を禁止する
-                if (expr->children[i]->type.base == BASE_STRUCT) {
-                    throw std::string("compiler error: struct cannot be passed as a function argument at ")
-                          + loc_to_string(expr->children[i]->loc);
-                }
-                // 配列パラメータには配列変数(構造体メンバ配列を含む)または文字列リテラルを，
-                // スカラーパラメータにはスカラー式を渡す
-                node_t *arg = expr->children[i];
-                if (params[i]->type.is_array) {
-                    const bool is_array_designator =
-                        arg->kind == ND_VAR || arg->kind == ND_STRING_LIT || arg->kind == ND_MEMBER_ACCESS;
-                    // is_arrayの判定はarg->typeを見る(構造体配列要素のメンバの場合，arg->symは
-                    // メンバ自身ではなく配列全体を指すため，arg->sym->type.is_arrayでは判定できない)
-                    if (!is_array_designator || !arg->type.is_array) {
-                        throw std::string("compiler error: argument for array parameter '")
-                              + params[i]->name + "' must be an array variable or string literal at "
-                              + loc_to_string(arg->loc);
-                    }
-                    // 構造体配列要素のメンバ配列(arr[i].name)は実行時アドレス計算になり，
-                    // 関数呼び出し規約(呼び出し元がコンパイル時アドレスを直接書き込む方式)と
-                    // 相容れないため，引数として渡すことを禁止する
-                    if (arg->kind == ND_MEMBER_ACCESS && arg->children[0]->kind == ND_ARRAY_ACCESS) {
-                        throw std::string("compiler error: array member of a struct array element cannot be "
-                                           "passed as a function argument at ") + loc_to_string(arg->loc);
-                    }
-                    // 要素型(符号を含む)が異なる配列の場合 (呼び出し先は自身の要素型で読み書きするため，値を取り違える)
-                    if (arg->type.base != params[i]->type.base || arg->type.is_signed != params[i]->type.is_signed) {
-                        throw std::string("compiler error: array element type mismatch for parameter '")
-                              + params[i]->name + "' at " + loc_to_string(arg->loc);
-                    }
-                } else {
-                    if ((arg->kind == ND_VAR || arg->kind == ND_MEMBER_ACCESS) && arg->type.is_array) {
-                        // 構造体配列要素のメンバ配列(arr[i].name)はarg->symが配列全体("arr")を
-                        // 指すため，エラーメッセージ表示用に "配列名[].メンバ名" の形に組み立てる
-                        const std::string arg_name =
-                            (arg->kind == ND_MEMBER_ACCESS && arg->children[0]->kind == ND_ARRAY_ACCESS)
-                                ? arg->sym->name + "[]." + arg->sval
-                                : arg->sym->name;
-                        throw std::string("compiler error: cannot pass array '")
-                              + arg_name + "' to scalar parameter '"
-                              + params[i]->name + "' at " + loc_to_string(arg->loc);
-                    }
-                    // スカラー引数は型が異なっても受け付け，パラメータの型で格納する
-                    // (値の変換規則が決まっているため，型の一致は検査しない)
-                }
-            }
-            expr->type = it->second;
+        // 関数呼び出し: 直接呼び出しか関数ポインタ経由かを判定し，引数と戻り値を検査する
+        case ND_CALL:
+            this->analyze_call(expr);
             return;
-        }
 
         // 組み込み関数print: char配列(直接配列)のみ対応．ヌル終端まで出力する
         case ND_PRINT: {
@@ -1258,12 +1647,14 @@ void Analyzer::analyze_expr(node_t *expr) {
             }
             target->sym  = sym;        // 名前解決の結果を結びつける
             target->type = sym->type;
-            if (!sym->type.is_array || sym->type.base != BASE_CHAR) {
-                throw std::string("compiler error: scan requires a char array at ")
+            // ポインタの場合 (指す先の配列の大きさが分からず，打ち切りの判定ができないため)
+            if (is_pointer_value(sym->type)) {
+                throw std::string("compiler error: scan does not support pointers (the array size is unknown) at ")
                       + loc_to_string(target->loc);
             }
-            if (sym->type.array_size == 0) {
-                throw std::string("compiler error: scan does not support array parameters (size unknown) at ")
+            // char型の配列でない場合 (charへのポインタの配列は，要素が文字ではないため対象外)
+            if (!sym->type.is_array || sym->type.base != BASE_CHAR || sym->type.pointer_depth > 0) {
+                throw std::string("compiler error: scan requires a char array at ")
                       + loc_to_string(target->loc);
             }
             if (sym->type.array_size < 2) {
@@ -1276,89 +1667,86 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 配列要素アクセス: 配列(構造体メンバ配列を含む)の名前解決とインデックス式の検査を行う
-        // 通常の配列変数はsval(変数名)で解決し，構造体メンバ配列はchildren[1](ND_MEMBER_ACCESS)で解決する
+        // 配列要素アクセス: 添字を付ける対象(配列またはポインタ)の名前解決とインデックス式の検査を行う
+        // 配列変数・ポインタ変数はsval(変数名)で解決し，それ以外(メンバ・間接参照・ポインタの配列の要素)は
+        // 基底の式children[1]を検査して解決する
         case ND_ARRAY_ACCESS: {
-            const symbol_t *sym;
-            type_t elem_type;   // 配列要素自身の型(is_arrayかどうかの判定にも使う)
+            type_t base_type;   // 添字を付ける対象(配列またはポインタ)の型
             if (expr->children.size() == 2) {
-                // 構造体メンバ配列: children[1]のメンバアクセスを検査させる．
-                // designator->symは通常のメンバなら「メンバ自身」，構造体配列要素のメンバなら
+                // 基底の式: children[1]を検査させる．
+                // 基底が構造体のメンバの場合，symは通常のメンバなら「メンバ自身」，構造体配列要素のメンバなら
                 // 「配列全体」を指す(コード生成でのアドレス計算用)ため，配列判定・要素型には
-                // designator->type(常にメンバ自身の型)を使う
-                node_t *designator = expr->children[1];
-                this->analyze_expr(designator);
-                sym = designator->sym;
-                elem_type = designator->type;
+                // 基底の型(常にメンバ自身の型)を使う
+                node_t *base = expr->children[1];
+                this->analyze_expr(base);
+                expr->sym = base->sym;
+                base_type = base->type;
             } else {
-                // 通常の配列変数: svalに入っている変数名で名前解決する
-                sym = this->lookup_symbol(expr->sval);
+                // 配列変数・ポインタ変数: svalに入っている変数名で名前解決する
+                const symbol_t *sym = this->lookup_symbol(expr->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
                           + expr->sval + "' at " + loc_to_string(expr->loc);
                 }
-                elem_type = sym->type;
-                // 構造体配列は，要素(構造体1個分)を直接使うことができない(メンバアクセス経由でのみ使える)．
-                // ND_MEMBER_ACCESSの基底として使われる場合はそちらが先にこのcaseを経由せず処理するため，
-                // ここに到達するのは単独で使われた場合(x = arr[i];等)であり，常にエラーにしてよい
-                if (elem_type.is_array && elem_type.base == BASE_STRUCT) {
-                    throw std::string("compiler error: struct array element must be accessed via a "
-                                       "member (e.g. arr[i].member) at ") + loc_to_string(expr->loc);
-                }
+                expr->sym = sym;
+                base_type = sym->type;
             }
-            if (!elem_type.is_array) {
-                const std::string name = expr->sval.empty() ? sym->name : expr->sval;
-                throw std::string("compiler error: '") + name
-                      + "' is not an array at " + loc_to_string(expr->loc);
+            // 要素の型を求める
+            // (構造体の配列・構造体へのポインタの要素は構造体そのものであり，メンバアクセスか&を介してのみ使える．
+            //  値として使った場合はanalyze_valueがエラーにする)
+            if (base_type.is_array) {
+                expr->type = base_type;
+                expr->type.is_array = false;
+                expr->type.array_size = 0;
+            } else if (is_pointer_value(base_type) && !is_func_pointer(base_type)) {
+                expr->type = pointee_type(base_type);
+            } else {
+                const std::string name = expr->sval.empty() ? "expression" : "'" + expr->sval + "'";   // エラーメッセージに書く対象
+                throw std::string("compiler error: ") + name
+                      + " is not an array or pointer at " + loc_to_string(expr->loc);
             }
-            expr->sym = sym;
-            // 要素の型は配列のbase型(スカラー)
-            expr->type = {elem_type.base, elem_type.is_signed};
-            // インデックス式を検査する
+            // 要素1個のバイト数 (添字に掛けて先頭からの位置を求める)
+            expr->ival = this->type_size_bytes(expr->type);
+            // インデックス式を検査する (void値(戻り値のない関数呼び出し)・ポインタは配列インデックスに使えない)
             node_t *index_expr = expr->children[0];
-            this->analyze_expr(index_expr);
-            // void値(戻り値のない関数呼び出し)は配列インデックスに使えない
-            if (index_expr->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at ")
+            this->analyze_value(index_expr);
+            if (is_pointer_like(index_expr->type)) {
+                throw std::string("compiler error: array index must be an integer at ")
                       + loc_to_string(index_expr->loc);
             }
             return;
         }
 
-        // 二項演算: 両辺を検査し，どちらかがvoid値(戻り値のない関数呼び出し)なら使用を禁止する
-        case ND_BINOP: {
-            this->analyze_expr(expr->children[0]);
-            this->analyze_expr(expr->children[1]);
-            if (expr->children[0]->type.base == BASE_VOID || expr->children[1]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at ")
+        // 二項演算: 両辺を値として検査し，整数・ポインタの組み合わせに応じて結果の型を決める
+        case ND_BINOP:
+            this->analyze_binop(expr);
+            return;
+
+        // 三項演算 a ? b : c: 条件・両分岐を値として検査し，両分岐の型から結果の型を決める
+        case ND_TERNARY: {
+            this->analyze_value(expr->children[0]);
+            this->analyze_value(expr->children[1]);
+            this->analyze_value(expr->children[2]);
+            const type_t &then_type = expr->children[1]->type;   // then節の型
+            const type_t &else_type = expr->children[2]->type;   // else節の型
+            // 整数どうしの場合 (結果は両方の分岐の値が昇格後intならint，そうでなければunsigned int)
+            if (!is_pointer_like(then_type) && !is_pointer_like(else_type)) {
+                expr->type = type_t{BASE_INT, is_promoted_signed(then_type) && is_promoted_signed(else_type)};
+                return;
+            }
+            // ポインタを含む場合 (同じ型のポインタどうし，またはポインタとnullptrに限り，結果はそのポインタの型)
+            const bool is_then_null = then_type.base == BASE_NULLPTR;   // then節がnullptrか
+            const bool is_else_null = else_type.base == BASE_NULLPTR;   // else節がnullptrか
+            const bool is_compatible = is_pointer_like(then_type) && is_pointer_like(else_type)
+                && (is_then_null || is_else_null || Analyzer::is_same_type(then_type, else_type));   // 両分岐の型が揃うか
+            if (!is_compatible) {
+                throw std::string("compiler error: type mismatch in conditional expression ('")
+                      + type_to_string(then_type) + "' and '" + type_to_string(else_type) + "') at "
                       + loc_to_string(expr->loc);
             }
-            const std::string &op = expr->sval;   // 演算子
-            // 比較・論理演算の結果は0/1のint
-            const bool is_boolean = op == "==" || op == "!=" || op == "<" || op == ">"
-                                 || op == "<=" || op == ">=" || op == "&&" || op == "||";
-            // それ以外は，演算の符号(符号付きで演算するならint，符号なしならunsigned int)
-            const bool is_signed =
-                is_boolean || is_signed_operation(op, expr->children[0]->type, expr->children[1]->type);
-            expr->type = type_t{BASE_INT, is_signed};
+            expr->type = is_then_null ? else_type : then_type;
             return;
         }
-
-        // 三項演算 a ? b : c: 条件・両分岐を検査し，いずれかがvoid値なら使用を禁止する
-        case ND_TERNARY:
-            this->analyze_expr(expr->children[0]);
-            this->analyze_expr(expr->children[1]);
-            this->analyze_expr(expr->children[2]);
-            if (expr->children[0]->type.base == BASE_VOID ||
-                expr->children[1]->type.base == BASE_VOID ||
-                expr->children[2]->type.base == BASE_VOID) {
-                throw std::string("compiler error: cannot use void value in expression at ")
-                      + loc_to_string(expr->loc);
-            }
-            // 結果は両方の分岐の値が昇格後intならint，そうでなければunsigned int
-            expr->type = type_t{BASE_INT, is_promoted_signed(expr->children[1]->type)
-                                          && is_promoted_signed(expr->children[2]->type)};
-            return;
 
         // 到達しない (式ノードの全種類は上記いずれかのcaseで処理される)．
         // 将来式ノードを追加した際に検査漏れとなるのを防ぐため，未対応として即エラーにする
