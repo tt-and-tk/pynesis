@@ -1,0 +1,9 @@
+// グローバルのポインタの初期化子: 配列名に整数定数を足した式・番地に整数定数を足した式・整数定数+配列名も書ける
+int table[4];
+int g;
+int *p1 = table + 1;
+int *p2 = &g + 1;
+int *p3 = 2 + table;
+
+void main(void) {
+}
