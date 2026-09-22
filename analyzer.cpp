@@ -1130,6 +1130,10 @@ void Analyzer::analyze_call(node_t *expr) {
     }
     // 直接呼び出しの場合 (関数と同名の変数は宣言できないため，関数名は常に関数を指す)
     if (is_direct) {
+        // mainの場合 (プログラムの開始点であり，呼び出し元へ復帰できないため呼び出せない)
+        if (callee->sval == "main") {
+            throw std::string("compiler error: cannot call 'main' at ") + loc_to_string(expr->loc);
+        }
         // 呼び出す関数を関数の番地を表すノードに置き換えてその型を書き込み，呼び出しグラフに記録する
         // (番地を値として取得したわけではないため，関数ポインタを通して呼ばれうる関数には加えない)
         callee->kind = ND_FUNC_ADDR;

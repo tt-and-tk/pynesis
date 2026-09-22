@@ -1,0 +1,7 @@
+// 意味解析エラー: mainはプログラムの開始点であり，他の関数から呼び出すことはできない (異常系)
+void restart(void) {
+    main();
+}
+void main(void) {
+    restart();
+}
