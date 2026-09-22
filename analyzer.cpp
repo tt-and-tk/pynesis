@@ -880,7 +880,7 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         this->scopes_.push_back({});
         if (stmt->children[0]) this->analyze_stmt(stmt->children[0]);  // 初期化
         if (stmt->children[1]) this->analyze_value(stmt->children[1]); // 条件
-        if (stmt->children[2]) this->analyze_expr(stmt->children[2]);  // 更新
+        if (stmt->children[2]) this->analyze_discarded(stmt->children[2]);  // 更新
         this->loop_depth_++;
         this->analyze_stmt(stmt->children[3]);                         // 本体
         this->loop_depth_--;
@@ -911,9 +911,9 @@ void Analyzer::analyze_stmt(node_t *stmt) {
                   + loc_to_string(stmt->loc);
         }
     }
-    // それ以外は式文として検査する
+    // それ以外は式文として検査する (求まった値は使わない)
     else {
-        this->analyze_expr(stmt);
+        this->analyze_discarded(stmt);
     }
 }
 
@@ -1061,12 +1061,23 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
 // (代入の右辺・引数・戻り値・演算のオペランド等．書き込み先や&の対象として使う式はanalyze_lvalueで検査する)
 // 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む
 // (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
+// 構造体・配列の扱いは式文，およびfor文の更新部に書いた式と共通のため，その検査に任せ，ここではvoidだけを検査する
 void Analyzer::analyze_value(node_t *expr) {
-    this->analyze_expr(expr);
+    this->analyze_discarded(expr);
     // void値の場合
     if (expr->type.base == BASE_VOID) {
         throw std::string("compiler error: cannot use void value in expression at ") + loc_to_string(expr->loc);
     }
+}
+
+// 式文，およびfor文の更新部に書いた式を検査する
+// これらの式は含まれる副作用(*p++;ならpを進めること)のために評価し，求まった値(*p++;ならpが指していた値)は
+// 代入にも引数にも使われない．このため式全体が値を持たないvoidであること(f();のような戻り値のない関数呼び出し)も許す．
+// 式の途中でvoidの値を使う場合(f() + 1;)は，途中の演算がオペランドを値として検査するためエラーになる．
+// ただし評価の過程では値をレジスタへ読み込むため，1つのレジスタに読み込めない構造体そのものはエラーにし，
+// 配列は中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
+void Analyzer::analyze_discarded(node_t *expr) {
+    this->analyze_expr(expr);
     // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
     if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")

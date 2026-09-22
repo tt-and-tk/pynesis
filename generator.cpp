@@ -276,17 +276,6 @@ void Generator::gen_stmt(node_t *stmt) {
         case ND_BLOCK:
             this->gen_block(stmt);
             break;
-        // 代入文・関数呼び出し文・入出力文・増減文 (式文): 副作用のため評価する．結果(r0)は捨てる
-        case ND_ASSIGN:
-        case ND_CALL:
-        case ND_PRINT:
-        case ND_SCAN:
-        case ND_STREQ:
-        case ND_STRCOPY:
-        case ND_UNOP:
-        case ND_POST_UNOP:
-            this->gen_expr(stmt, 0);
-            break;
         // if文
         case ND_IF:
             this->gen_if(stmt);
@@ -324,7 +313,9 @@ void Generator::gen_stmt(node_t *stmt) {
             this->gen_frame_leave();
             (*this->out_) << "    ret\n";
             break;
+        // 式文，およびfor文の更新部: 最上位の種類によらず，含まれる副作用(代入・関数呼び出し・増減等)のため評価する．求まった値(r0)は使わない
         default:
+            this->gen_expr(stmt, 0);
             break;
     }
 }

@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体そのものはfor文の更新に書けない (異常系)
+struct Point { int x; int y; };
+struct Point s;
+void main(void) {
+    int i;
+    for (i = 0; i < 1; s) {
+    }
+}

@@ -1,0 +1,87 @@
+.global next, tick, main
+
+main:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    mov fh r0 r0 25185
+    wm fh r0 r0 40
+    mov fh r0 r0 0
+    wmr fh r16 r0 0
+    mov fh r0 r0 0
+    wmr fh r16 r0 4
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wmr fh r16 r1 0
+    mov fh r0 r1 2
+    sll r0 r1 r0
+    mov fh r0 r1 24
+    add r0 r1 r0
+    rm fh r0 r0 0
+    rmr fh r16 r0 4
+    mov fh r0 r1 4
+    add r0 r1 r0
+    rm fh r0 r0
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wmr fh r16 r1 0
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 8
+    add r0 r1 r0
+    rm fh r0 r0
+    mov fh r0 r0 8
+    call next
+    mov fh r30 r0
+    mov fh r0 r1 0
+    sub r1 r0 r0
+    mov fh r0 r0 1
+    rmr fh r16 r1 0
+    mov fh r0 r2 1
+    add r1 r2 r2
+    wmr fh r16 r2 0
+    add r0 r1 r0
+    rm fh r0 r0 32
+    mov fh r0 r1 0
+    eq r0 r1 .L0
+    call next
+    mov fh r30 r0
+    mov fh r0 r1 0
+    eq r0 r1 .L0
+    mov fh r0 r0 1
+    jmp .L1
+.L0:
+    mov fh r0 r0 0
+.L1:
+    mov fh r0 r0 40
+    mov fh r0 r0 0
+    wmr fh r16 r0 0
+.L2:
+    rmr fh r16 r0 0
+    mov fh r0 r1 2
+    egt r0 r1 .L4
+.L3:
+    call tick
+    jmp .L2
+.L4:
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+
+next:
+    rm fh r0 r0 32
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wm fh r0 r1 32
+    rm fh r0 r0 32
+    mov fh r0 r30
+    ret
+    ret
+
+tick:
+    rm fh r0 r0 36
+    mov fh r0 r1 1
+    add r0 r1 r1
+    wm fh r0 r1 36
+    ret
