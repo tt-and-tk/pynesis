@@ -1519,11 +1519,13 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_CAST: {
             node_t *operand = expr->children[0];   // 変換する式
             this->analyze_value(operand);
-            // nullptrの場合 (どのポインタへもキャストせずに格納でき，整数へ変換してもnullptrを表すために選んだビット列を得るだけのため)
+            // nullptrの場合はエラーにする
+            // (どのポインタへもキャストせずに格納でき，整数へ変換してもnullptrを表すために選んだビット列を得るだけのため)
             if (operand->type.base == BASE_NULLPTR) {
                 throw std::string("compiler error: cannot cast nullptr at ") + loc_to_string(expr->loc);
             }
-            // データのポインタと関数ポインタの間の場合 (データの番地はバイト単位，関数の番地は命令の番号で，指す空間が異なるため)
+            // データのポインタと関数ポインタの間の場合はエラーにする
+            // (データの番地はバイト単位，関数の番地は命令の番号で，指す空間が異なるため)
             if (is_pointer_value(operand->type) && is_pointer_value(expr->type)
                 && is_func_pointer(operand->type) != is_func_pointer(expr->type)) {
                 throw std::string("compiler error: cannot cast '") + type_to_string(operand->type) + "' to '"
