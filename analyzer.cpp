@@ -577,7 +577,8 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
     // ポインタから整数へのキャストは変換する式の計算がエラーになる)
     if (expr->kind == ND_CAST && !is_pointer_value(expr->type)) {
         const const_value_t v = this->eval_const_expr(expr->children[0]);
-        // 結果の符号は，キャストした型を整数昇格した型に従う
+        // 定数式の値は整数昇格後のint/unsigned intとして持つため，結果の符号はキャストした型を整数昇格した型に従う
+        // ((unsigned char)-1は，値255のintになる)
         return {convert_integer(v.value, expr->type), is_promoted_signed(expr->type)};
     }
 
