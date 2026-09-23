@@ -35,10 +35,12 @@ def main():
             src_path = os.path.join(SRC_ERR_DIR, src_file)
             asm_path = os.path.join(tmpdir, src_file.replace(".pn", ".pt"))
 
+            # 出力はUTF-8のソース由来の文字を含むため，既定のcp932ではなくUTF-8で読む
             result = subprocess.run(
                 [PN2ASM, "-pn", src_path, "-pt", asm_path],
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
 
             stdout = result.stdout.strip()
