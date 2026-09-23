@@ -1,0 +1,9 @@
+// ポインタを8/16ビットの整数型へキャストすると，番地のビット列を下位ビットへ切り詰めてから型の規則で拡張した値になる
+char c;
+unsigned short s;
+
+void main(void) {
+    int *p = (int *)0x1FF80;
+    c = (char)p;                // 下位8ビット0x80を符号拡張して-128
+    s = (unsigned short)p;      // 下位16ビット0xFF80
+}
