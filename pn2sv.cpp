@@ -25,16 +25,20 @@ static bool check_args(int argc, char **argv) {
         if (argv[i][0] == '-') {
             std::string kind = argv[i];   // 指定を保存
             i++;
+
+            // 値のない指定子は誤りとする
             if (i >= argc) {
                 has_bad_arg = true;
                 break;
             }
 
+            // 指定されたパラメータを保存する (未知の指定子は誤りとする)
             if      (kind == "-pn") pn_file_name = argv[i];
             else if (kind == "-pt") pt_file_name = argv[i];
             else if (kind == "-sv") sv_file_name = argv[i];
             else                    has_bad_arg = true;
         }
+        // 指定子なしの引数は誤りとする
         else {
             has_bad_arg = true;
         }
@@ -43,6 +47,7 @@ static bool check_args(int argc, char **argv) {
     // -svは省略を許し，指定された場合だけ拡張子を確かめる
     const bool sv_name_ok = sv_file_name.empty() || has_extension(sv_file_name, ".sv");
 
+    // 受け付けない引数があるか，ファイル名の拡張子が違えば，使い方を出力する
     if (has_bad_arg || !has_extension(pn_file_name, ".pn")
         || !has_extension(pt_file_name, ".pt") || !sv_name_ok) {
         std::cout << "args fail" << std::endl
