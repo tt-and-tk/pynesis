@@ -42,7 +42,9 @@ static long long convert_integer(long long value, const type_t &type) {
     switch (type.base) {
         case BASE_CHAR:  bits = 8;  break;
         case BASE_SHORT: bits = 16; break;
-        default:         return wrap32(value, type.is_signed);
+        case BASE_INT:   return wrap32(value, type.is_signed);
+        default:
+            throw std::string("compiler error: unsupported integer type in conversion");
     }
     const long long low = value & ((1LL << bits) - 1);   // 下位ビットへ切り詰めた値
     // 符号付きで最上位ビットが立っている場合は負の値として解釈する
