@@ -98,8 +98,9 @@ typedef enum {
     ND_FUNC_ADDR,   // 関数の番地 (svalに関数名．式に書かれた関数名を意味解析が置き換える)
     ND_ADDR_OF,     // 番地の取得 &x (children: [番地を取る式])
     ND_DEREF,       // 間接参照 *p (children: [ポインタの式])
+    ND_CAST,        // キャスト (型名)式 (children: [変換する式]，typeに変換先の型を構文解析時から持つ)
     // 配列要素アクセス a[i] (children: 配列変数・ポインタ変数ならsvalに名前を持ち[インデックス式]，
-    // それ以外なら[インデックス式, 添字を付ける基底の式(ND_MEMBER_ACCESS・ND_DEREF・ND_ARRAY_ACCESS)])．
+    // それ以外なら[インデックス式, 添字を付ける基底の式(ND_MEMBER_ACCESS・ND_DEREF・ND_ARRAY_ACCESS・ND_CAST)])．
     // 要素が構造体の場合，要素a[i]は単独では値を持たず，ND_MEMBER_ACCESSの基底か&の対象としてのみ使われる
     ND_ARRAY_ACCESS,
     // 構造体メンバアクセス a.b (children: [構造体変数(ND_VAR)・要素が構造体の配列要素(ND_ARRAY_ACCESS)・
@@ -202,7 +203,8 @@ private:
     node_t *parse_assign();             // 代入式 x = 式, x += 式 等
     node_t *parse_ternary();            // 三項演算子 a ? b : c
     node_t *parse_binary(int min_prec); // 二項演算子を含む式 (優先順位min_prec以上を処理)
-    node_t *parse_unary();              // 前置単項演算子を含む式
+    node_t *parse_unary();              // 前置単項演算子・キャストを含む式
+    node_t *parse_cast();               // キャスト (型名)式 (前置単項演算子と同じ優先順位で結合する)
     node_t *parse_postfix();            // 後置演算子・メンバアクセス・配列添字・関数呼び出しを含む式
     node_t *parse_member_name(node_t *base);   // .・->の直後のメンバ名を読み，baseを基底とするメンバアクセスを返す
     node_t *parse_primary();    // 基本式 (リテラル・nullptr・変数参照・括弧式)

@@ -1,0 +1,47 @@
+.global twice, tick, main
+
+main:
+    mov fh r0 r0 32768
+    wm fh r0 r0 4
+    mov fh r0 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r0
+    wm fh r0 r0 8
+    mov fh r0 r0 16
+    wm fh r0 r0 12
+    mov fh r0 r0 twice
+    wm fh r0 r0 16
+    rm fh r0 r0 16
+    wm fh r0 r0 20
+    rm fh r0 r0 20
+    mov fh r0 r1 3
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    wm fh r0 r0 0
+    rm fh r0 r0 12
+    wm fh r0 r0 20
+    mov fh r0 r0 tick
+    call r0
+    ret
+
+twice:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 2
+    mul r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+tick:
+    rm fh r0 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r0
+    wm fh r0 r0 0
+    ret

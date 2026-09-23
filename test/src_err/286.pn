@@ -1,0 +1,7 @@
+// 構文解析エラー: constを付けた型へはキャストできない (異常系)
+int r;
+
+void main(void) {
+    int x = 0;
+    r = (const int)x;
+}

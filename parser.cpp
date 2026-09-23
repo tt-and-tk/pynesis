@@ -1075,11 +1075,15 @@ node_t *Parser::parse_binary(int min_prec) {
     return left;
 }
 
-// 前置単項演算子を含む式を解析してASTノードを返す
+// 前置単項演算子・キャストを含む式を解析してASTノードを返す
 // 演算子があれば消費してオペランドを再帰的に解析する
 // (!!x や +-x のような連続にも対応するため．また，前置演算子と後置演算子が両方ついていた場合に対応するため)
 node_t *Parser::parse_unary() {
     const token_kind_t kind = this->peek_token().kind;
+    // (の直後が型名の場合 (括弧式ではなくキャストとして読む．型名は予約語で始まるため，識別子の括弧式とは区別できる)
+    if (kind == TK_LPAREN && Parser::is_type_start(this->peek_kind_ahead(1))) {
+        return this->parse_cast();
+    }
     // 間接参照*・番地の取得&の場合 (値ではなく番地を扱う専用のノードにする)
     // 二項演算の*・&と同じトークンだが，式の先頭に現れるものは単項演算子として読む．
     // オペランドを再帰的に読むため，**ppや&*pのような連続も読める
@@ -1104,6 +1108,41 @@ node_t *Parser::parse_unary() {
 
     // 前置演算子でなければ後置演算子・関数呼び出しの解析に委譲する
     return this->parse_postfix();
+}
+
+// キャスト (型名)式 を解析してND_CASTを返す
+// 型名は整数型・ポインタ・関数ポインタ(戻り値型 (*)(引数型...))のいずれか．変換する式は前置単項演算子を含む式として
+// 再帰的に読むため，(int)-xや(int)(char)xのような連続も読め，(int *)p[i]は添字を付けた要素を変換する
+// 変換できる型の組み合わせは，変換する式の型が決まる意味解析で確かめる
+node_t *Parser::parse_cast() {
+    node_t *node = this->new_node(ND_CAST);
+    this->get_token(TK_LPAREN);                      // (
+    const loc_t type_loc = this->peek_token().loc;   // 型名の位置 (エラー報告用)
+    node->type = this->parse_type(true);
+    // 関数ポインタの型の場合 (宣言子の名前は省く)
+    if (this->token_kind_is(TK_LPAREN)) {
+        std::string name;   // 宣言子に書かれた名前 (書けないため，空であることを確かめる)
+        node->type = this->parse_func_pointer_declarator(node->type, false, name);
+        if (!name.empty()) {
+            throw std::string("compiler error: type name in cast cannot have a declarator name '") + name
+                  + "' at " + loc_to_string(type_loc);
+        }
+    }
+    // voidの場合 (値を捨てる用途は式文で足りるため対応しない)
+    if (node->type.base == BASE_VOID) {
+        throw std::string("compiler error: cast to void is not supported at ") + loc_to_string(type_loc);
+    }
+    // 構造体そのものの場合 (構造体を値として扱う仕組みがないため．構造体へのポインタへは変換できる)
+    else if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
+        throw std::string("compiler error: cast to struct is not supported at ") + loc_to_string(type_loc);
+    }
+    // constを付けた型の場合 (constは値を埋め込む変数の宣言にのみ使うため)
+    else if (node->type.is_const) {
+        throw std::string("compiler error: cast type cannot be const at ") + loc_to_string(type_loc);
+    }
+    this->get_token(TK_RPAREN);                      // )
+    node->children.push_back(this->parse_unary());   // 変換する式
+    return node;
 }
 
 // 後置演算子・構造体メンバアクセス・配列添字・関数呼び出しを解析してASTノードを返す
@@ -1140,9 +1179,10 @@ node_t *Parser::parse_postfix() {
 
         // 配列要素アクセス: 配列変数・ポインタ変数の名前[インデックス式]，またはメンバ・間接参照・配列要素[インデックス式]
         if (this->token_kind_is(TK_LBRACKET)) {
-            // []の前は変数名・メンバアクセス・間接参照・配列要素のいずれかでなければならない (例: (a+b)[0]は非対応)
-            if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS
-                && node->kind != ND_DEREF && node->kind != ND_ARRAY_ACCESS) {
+            // []の前は変数名・メンバアクセス・間接参照・配列要素・キャスト(((char *)p)[i])のいずれかでなければならない
+            // (例: (a+b)[0]は非対応)
+            if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS && node->kind != ND_DEREF
+                && node->kind != ND_ARRAY_ACCESS && node->kind != ND_CAST) {
                 throw std::string("compiler error: expected a variable name before '[' at ")
                       + loc_to_string(this->peek_token().loc);
             }
@@ -1154,7 +1194,7 @@ node_t *Parser::parse_postfix() {
                 access->sval = node->sval;
                 access->children.push_back(this->parse_expr());
             } else {
-                // 配列型・ポインタ型のメンバ(entry.name[i]等)・間接参照((*pp)[i])・ポインタの配列の要素(names[i][j]):
+                // 配列型・ポインタ型のメンバ(entry.name[i]等)・間接参照((*pp)[i])・ポインタの配列の要素(names[i][j])・キャスト:
                 // インデックス式(children[0])に加え，添字を付ける基底の式(children[1])を持たせて意味解析に解決させる
                 access->children.push_back(this->parse_expr());
                 access->children.push_back(node);
@@ -1168,10 +1208,10 @@ node_t *Parser::parse_postfix() {
         // 呼び出す関数は，関数名(直接呼び出し)と関数ポインタの値を持つ式(変数・メンバ等)のどちらにもなる．
         // どちらであるかは，名前を関数と変数のどちらに解決するかで決まるため意味解析で判定する
         if (this->token_kind_is(TK_LPAREN)) {
-            // (の前が名前・メンバ・添字・間接参照のいずれの形でもない場合 (演算の結果((a+b)(1)等)は呼び出せない．
+            // (の前が名前・メンバ・添字・間接参照・キャストのいずれの形でもない場合 (演算の結果((a+b)(1)等)は呼び出せない．
             // 関数ポインタの値を持つかどうかは，型が決まる意味解析で確かめる)
-            if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS
-                && node->kind != ND_DEREF && node->kind != ND_ARRAY_ACCESS) {
+            if (node->kind != ND_VAR && node->kind != ND_MEMBER_ACCESS && node->kind != ND_DEREF
+                && node->kind != ND_ARRAY_ACCESS && node->kind != ND_CAST) {
                 throw std::string("compiler error: expected function name before '(' at ")
                       + loc_to_string(this->peek_token().loc);
             }

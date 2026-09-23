@@ -1,0 +1,25 @@
+// 整数どうしのキャストは，下位ビットへ切り詰めてからキャストした型の規則で拡張した値になる
+// (int)・(unsigned int)はビット列を変えず，演算の符号だけを変える．キャストは前置単項演算子と同じ優先順位で結合する
+int g = 300;
+int r_char;
+int r_uchar;
+int r_short;
+int r_ushort;
+int r_int;
+unsigned int r_uint;
+int r_div;
+int r_cmp;
+int r_neg;
+
+void main(void) {
+    int x = -1;
+    r_char = (char)g;               // 44
+    r_uchar = (unsigned char)x;     // 255
+    r_short = (short)x;             // -1
+    r_ushort = (unsigned short)x;   // 65535
+    r_uint = (unsigned int)x;       // 4294967295
+    r_int = (int)r_uint >> 1;       // 符号付きの算術シフトで-1
+    r_div = (unsigned int)x / 2;    // 符号なしの除算で2147483647
+    r_cmp = (unsigned int)x > 0;    // 符号なしの比較で1
+    r_neg = -(char)g;               // -44
+}

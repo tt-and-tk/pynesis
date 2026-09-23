@@ -1,0 +1,23 @@
+// 整数どうしのキャストは定数式に書け，実行時と同じ値にコンパイル時に計算される
+const unsigned int ALL = (unsigned int)-1;   // 4294967295
+const char C = (char)300;                    // 44
+const int MIN = (int)0x80000000;             // -2147483648
+char buf[(unsigned char)-252];               // 要素数4
+int g1 = (unsigned char)-1;                  // 255
+int g2 = (short)0x18000;                     // -32768
+unsigned int g3 = ALL / 2;                   // 符号なしの除算で2147483647
+int g4 = MIN / 2;                            // -1073741824
+int g5 = C;                                  // 44
+int g6 = sizeof(buf);                        // 4
+int r;
+
+void main(void) {
+    switch (r) {
+        case (char)200:            // -56
+            r = 1;
+            break;
+        case (unsigned char)200:   // 200
+            r = 2;
+            break;
+    }
+}

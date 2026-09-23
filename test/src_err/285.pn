@@ -1,0 +1,8 @@
+// 構文解析エラー: 構造体そのものへはキャストできない (異常系)
+struct Point { int x; int y; };
+struct Point p;
+
+void main(void) {
+    int x = 0;
+    (struct Point)x;
+}

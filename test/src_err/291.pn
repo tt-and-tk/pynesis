@@ -1,0 +1,9 @@
+// 意味解析エラー: 関数ポインタはデータのポインタへ直接キャストできない (異常系)
+int *p;
+
+void tick(void) {
+}
+
+void main(void) {
+    p = (int *)tick;
+}
