@@ -1515,7 +1515,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         }
 
         // キャスト (型名)式: 変換する式の型から，キャストした型へ変換できるかを確かめる (型は構文解析が注釈済み)
-        // 整数どうし・整数とポインタ(関数ポインタを含む)・データのポインタどうし・関数ポインタどうしを変換できる
+        // 整数どうし・整数とポインタ(関数ポインタを含む)・データのポインタどうし・同じ型の関数ポインタどうしを変換できる
         case ND_CAST: {
             node_t *operand = expr->children[0];   // 変換する式
             this->analyze_value(operand);
@@ -1530,6 +1530,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                 && is_func_pointer(operand->type) != is_func_pointer(expr->type)) {
                 throw std::string("compiler error: cannot cast '") + type_to_string(operand->type) + "' to '"
                       + type_to_string(expr->type) + "' (convert through an integer) at " + loc_to_string(expr->loc);
+            }
+            // 型の異なる関数ポインタどうしの場合はエラーにする
+            // (変換した関数ポインタを呼ぶと，呼び出す関数と引数・戻り値の型が食い違うため)
+            if (is_func_pointer(operand->type) && is_func_pointer(expr->type)
+                && !Analyzer::is_same_type(operand->type, expr->type)) {
+                throw std::string("compiler error: cannot cast '") + type_to_string(operand->type) + "' to '"
+                      + type_to_string(expr->type) + "' (function pointer types differ) at " + loc_to_string(expr->loc);
             }
             // キャストした型に構造体名が現れる場合は，その構造体が定義済みであることを確かめる
             this->check_type_exists(expr->type, expr->loc);

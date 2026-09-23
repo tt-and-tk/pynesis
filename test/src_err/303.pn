@@ -1,0 +1,7 @@
+// 意味解析エラー: 型の異なる関数ポインタへは直接キャストできない(呼び出す関数と引数・戻り値の型が食い違うため) (異常系)
+void (*entry)(void);
+int (*op)(int);
+
+void main(void) {
+    op = (int (*)(int))entry;
+}
