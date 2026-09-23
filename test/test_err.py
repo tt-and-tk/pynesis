@@ -40,7 +40,7 @@ def main():
                 [PN2ASM, "-pn", src_path, "-pt", asm_path],
                 capture_output=True,
                 encoding="utf-8",
-                errors="replace",
+                errors="backslashreplace",
             )
 
             stdout = result.stdout.strip()

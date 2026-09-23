@@ -24,7 +24,7 @@ def build_compiler():
     cmd = ["g++", "-Wall", "-Wextra", "-std=c++17", "-o", PN2ASM]
     cmd += [os.path.join(COMPILER_DIR, s) for s in SOURCES]
     # text=Trueは既定の文字コード(Windowsではcp932)で読み，g++の警告が引用する日本語コメントを復号できないため使わない
-    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="replace")
+    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="backslashreplace")
     if result.returncode != 0:
         print("[BUILD FAIL] コンパイラのビルドに失敗しました")
         print(result.stderr.strip())
@@ -62,7 +62,7 @@ def main():
             [PN2ASM, "-pn", src_path, "-pt", asm_path],
             capture_output=True,
             encoding="utf-8",
-            errors="replace",
+            errors="backslashreplace",
         )
 
         stdout = result.stdout.strip()
