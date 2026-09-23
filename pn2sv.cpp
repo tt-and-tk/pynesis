@@ -23,7 +23,7 @@ static bool check_args(int argc, char **argv) {
     std::string pn_file_name;   // 入力Pynesisソースファイル名
     std::string pt_file_name;   // 中間アセンブリファイル名
     std::string sv_file_name;   // 出力SystemVerilog ROMファイル名
-    bool has_bad_arg = false;   // 指定子なし・未知の指定子・値のない指定子のいずれかがあったか
+    bool has_bad_arg = false;   // 受け付けない引数があったか
 
     // 全ての引数でループ (コマンド名は飛ばす)
     for (int i = 1; i < argc; i++) {
