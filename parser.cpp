@@ -1133,11 +1133,11 @@ node_t *Parser::parse_cast() {
         throw std::string("compiler error: cast to void is not supported at ") + loc_to_string(type_loc);
     }
     // 構造体そのものの場合 (構造体を値として扱う仕組みがないため．構造体へのポインタへは変換できる)
-    if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
+    else if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
         throw std::string("compiler error: cast to struct is not supported at ") + loc_to_string(type_loc);
     }
     // constを付けた型の場合 (constは値を埋め込む変数の宣言にのみ使うため)
-    if (node->type.is_const) {
+    else if (node->type.is_const) {
         throw std::string("compiler error: cast type cannot be const at ") + loc_to_string(type_loc);
     }
     this->get_token(TK_RPAREN);                      // )
