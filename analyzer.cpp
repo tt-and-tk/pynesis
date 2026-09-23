@@ -1525,7 +1525,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot cast nullptr at ") + loc_to_string(expr->loc);
             }
             // データのポインタと関数ポインタの間の場合はエラーにする
-            // (データの番地はバイト単位，関数の番地は命令の番号で，指す空間が異なるため)
+            // (データの番地はメモリのバイト単位，関数の番地は命令indexで，指す空間が異なるため)
             if (is_pointer_value(operand->type) && is_pointer_value(expr->type)
                 && is_func_pointer(operand->type) != is_func_pointer(expr->type)) {
                 throw std::string("compiler error: cannot cast '") + type_to_string(operand->type) + "' to '"
