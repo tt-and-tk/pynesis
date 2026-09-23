@@ -16,12 +16,13 @@ static bool has_extension(const std::string &name, const std::string &ext) {
 // -pt: 必須引数．中間アセンブリファイル名．
 // -sv: 出力SystemVerilog ROMファイル名．省略した場合，2段階目が中間アセンブリファイル名の拡張子を変更して使う．
 // 指定子なしの引数は，1段階目は入力Pynesisソースファイル名，2段階目は中間アセンブリファイル名と解釈が食い違うため受け付けない．
+// 未知の指定子と値のない指定子は，各段階の解析では黙って無視され打ち間違いに気づけないため受け付けない．
 // 引数が正しければtrue，誤りがあれば使い方を出力してfalseを返す
 static bool check_args(int argc, char **argv) {
     std::string pn_file_name;   // 入力Pynesisソースファイル名
     std::string pt_file_name;   // 中間アセンブリファイル名
     std::string sv_file_name;   // 出力SystemVerilog ROMファイル名
-    bool has_bare_arg = false;  // 指定子なしの引数があったか
+    bool has_bad_arg = false;   // 指定子なし・未知の指定子・値のない指定子のいずれかがあったか
 
     // 全ての引数でループ (コマンド名は飛ばす)
     for (int i = 1; i < argc; i++) {
@@ -29,21 +30,25 @@ static bool check_args(int argc, char **argv) {
         if (argv[i][0] == '-') {
             std::string kind = argv[i];   // 指定を保存
             i++;
-            if (i >= argc) break;
+            if (i >= argc) {
+                has_bad_arg = true;
+                break;
+            }
 
             if      (kind == "-pn") pn_file_name = argv[i];
             else if (kind == "-pt") pt_file_name = argv[i];
             else if (kind == "-sv") sv_file_name = argv[i];
+            else                    has_bad_arg = true;
         }
         else {
-            has_bare_arg = true;
+            has_bad_arg = true;
         }
     }
 
     // -svは省略を許し，指定された場合だけ拡張子を確かめる
     const bool sv_name_ok = sv_file_name.empty() || has_extension(sv_file_name, ".sv");
 
-    if (has_bare_arg || !has_extension(pn_file_name, ".pn")
+    if (has_bad_arg || !has_extension(pn_file_name, ".pn")
         || !has_extension(pt_file_name, ".pt") || !sv_name_ok) {
         std::cout << "args fail" << std::endl
                   << "-pn: pynesis source file name. e.g. ~~.pn" << std::endl
@@ -52,7 +57,7 @@ static bool check_args(int argc, char **argv) {
                   << "    actual: " << pt_file_name << std::endl
                   << "-sv: output file name (optional). e.g. ~~.sv" << std::endl
                   << "    actual: " << sv_file_name << std::endl
-                  << "arguments without a flag are not accepted" << std::endl;
+                  << "arguments without a flag, unknown flags and flags without a value are not accepted" << std::endl;
         return false;
     }
     return true;
