@@ -43,6 +43,7 @@ static long long convert_integer(long long value, const type_t &type) {
         case BASE_CHAR:  bits = 8;  break;
         case BASE_SHORT: bits = 16; break;
         case BASE_INT:   return wrap32(value, type.is_signed);
+        // 整数型以外が渡された場合 (呼び出し側の誤りのため，値を返さず内部エラーにする)
         default:
             throw std::string("compiler error: unsupported integer type in conversion");
     }
