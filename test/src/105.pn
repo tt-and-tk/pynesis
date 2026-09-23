@@ -1,0 +1,6 @@
+// (int *)0は番地0を指すポインタであり，nullptrとは値が異なるため等しくない
+int is_null;
+
+void main(void) {
+    is_null = (int *)0 == nullptr;   // 0
+}
