@@ -573,7 +573,8 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         // ++/-- は変数にしか使えないので定数式では不可 (下のエラーに落ちる)
     }
 
-    // 整数へのキャスト (ポインタを含むキャストは番地が値になるため，下のエラーに落ちる)
+    // 整数へのキャスト (ポインタへのキャストは値が番地になるため下のエラーに落ち，
+    // ポインタから整数へのキャストは変換する式の計算がエラーになる)
     if (expr->kind == ND_CAST && !is_pointer_value(expr->type)) {
         const const_value_t v = this->eval_const_expr(expr->children[0]);
         // 結果の符号は，キャストした型を整数昇格した型に従う
