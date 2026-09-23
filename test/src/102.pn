@@ -1,0 +1,24 @@
+// 整数とポインタ，データのポインタどうしはキャストで変換できる
+// キャストの結果には添字・->・*を続けて読み書きでき，(int *)table[1]は添字を付けた要素をキャストする
+struct Pair {
+    int first;
+    int second;
+};
+
+unsigned int words[2];
+struct Pair pair;
+int addr;
+unsigned char low;
+unsigned int *table[2];
+int *ip;
+
+void main(void) {
+    unsigned int *p = (unsigned int *)0x8000;   // 番地0x8000を指す
+    *(unsigned int *)0x8004 = 7;                // 固定番地へ書き込む
+    addr = (int)p;                              // 32768
+    low = ((unsigned char *)words)[1];          // wordsの2バイト目
+    ((struct Pair *)words)->second = 5;         // words[1]へ書き込む
+    p = (unsigned int *)&pair.second;           // int *からunsigned int *へ
+    p = (unsigned int *)addr;                   // 実行時に決まる整数から
+    ip = (int *)table[1];
+}

@@ -113,6 +113,7 @@ private:
     void gen_ternary(node_t *expr, int reg);   // 三項演算子 ?: の結果をr{reg}に生成
     void gen_incdec(node_t *expr, int reg, bool is_prefix);  // ++/-- (前置は新値・後置は旧値をr{reg}に残す)
     void gen_unary(node_t *expr, int reg);     // 単項 -/+/~/! の結果をr{reg}に生成
+    void gen_cast(node_t *expr, int reg);      // キャスト (型名)式 の結果をr{reg}に生成
     // condが偽/真ならlabelへ分岐 (評価にr{reg}・r{reg+1}を使う．制御構文からはreg=0で呼ぶ)
     void gen_branch_if_false(node_t *cond, const std::string &label, int reg = 0);
     void gen_branch_if_true(node_t *cond, const std::string &label, int reg = 0);

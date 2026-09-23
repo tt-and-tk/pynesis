@@ -1,0 +1,10 @@
+// 意味解析エラー: ポインタを含むキャストは定数式ではないため，caseの値に書けない (異常系)
+int r;
+
+void main(void) {
+    switch (r) {
+        case (int)(int *)0:
+            r = 1;
+            break;
+    }
+}

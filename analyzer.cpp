@@ -35,6 +35,21 @@ static long long wrap32(long long value, bool is_signed) {
     return bits;
 }
 
+// 整数の値を整数型typeへ変換した値を返す
+// (8/16ビットの型は下位ビットへ切り詰めてから，符号付きなら符号拡張・符号なしならゼロ拡張し，32ビットの型は折り返す)
+static long long convert_integer(long long value, const type_t &type) {
+    int bits;   // 型のビット幅
+    switch (type.base) {
+        case BASE_CHAR:  bits = 8;  break;
+        case BASE_SHORT: bits = 16; break;
+        default:         return wrap32(value, type.is_signed);
+    }
+    const long long low = value & ((1LL << bits) - 1);   // 下位ビットへ切り詰めた値
+    // 符号付きで最上位ビットが立っている場合は負の値として解釈する
+    if (type.is_signed && low >= (1LL << (bits - 1))) return low - (1LL << bits);
+    return low;
+}
+
 // 整数リテラルの値がint型になるかを返す (intで表せない0x80000000以上の値は16進でのみ書け，unsigned intになる)
 static bool is_signed_literal(long long value) {
     return value <= 0x7FFFFFFFLL;
@@ -556,6 +571,13 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         // ++/-- は変数にしか使えないので定数式では不可 (下のエラーに落ちる)
     }
 
+    // 整数へのキャスト (ポインタを含むキャストは番地が値になるため，下のエラーに落ちる)
+    if (expr->kind == ND_CAST && !is_pointer_value(expr->type)) {
+        const const_value_t v = this->eval_const_expr(expr->children[0]);
+        // 結果の符号は，キャストした型を整数昇格した型に従う
+        return {convert_integer(v.value, expr->type), is_promoted_signed(expr->type)};
+    }
+
     // 二項演算
     if (expr->kind == ND_BINOP) {
         const const_value_t l = this->eval_const_expr(expr->children[0]);
@@ -690,7 +712,8 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
 
 // ポインタ型のグローバル変数の初期化子を検査する
 // グローバル変数の初期化子は，mainより前に実行される処理が存在しないため，コンパイル時に値が決まる式に限る．
-// ポインタの場合は整数の定数式の代わりに，グローバル変数・関数の番地(に整数定数を足し引きした式)とnullptrを許す．
+// ポインタの場合は整数の定数式の代わりに，グローバル変数・関数の番地(に整数定数を足し引きした式)とnullptr，
+// およびそれらや整数定数をポインタへキャストした式を許す．
 // 値は整数のように畳み込まず，他の初期化子と同じくmainの先頭で番地を求めて書き込む
 void Analyzer::check_global_pointer_inits() {
     for (node_t *decl : this->root_->children) {
@@ -704,14 +727,16 @@ void Analyzer::check_global_pointer_inits() {
         // コンパイル時に番地が決まらない式の場合 (変数の値の参照・関数呼び出し・間接参照等)
         if (!Analyzer::is_address_constant(init)) {
             throw std::string("compiler error: initializer of global pointer '") + decl->sval
-                  + "' must be nullptr or an address of a global variable or function at "
+                  + "' must be nullptr, an address of a global variable or function, "
+                    "or an integer constant cast to a pointer at "
                   + loc_to_string(init->loc);
         }
     }
 }
 
 // コンパイル時に値が決まる番地の式かを返す
-// (nullptr・関数の番地・グローバル配列や文字列リテラルの先頭・&グローバルの左辺値と，それらに整数定数を足し引きした式)
+// (nullptr・関数の番地・グローバル配列や文字列リテラルの先頭・&グローバルの左辺値と，それらに整数定数を足し引きした式，
+//  およびそれらや整数定数をポインタへキャストした式)
 bool Analyzer::is_address_constant(const node_t *expr) {
     switch (expr->kind) {
         // nullptr・関数の番地・文字列リテラルの先頭の番地の場合 (常にコンパイル時に決まる)
@@ -728,6 +753,12 @@ bool Analyzer::is_address_constant(const node_t *expr) {
         // &の場合 (対象の番地がコンパイル時に決まる左辺値ならよい)
         case ND_ADDR_OF:
             return Analyzer::is_static_lvalue(expr->children[0]);
+        // ポインタへのキャストの場合 (変換する式が整数定数か，コンパイル時に決まる番地ならよい)
+        case ND_CAST: {
+            const node_t *operand = expr->children[0];   // 変換する式
+            return is_pointer_value(expr->type)
+                && (Analyzer::is_integer_constant(operand) || Analyzer::is_address_constant(operand));
+        }
         // ポインタに整数定数を足し引きした式の場合
         case ND_BINOP: {
             const node_t *lhs = expr->children[0];   // 左辺
@@ -795,6 +826,9 @@ bool Analyzer::is_integer_constant(const node_t *expr) {
         case ND_TERNARY:
             return Analyzer::is_integer_constant(expr->children[0]) && Analyzer::is_integer_constant(expr->children[1])
                 && Analyzer::is_integer_constant(expr->children[2]);
+        // 整数へのキャストの場合 (変換する式が整数定数ならよい)
+        case ND_CAST:
+            return !is_pointer_value(expr->type) && Analyzer::is_integer_constant(expr->children[0]);
         // それ以外(変数の値の参照・関数呼び出し等)の場合 (実行時に値が決まる)
         default:
             return false;
@@ -1473,6 +1507,26 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + "' at " + loc_to_string(expr->loc);
             }
             expr->type = pointee_type(pointer->type);
+            return;
+        }
+
+        // キャスト (型名)式: 変換する式の型から，キャストした型へ変換できるかを確かめる (型は構文解析が注釈済み)
+        // 整数どうし・整数とポインタ(関数ポインタを含む)・データのポインタどうし・関数ポインタどうしを変換できる
+        case ND_CAST: {
+            node_t *operand = expr->children[0];   // 変換する式
+            this->analyze_value(operand);
+            // nullptrの場合 (どのポインタへもキャストせずに格納でき，整数へ変換しても表現に依存した値を得るだけのため)
+            if (operand->type.base == BASE_NULLPTR) {
+                throw std::string("compiler error: cannot cast nullptr at ") + loc_to_string(expr->loc);
+            }
+            // データのポインタと関数ポインタの間の場合 (データの番地はバイト単位，関数の番地は命令の番号で，指す空間が異なるため)
+            if (is_pointer_value(operand->type) && is_pointer_value(expr->type)
+                && is_func_pointer(operand->type) != is_func_pointer(expr->type)) {
+                throw std::string("compiler error: cannot cast '") + type_to_string(operand->type) + "' to '"
+                      + type_to_string(expr->type) + "' (convert through an integer) at " + loc_to_string(expr->loc);
+            }
+            // キャストした型に構造体名が現れる場合は，その構造体が定義済みであることを確かめる
+            this->check_type_exists(expr->type, expr->loc);
             return;
         }
 

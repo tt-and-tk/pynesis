@@ -1,0 +1,8 @@
+// 意味解析エラー: 構造体そのものはキャストできない(値として読めないため) (異常系)
+struct Point { int x; int y; };
+struct Point pt;
+int r;
+
+void main(void) {
+    r = (int)pt;
+}

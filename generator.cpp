@@ -804,6 +804,30 @@ void Generator::gen_unary(node_t *expr, int reg) {
     }
 }
 
+// キャスト (型名)式 の結果をr{reg}に生成する
+// 8/16ビットの整数型へは下位ビットへ切り詰めてから型の規則で拡張し，32ビットの整数型・ポインタへはビット列をそのまま使う
+void Generator::gen_cast(node_t *expr, int reg) {
+    const type_t &type = expr->type;   // キャストした型
+    // 変換する式をr{reg}に評価する
+    this->gen_expr(expr->children[0], reg);
+    // ポインタ・32ビットの整数型の場合 (ビット列は変わらないため，これ以上何もしない)
+    if (type.pointer_depth > 0 || type.base == BASE_INT) return;
+    const int bits = (type.base == BASE_CHAR) ? 8 : 16;   // キャストした型のビット幅
+    // 符号付きの場合 (切り詰めと符号拡張を，上位へ寄せて算術シフトで戻す操作で同時に行う)
+    if (type.is_signed) {
+        this->gen_sign_extend(reg, bits, reg + 1, expr->loc);
+        return;
+    }
+    // 符号なしの場合 (下位ビットだけを残すマスクとの論理積で，上位を0にする)
+    // 作業用のr{reg+1}が上限(r15)を超えないことを確認する
+    if (reg + 1 >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
+    }
+    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " " << ((1LL << bits) - 1) << "\n";   // r{reg+1} = マスク
+    (*this->out_) << "    and r" << reg << " r" << (reg + 1) << " r" << reg << "\n";         // r{reg} = 下位ビット
+}
+
 // if文を生成する
 // children: [0]=条件, [1]=then節, [2]=else節(省略可)
 void Generator::gen_if(node_t *stmt) {
@@ -1247,6 +1271,11 @@ void Generator::gen_expr(node_t *expr, int reg) {
         // 後置単項演算: ++/--のみ (parserがND_POST_UNOPを作るのはこの2つだけ)
         case ND_POST_UNOP:
             this->gen_incdec(expr, reg, false);       // 後置
+            break;
+
+        // キャスト
+        case ND_CAST:
+            this->gen_cast(expr, reg);
             break;
 
         // 関数呼び出し

@@ -1,0 +1,6 @@
+// 意味解析エラー: nullptrは整数へキャストできない (異常系)
+unsigned int r;
+
+void main(void) {
+    r = (unsigned int)nullptr;
+}

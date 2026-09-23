@@ -1,0 +1,7 @@
+// 意味解析エラー: 定義されていない構造体へのポインタへはキャストできない (異常系)
+int g;
+
+void main(void) {
+    int *p = &g;
+    (struct Undefined *)p;
+}

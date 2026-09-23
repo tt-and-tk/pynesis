@@ -1,0 +1,24 @@
+// 関数ポインタと整数，型の異なる関数ポインタどうしはキャストで変換でき，キャストの結果を直接呼び出せる
+// ポインタ型のグローバル変数の初期化子には，整数の定数式や番地が決まる式をキャストしたものを書ける
+int g;
+unsigned int *code = (unsigned int *)0x8000;
+char *bytes = (char *)&g + 1;
+void (*entry)(void) = (void (*)(void))0x10;
+int index;
+int (*op)(int);
+
+int twice(int x) {
+    return x * 2;
+}
+
+void tick(void) {
+    g = g + 1;
+}
+
+void main(void) {
+    index = (int)twice;                 // 関数の番地(命令の番号)
+    op = (int (*)(int))index;
+    g = op(3);
+    op = (int (*)(int))entry;
+    ((void (*)(void))(int)tick)();
+}
