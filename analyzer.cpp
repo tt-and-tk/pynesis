@@ -1515,7 +1515,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         case ND_CAST: {
             node_t *operand = expr->children[0];   // 変換する式
             this->analyze_value(operand);
-            // nullptrの場合 (どのポインタへもキャストせずに格納でき，整数へ変換しても表現に依存した値を得るだけのため)
+            // nullptrの場合 (どのポインタへもキャストせずに格納でき，整数へ変換してもnullptrを表すために選んだビット列を得るだけのため)
             if (operand->type.base == BASE_NULLPTR) {
                 throw std::string("compiler error: cannot cast nullptr at ") + loc_to_string(expr->loc);
             }
