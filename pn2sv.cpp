@@ -15,9 +15,6 @@ static bool has_extension(const std::string &name, const std::string &ext) {
 // -pn: 必須引数．入力Pynesisソースファイル名．
 // -pt: 必須引数．中間アセンブリファイル名．
 // -sv: 出力SystemVerilog ROMファイル名．省略した場合，2段階目が中間アセンブリファイル名の拡張子を変更して使う．
-// 次の引数は受け付けない．
-//   指定子なしの引数: 1段階目は入力Pynesisソースファイル名，2段階目は中間アセンブリファイル名と解釈が食い違う
-//   未知の指定子・値のない指定子: 各段階の解析では黙って無視され，打ち間違いに気づけない
 // 引数が正しければtrue，誤りがあれば使い方を出力してfalseを返す
 static bool check_args(int argc, char **argv) {
     std::string pn_file_name;   // 入力Pynesisソースファイル名
