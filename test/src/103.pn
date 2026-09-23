@@ -16,7 +16,7 @@ void tick(void) {
 }
 
 void main(void) {
-    index = (int)twice;                 // 関数の番地(命令の番号)
+    index = (int)twice;                 // 関数の先頭の命令index
     op = (int (*)(int))index;
     g = op(3);
     op = (int (*)(int))(int)entry;
