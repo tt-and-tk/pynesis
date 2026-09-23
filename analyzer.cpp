@@ -425,6 +425,18 @@ void Analyzer::collect_globals() {
         // 全関数のシグネチャをここ(2パス目)で揃えておく．3パス目(analyze_functions)は，ここで作った引数の
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
+            // mainの場合 (プログラムの開始点であり，値を受け渡す呼び出し元が存在しないため，戻り値型はvoidで引数は取らない．
+            //  voidへのポインタは構文解析で拒否済みのため，基本型だけでvoidそのものかを判定できる)
+            if (child->sval == "main") {
+                if (child->type.base != BASE_VOID) {
+                    throw std::string("compiler error: 'main' must return void at ") + loc_to_string(child->loc);
+                }
+                // 最後の子は関数本体ブロックのため，それより前に子があれば仮引数を持つ
+                if (child->children.size() > 1) {
+                    throw std::string("compiler error: 'main' cannot take parameters at ")
+                          + loc_to_string(child->loc);
+                }
+            }
             // 戻り値型に構造体が現れる場合はその定義が済んでいるか確かめる
             this->check_type_exists(child->type, child->loc);
             auto sig = std::make_shared<func_sig_t>();   // この関数のシグネチャ

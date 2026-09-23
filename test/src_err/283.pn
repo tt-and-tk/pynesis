@@ -1,0 +1,4 @@
+// 意味解析エラー: mainの戻り値型はvoidに限り，ポインタも返せない (異常系)
+int *main(void) {
+    return nullptr;
+}
