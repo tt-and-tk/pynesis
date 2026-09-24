@@ -68,12 +68,12 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 | `test/test.py` | 正常系テストスクリプト |
 | `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
 | `test/src_err/include/` | 異常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
-| `test/test_err.py` | 異常系テストスクリプト(アセンブラの`test_err.py`と同じ方針) |
+| `test/test_err.py` | 異常系テストスクリプト |
 
 ### 実行方法
 
 - 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`の全`.pn`を`asm/`に変換して`asm_ans/`の期待値と比較する．
-- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`の全`.pn`をコンパイルし，全てエラー(非0終了コードまたはエラーメッセージ)になることを確認する．
+- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`の全`.pn`をコンパイルし，全てコンパイルエラー(終了コード1，かつ`compiler error:`で始まる行の出力)になることを確認する．クラッシュなど他の理由による終了は失敗とする．
 
 ## 開発フロー
 
