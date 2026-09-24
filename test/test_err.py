@@ -54,7 +54,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmpdir:
         for src_file in src_files:
             src_path = os.path.join(SRC_ERR_DIR, src_file)
-            asm_path = os.path.join(tmpdir, src_file.replace(".pn", ".pt"))
+            asm_path = os.path.join(tmpdir, os.path.splitext(src_file)[0] + ".pt")
 
             # 出力はソース由来の日本語を含みうるため，Windows既定のcp932ではなくUTF-8で読む
             result = subprocess.run(
