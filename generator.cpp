@@ -409,7 +409,7 @@ void Generator::gen_print_string(const symbol_t *sym, int reg) {
 }
 
 // 標準入力を改行(\n=10)まで読み込み，char配列へヌル終端付きで格納するループを生成する
-// 先頭の改行はすべて読み飛ばす．配列サイズ-1文字を超えたら追加のscanを行わず打ち切る
+// 改行だけの行は空文字列として格納する．配列サイズ-1文字を超えたら追加のscanを行わず打ち切る
 // (超過分は次にscanを実行したときに読み込まれる．そのためのscanが1回多く消費されることはない)
 // DEL(0x7F，バックスペース)を受け取った場合は，直前に格納した1文字分インデックスを戻す(先頭では何もしない)
 // レジスタ使用: r{reg}=読み込んだ文字, r{reg+1}=インデックス, r{reg+2}=ベースアドレス(不変), r{reg+3}=アドレス(作業用),
@@ -419,8 +419,6 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
     if (reg + 8 >= MAX_REG) {
         throw std::string("compiler error: expression too complex (out of registers)");
     }
-    const std::string skip_loop = this->new_label();
-    const std::string skip_end = this->new_label();
     const std::string read_loop = this->new_label();
     const std::string del_branch = this->new_label();
     const std::string scan_next = this->new_label();
@@ -434,13 +432,8 @@ void Generator::gen_scan_line(const symbol_t *sym, int reg) {
     (*this->out_) << "    mov fh r0 r" << (reg + 7) << " 0\n";                        // r{reg+7} = 0
     (*this->out_) << "    mov fh r0 r" << (reg + 8) << " 7Fh\n";                      // r{reg+8} = DEL(0x7F)
 
-    // 先頭の改行はすべて読み飛ばす
+    // 格納ループは読み込み済みの文字から判定するため，最初の1文字を先に読み込む
     (*this->out_) << "    scan r" << reg << "\n";
-    (*this->out_) << skip_loop << ":\n";
-    (*this->out_) << "    ne r" << reg << " r" << (reg + 4) << " " << skip_end << "\n";  // 改行以外ならスキップ終了
-    (*this->out_) << "    scan r" << reg << "\n";
-    (*this->out_) << "    jmp " << skip_loop << "\n";
-    (*this->out_) << skip_end << ":\n";
 
     // 改行が来るまで1文字ずつ配列へ格納する
     (*this->out_) << "    mov fh r0 r" << (reg + 1) << " 0\n";                        // r{reg+1} = インデックス(0)
