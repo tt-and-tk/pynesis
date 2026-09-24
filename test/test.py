@@ -53,7 +53,7 @@ def main():
 
     for src_file in src_files:
         src_path = os.path.join(SRC_DIR, src_file)
-        asm_name = src_file.replace(".pn", ".pt")
+        asm_name = os.path.splitext(src_file)[0] + ".pt"
         asm_path = os.path.join(ASM_DIR, asm_name)
         ans_path = os.path.join(ASM_ANS_DIR, asm_name)
 
