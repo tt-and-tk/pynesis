@@ -8,10 +8,11 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 
 | リポジトリ(GitHub) | ディレクトリ(`pc/`配下) | 役割 |
 |:-|:-|:-|
-| `specification` | `specification/` | CPUアーキテクチャ・ISA・アセンブリ言語・コンパイラ・Qosmosの仕様のドキュメント(唯一の一次情報源) |
+| `specification` | `specification/` | CPUアーキテクチャ・ISA・アセンブリ言語・コンパイラ・Qosmosの仕様のドキュメント(唯一の一次情報源．Claude Codeプロジェクトを持たない) |
 | `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)へのアセンブラ |
 | `pynesis`(本リポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルをincludeして使用し，`.sv`まで一貫変換も可能 |
-| `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクト(SystemVerilog + PS側C++)と，ROM上で動く自作OS Qosmos(シェルやファイルシステムなど．Pynesisで記述．仕様は`specification`の`qosmos.md`) |
+| `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクト(SystemVerilog + PS側C++) |
+| (専用のリポジトリなし．`qurge`内) | `mypc/mypc.srcs/pn/` | ROM上で動く自作OS Qosmos(シェルやファイルシステムなど)のPynesisソース．仕様は`specification`の`qosmos.md` |
 | `for-pynthesis-skills` | `for-pynthesis-skills/` | 上記各リポジトリで共有するissue起票・対応支援スキルを提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先(受け皿)でもある |
 
 ```
