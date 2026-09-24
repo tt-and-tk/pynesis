@@ -5,7 +5,7 @@
 
 // ROM用のグローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
 static const int g_global_base_addr = 0x0000000;
-// 実行ファイル用のグローバル変数の配置終了アドレス (メモリの末尾にあるコード領域の上端の直後．ここから下へ順次割り当てる)
+// 実行ファイル用のグローバル変数の配置終了アドレス (メモリの末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_SIZE;
 
 // ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
@@ -153,8 +153,8 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 実行ファイル用なら，コード領域の上端から下へ詰める
-        // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はコード領域の先頭から上へ伸びるため)
+        // 実行ファイル用なら，メモリの後半の上端から下へ詰める
+        // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はメモリの後半の先頭から上へ伸びるため)
         if (this->is_bin_mode_) return g_bin_global_end_addr - this->global_size_;
         // ROM用なら，0番地から上へ詰める
         return g_global_base_addr + this->global_size_ - bytes;
