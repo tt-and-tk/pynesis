@@ -9,7 +9,7 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 | リポジトリ(GitHub) | ディレクトリ(`pc/`配下) | 役割 |
 |:-|:-|:-|
 | `specification` | `specification/` | CPUアーキテクチャ・ISA・アセンブリ言語・コンパイラ・Qosmosの仕様のドキュメント(唯一の一次情報源) |
-| `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)へのアセンブラ |
+| `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)，または自作OS Qosmosの実行ファイルへのアセンブラ |
 | `pynesis`(本リポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルをincludeして使用し，`.sv`まで一貫変換も可能 |
 | `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクト(SystemVerilog + PS側C++)と，ROM上で動く自作OS Qosmos(シェルやファイルシステムなど．Pynesisで記述．仕様は`specification`の`qosmos.md`) |
 | `for-pynthesis-skills` | `for-pynthesis-skills/` | 上記各リポジトリで共有するissue起票・対応支援スキルを提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先(受け皿)でもある |
@@ -25,7 +25,7 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 
 CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
 - `pn2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出)
-- `asm2sv.exe`: `-pt`(入力アセンブリファイル) `-sv`(出力`.sv`ファイル，省略時は`.pt`から自動導出)
+- `asm2sv.exe`: `-pt`(入力アセンブリファイル)と，出力先として`-sv`(出力`.sv`ファイル)・`-bin`(出力するQosmosの実行ファイル)のどちらか一方．どちらも省略すると，`.pt`から名前を自動導出した`.sv`を出力する
 - `pn2sv.exe`: `-pn`(入力Pynesisファイル) `-pt`(中間アセンブリファイル，必須) `-sv`(出力`.sv`ファイル，省略時は`.pt`から自動導出)．引数の誤りは変換を始める前に検出し，中間ファイルを書き出さずにエラーになる
 
 `pn2sv.exe`のビルドには，`pn2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`PN2ASM_NO_MAIN`・`ASM2SV_NO_MAIN`)を指定し，両者の本処理ソースを`pn2sv.cpp`と一緒にコンパイルする．
