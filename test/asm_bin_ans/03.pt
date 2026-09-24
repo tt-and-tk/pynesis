@@ -1,0 +1,41 @@
+.global zero, main
+
+main:
+    mov fh r0 r0 80000000h
+    wm fh r0 r0 65532
+    mov fh r0 r0 65504
+    wm fh r0 r0 65528
+    mov fh r0 r0 65488
+    wm fh r0 r0 65524
+    mov fh r0 r0 2
+    mov fh r0 r1 2
+    sll r0 r1 r0
+    mov fh r0 r1 65488
+    add r0 r1 r0
+    mov fh r0 r1 1
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    sub r0 r1 r0
+    wm fh r0 r0 65520
+    mov fh r0 r0 1
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 65476
+    add r0 r1 r0
+    wm fh r0 r0 65516
+    mov fh r0 r0 65468
+    wm fh r0 r0 65512
+    mov fh r0 r0 zero
+    wm fh r0 r0 65508
+    mov fh r0 r0 26984
+    wm fh r0 r0 65468
+    rm fh r0 r0 65520
+    rm fh r0 r0
+    wm fh r0 r0 65504
+    ret
+
+zero:
+    mov fh r0 r0 0
+    mov fh r0 r30
+    ret
+    ret

@@ -1,0 +1,26 @@
+// 実行ファイル用: グローバルのポインタの初期化子が指す番地も，コード領域の上端から下へ置いた番地になる
+// 宣言順にp0〜handler・g・table・pairsを置き，初期化子に書いた文字列リテラルはその後(pairsの下)に置く
+// 関数の番地は即値の位置に関数名を書き，アセンブラが解決する
+struct Pair {
+    int first;
+    int second;
+};
+
+int *p0 = nullptr;
+int *p1 = &g;
+int *p2 = table;
+int *p3 = &table[2] - 1;
+int *p4 = &pairs[1].second;
+char *msg = "hi";
+int (*handler)(void) = zero;
+int g;
+int table[4];
+struct Pair pairs[2];
+
+int zero(void) {
+    return 0;
+}
+
+void main(void) {
+    g = *p3;
+}
