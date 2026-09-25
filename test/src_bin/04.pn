@@ -1,0 +1,8 @@
+// 実行ファイル用: 式中の文字列リテラルは，全てのグローバル変数の下に置かれる
+// (countは0xFFFC番地，"OK"は0xFFF8番地)．どちらもmainの先頭で書き込む
+int count = 3;
+
+void main(void) {
+    print("OK");
+    count = count + 1;
+}

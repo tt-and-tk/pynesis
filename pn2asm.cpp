@@ -12,6 +12,7 @@
 typedef struct {
     std::string pn_file_name;   // 入力Pynesisソースファイル名
     std::string pt_file_name;   // 出力アセンブリファイル名
+    bool is_bin_mode = false;   // Qosmosの実行ファイル用のアセンブリを出力するか (falseならROM用)
 } args_t;
 
 // 前宣言
@@ -49,7 +50,7 @@ int compile_pn_to_asm(int argc, char **argv) {
         ast = parser();
 
         // 意味解析を行い，シンボルテーブルを構築する (Semantic Analyzer)
-        Analyzer analyzer(ast);
+        Analyzer analyzer(ast, args.is_bin_mode);
         analyzer();
 
         // 出力アセンブリファイルを開く
@@ -100,14 +101,19 @@ int compile_pn_to_asm(int argc, char **argv) {
 // コマンドライン引数を取得する
 // -pn: 必須引数．入力Pynesisソースファイル名．
 // -pt: 出力アセンブリファイル名．省略した場合，Pynesisファイル名の拡張子を .pt に変更して使用．
+// --bin-mode: 値を取らない．指定した場合，Qosmosの実行ファイル用のアセンブリを出力する．省略した場合はROM用．
 // 何も指定せずに引数を置いた場合，入力Pynesisソースファイル名と解釈される．
 void get_args(int argc, char **argv, args_t &args) {
     // 全ての引数でループ (コマンド名は飛ばす)
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];    // 引数一つ
 
-        // 指定子なら
-        if (arg[0] == '-') {
+        // 値を取らない指定子なら，指定されたことだけを覚える
+        if (std::string(arg) == "--bin-mode") {
+            args.is_bin_mode = true;
+        }
+        // 値を取る指定子なら
+        else if (arg[0] == '-') {
             std::string kind = arg;   // 指定を保存
 
             // インクリメントして次のパラメータを取得する
@@ -147,7 +153,8 @@ void get_args(int argc, char **argv, args_t &args) {
                   << "-pn: pynesis source file name. e.g. ~~.pn" << std::endl
                   << "    actual: " << args.pn_file_name << std::endl
                   << "-pt: output asm file name. e.g. ~~.pt" << std::endl
-                  << "    actual: " << args.pt_file_name << std::endl;
+                  << "    actual: " << args.pt_file_name << std::endl
+                  << "--bin-mode: output asm for a Qosmos executable (optional, takes no value)" << std::endl;
 
         // 後の処理でエラーになるよう，コマンドライン引数をクリアする
         args.pn_file_name.clear();

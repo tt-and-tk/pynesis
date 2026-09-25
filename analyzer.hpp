@@ -88,12 +88,13 @@ struct analysis_result_t {
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
-    explicit Analyzer(node_t *root);
+    Analyzer(node_t *root, bool is_bin_mode);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
     analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST
+    const bool is_bin_mode_;                             // Qosmosの実行ファイル用に解析するか (falseならROM用)
 
     // 解析の成果物 (result()でコード生成へ渡す)
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
@@ -101,7 +102,7 @@ private:
     std::map<std::string, struct_def_t> struct_defs_;    // 構造体名→メンバ構成の対応表
     std::map<std::string, int> func_local_sizes_;        // 関数名→ローカル変数領域のバイト数
     std::map<std::string, std::set<std::string>> call_graph_;  // 関数名→呼び出しうる関数名の集合
-    int next_addr_;                                      // 次に割り当てるグローバル変数の絶対番地 (割り当て後はグローバル領域のバイト数)
+    int global_size_;                                    // 割り当て済みのグローバル変数・文字列リテラルのバイト数
 
     // 解析の途中で使う情報
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表

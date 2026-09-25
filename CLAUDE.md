@@ -18,15 +18,15 @@ PYNQ-Z2(Zynq-7000)上に実装する自作CPUと，それを動かすソフト�
 入力(.pn) → [pynesis(本リポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
 ```
 
-`pn2sv.cpp`(`pn2sv.exe`)が，Pynesisソースから`.sv`まで一貫して変換する今後の入口となる．  
-内部では`pn2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2sv.cpp`(アセンブリ→`.sv`)の本処理をそれぞれ`main`から分離した関数(`compile_pn_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
+`pn2sv.cpp`(`pn2sv.exe`)が，Pynesisソースから`.sv`またはQosmosの実行ファイルまで一貫して変換する今後の入口となる．  
+内部では`pn2asm.cpp`(Pynesisソース→アセンブリ)と`../assembler/asm2sv.cpp`(アセンブリ→`.sv`または実行ファイル)の本処理をそれぞれ`main`から分離した関数(`compile_pn_to_asm`，`assemble_asm_to_sv`)として直接リンクし，順に呼び出す(サブプロセス起動はしない)．  
 `pn2asm.exe`・`../assembler/asm2sv.exe`は単体の実行ファイルとしても引き続き動作する．  
 **このプロジェクトのテスト対象は`pn2asm.cpp`(アセンブリ生成まで)のままとする**．`pn2sv`はビルド確認のみで自動テストの対象外．
 
 CLIフラグ(3ツール共通で`-pt`がアセンブリファイルを指す):
-- `pn2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出)
+- `pn2asm.exe`: `-pn`(入力Pynesisファイル) `-pt`(出力アセンブリファイル，省略時は`.pn`から自動導出) `--bin-mode`(値を取らない．指定するとQosmosの実行ファイル用のアセンブリを出力する)
 - `asm2sv.exe`: `-pt`(入力アセンブリファイル)と，出力先として`-sv`(出力`.sv`ファイル)・`-bin`(出力するQosmosの実行ファイル)のどちらか一方．どちらも省略すると，`.pt`から名前を自動導出した`.sv`を出力する
-- `pn2sv.exe`: `-pn`(入力Pynesisファイル) `-pt`(中間アセンブリファイル，必須) `-sv`(出力`.sv`ファイル，省略時は`.pt`から自動導出)．引数の誤りは変換を始める前に検出し，中間ファイルを書き出さずにエラーになる
+- `pn2sv.exe`: `-pn`(入力Pynesisファイル) `-pt`(中間アセンブリファイル，必須)と，出力先として`-sv`(出力`.sv`ファイル)・`-bin`(出力するQosmosの実行ファイル)のどちらか一方．どちらも省略すると，`.pt`から名前を自動導出した`.sv`を出力する．`-bin`を指定すると，実行ファイル用のアセンブリを生成する．引数の誤りは変換を始める前に検出し，中間ファイルを書き出さずにエラーになる
 
 `pn2sv.exe`のビルドには，`pn2asm.cpp`・`../assembler/asm2sv.cpp`それぞれの`main`定義を無効化するマクロ(`PN2ASM_NO_MAIN`・`ASM2SV_NO_MAIN`)を指定し，両者の本処理ソースを`pn2sv.cpp`と一緒にコンパイルする．
 ```
@@ -61,10 +61,11 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 
 | パス | 内容 |
 |:-|:-|
-| `test/src/` | 入力Pynesisソースファイル(`NN.pn`，正常系) |
+| `test/src/` | 入力Pynesisソースファイル(`NN.pn`，正常系．ROM用としてコンパイルする) |
 | `test/src/include/` | 正常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
 | `test/asm/` | コンパイラの出力アセンブリ(`NN.pt`，自動生成) |
 | `test/asm_ans/` | 期待値アセンブリ(`NN.pt`，手動作成) |
+| `test/src_bin/`・`test/asm_bin/`・`test/asm_bin_ans/` | Qosmosの実行ファイル用(`--bin-mode`)としてコンパイルする正常系の入力・出力・期待値．役割は`src/`・`asm/`・`asm_ans/`と同じで，連番は独立 |
 | `test/test.py` | 正常系テストスクリプト |
 | `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
 | `test/src_err/include/` | 異常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
@@ -72,12 +73,12 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 
 ### 実行方法
 
-- 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`の全`.pn`を`asm/`に変換して`asm_ans/`の期待値と比較する．
+- 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`(ROM用)・`src_bin/`(実行ファイル用)の全`.pn`をそれぞれ`asm/`・`asm_bin/`に変換して，`asm_ans/`・`asm_bin_ans/`の期待値と比較する．
 - 異常系: `test/`で`python test_err.py`を実行する．`src_err/`の全`.pn`をコンパイルし，全てコンパイルエラー(終了コード1，かつ`compiler error:`で始まる行の出力)になることを確認する．クラッシュなど他の理由による終了は失敗とする．
 
 ## 開発フロー
 
 1. `pn2asm`がPynesisソースファイルをアセンブリファイル(`.pt`)に翻訳する
-2. `asm2sv`(アセンブラ)がアセンブリファイルをSystemVerilog ROMファイル(`.sv`)に変換する
-3. `pn2sv`は上記1・2を順に呼び出し，Pynesisソースから`.sv`まで一貫して変換する
+2. `asm2sv`(アセンブラ)がアセンブリファイルをSystemVerilog ROMファイル(`.sv`)またはQosmosの実行ファイルに変換する
+3. `pn2sv`は上記1・2を順に呼び出し，Pynesisソースから`.sv`または実行ファイルまで一貫して変換する
 4. テストでは`pn2asm`の翻訳結果(アセンブリ)が期待値と一致するか確認する(`pn2sv`はテスト対象外)

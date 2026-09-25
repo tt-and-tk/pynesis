@@ -3,8 +3,10 @@
 
 #include "analyzer.hpp"
 
-// グローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
+// ROM用のグローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
 static const int g_global_base_addr = 0x0000000;
+// 実行ファイル用のグローバル変数の配置終了アドレス (メモリの末尾の直後．ここから下へ順次割り当てる)
+static const int g_bin_global_end_addr = RAM_SIZE;
 
 // ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
 // 読み書き可否はハードウェア実装(mypc/alu.svh)に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
@@ -85,8 +87,9 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
     return is_signed_operation_by_signs(op, is_promoted_signed(lhs), is_promoted_signed(rhs));
 }
 
-// コンストラクタ: ASTを受け取る
-Analyzer::Analyzer(node_t *root) : root_(root), next_addr_(g_global_base_addr), local_size_(0) {}
+// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかを受け取る
+Analyzer::Analyzer(node_t *root, bool is_bin_mode)
+    : root_(root), is_bin_mode_(is_bin_mode), global_size_(0), local_size_(0) {}
 
 // 意味解析を実行してシンボルテーブルを返す
 std::map<std::string, const symbol_t *> Analyzer::operator()() {
@@ -122,9 +125,9 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     // グローバル変数・文字列リテラルだけでメモリを使い切っていないか確認する
     // (スタックはメモリの上端から下へ伸びるため，残りがなければ関数を1つも呼び出せない．
     //  スタックまで含めた容量の検査は，フレームの大きさが確定するコード生成で行う)
-    if (this->next_addr_ > RAM_SIZE) {
+    if (this->global_size_ > RAM_SIZE) {
         throw std::string("compiler error: global variables (")
-              + std::to_string(this->next_addr_) + " bytes) exceed memory capacity ("
+              + std::to_string(this->global_size_) + " bytes) exceed memory capacity ("
               + std::to_string(RAM_SIZE) + " bytes)";
     }
 
@@ -132,10 +135,9 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 }
 
 // コード生成が参照する解析結果を返す
-// (グローバル変数は0番地から順に割り当てるため，割り当て後の次の番地がそのまま占有バイト数になる)
 analysis_result_t Analyzer::result() const {
     return {this->func_params_, this->struct_defs_, this->func_local_sizes_,
-            this->call_graph_, this->next_addr_};
+            this->call_graph_, this->global_size_};
 }
 
 // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
@@ -150,9 +152,12 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     }
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
-        const int addr = this->next_addr_;   // 確保する領域の絶対番地
-        this->next_addr_ += bytes;
-        return addr;
+        this->global_size_ += bytes;
+        // 実行ファイル用なら，メモリの後半の上端から下へ詰める
+        // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はメモリの後半の先頭から上へ伸びるため)
+        if (this->is_bin_mode_) return g_bin_global_end_addr - this->global_size_;
+        // ROM用なら，0番地から上へ詰める
+        return g_global_base_addr + this->global_size_ - bytes;
     }
     // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
     throw std::string("compiler error: cannot allocate memory for this kind of variable");

@@ -1,0 +1,28 @@
+// 実行ファイル用: グローバル変数はメモリの後半の上端から下へ置かれ(gは0xFFFC番地，gpは0xFFF8番地，resultは0xFFF4番地)，
+// ローカル変数・引数はROM用と同じくスタックに置かれる．mainの終端ではフレームを解放してretで呼び出し元へ戻る
+int g;
+int *gp;
+int result;
+
+void set(int *p, int v) {
+    *p = v;
+}
+
+void main(void) {
+    int x = 1;
+    int *lp = &x;
+    gp = &g;
+    *gp = 5;                      // g = 5
+    set(lp, *gp + 1);             // x = 6
+    result = x;
+    lp = nullptr;
+    if (lp == nullptr) {
+        result = result + 10;     // 16
+    }
+    if (!lp) {
+        result = result + 100;    // 116
+    }
+    if (gp && lp) {
+        result = 0;               // lpがnullptrのため実行されない
+    }
+}

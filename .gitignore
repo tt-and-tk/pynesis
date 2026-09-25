@@ -2,5 +2,6 @@
 memo.txt
 review*.md
 test/asm/
+test/asm_bin/
 .claude/settings.local.json
 .worktrees/
