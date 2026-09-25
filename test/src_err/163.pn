@@ -1,3 +1,4 @@
+// expect: compiler error: '#include' is only allowed between global declarations at src_err/163.pn:4
 // 字句解析エラー: #includeは関数本体の中に書けない (取り込む内容が文として正しくてもエラー) (異常系)
 void main(void) {
 #include "include/163_body.pn"

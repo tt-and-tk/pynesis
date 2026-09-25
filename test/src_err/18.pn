@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of 'f' at src_err/18.pn:5
 // 意味解析エラー: 関数の再定義 (異常系)
 void f(void) {
 }

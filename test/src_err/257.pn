@@ -1,3 +1,4 @@
+// expect: compiler error: string literal can only initialize char array at src_err/257.pn:3
 // 意味解析エラー: 文字列リテラルで初期化できるのはcharの配列のみで，charへのポインタの配列は初期化できない (異常系)
 char *msgs[] = "hi";
 void main(void) {

@@ -1,3 +1,4 @@
+// expect: compiler error: expression must be a constant expression at src_err/300.pn:7
 // 意味解析エラー: ポインタを含むキャストは定数式ではないため，caseの値に書けない (異常系)
 int r;
 

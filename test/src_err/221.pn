@@ -1,3 +1,4 @@
+// expect: compiler error: function pointer expects 1 argument(s) but got 2 at src_err/221.pn:8
 // 意味解析エラー: 関数ポインタを通した呼び出しも，引数の数がシグネチャと一致しなければならない (異常系)
 int twice(int a) {
     return a * 2;

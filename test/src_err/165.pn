@@ -1,3 +1,4 @@
+// expect: compiler error: expected expression but got ';' at src_err/include/165_lib.pn:2
 // 構文解析エラー: 取り込んだファイルに構文の誤りがある (異常系)
 #include "include/165_lib.pn"
 void main(void) {

@@ -1,3 +1,4 @@
+// expect: compiler error: struct cannot be used as a value; access a member or take its address at src_err/95.pn:11
 // 構造体配列の要素そのものを，メンバアクセスを介さず直接参照することは非対応
 struct Tag {
     int v;

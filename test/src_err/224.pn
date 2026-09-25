@@ -1,3 +1,4 @@
+// expect: compiler error: invalid operands to binary '*' ('int *' and 'int') at src_err/224.pn:6
 // 意味解析エラー: ポインタは乗算できない(加減算のみ) (異常系)
 int arr[4];
 void main(void) {

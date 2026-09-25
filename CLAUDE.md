@@ -54,7 +54,7 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 アセンブラ(`../assembler/CLAUDE.md`)のテスト方針を踏襲する．
 
 1. テスト用のPynesisソースファイルを用意する
-2. 期待値のアセンブリファイルを手動で用意する
+2. 期待値を用意する．正常系は期待値のアセンブリファイルを手動で用意する．異常系は期待するエラーメッセージをソースの1行目に`// expect: <メッセージ>`の形で書く．メッセージは手で書かず`test_err.py`が表示する実際の出力(ファイルパスをtestディレクトリからの相対パスに直したもの)から作り，続くコメントに書いた意図と合っているかを確かめる
 3. コンパイラで翻訳した結果が期待値と一致するか確認する
 
 ### テスト用ディレクトリ
@@ -67,7 +67,7 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 | `test/asm_ans/` | 期待値アセンブリ(`NN.pt`，手動作成) |
 | `test/src_bin/`・`test/asm_bin/`・`test/asm_bin_ans/` | Qosmosの実行ファイル用(`--bin-mode`)としてコンパイルする正常系の入力・出力・期待値．役割は`src/`・`asm/`・`asm_ans/`と同じで，連番は独立 |
 | `test/test.py` | 正常系テストスクリプト |
-| `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．コンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
+| `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．1行目に書いたメッセージのコンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
 | `test/src_err/include/` | 異常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
 | `test/src_err_bin/` | Qosmosの実行ファイル用(`--bin-mode`)としてコンパイルする異常系の入力．役割は`src_err/`と同じで，連番は独立 |
 | `test/test_err.py` | 異常系テストスクリプト |
@@ -75,7 +75,7 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 ### 実行方法
 
 - 正常系: `test/`で`python test.py`を実行する．コンパイラをビルドし，`src/`(ROM用)・`src_bin/`(実行ファイル用)の全`.pn`をそれぞれ`asm/`・`asm_bin/`に変換して，`asm_ans/`・`asm_bin_ans/`の期待値と比較する．
-- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`(ROM用)・`src_err_bin/`(実行ファイル用)の全`.pn`をコンパイルし，全てコンパイルエラー(終了コード1，かつ`compiler error:`で始まる行の出力)になることを確認する．クラッシュなど他の理由による終了は失敗とする．
+- 異常系: `test/`で`python test_err.py`を実行する．`src_err/`(ROM用)・`src_err_bin/`(実行ファイル用)の全`.pn`をコンパイルし，全て1行目に書いたメッセージと一致するコンパイルエラー(終了コード1)になることを確認する．出力中のファイルパスは，testディレクトリからの相対パスに直してから比較する．クラッシュなど他の理由による終了や，期待と異なるエラーは失敗とする．
 
 ## 開発フロー
 

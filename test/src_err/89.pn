@@ -1,3 +1,4 @@
+// expect: compiler error: struct cannot be used as a function return type at src_err/89.pn:7
 // 構造体を関数の戻り値型にすることは非対応
 struct Tag {
     int v;

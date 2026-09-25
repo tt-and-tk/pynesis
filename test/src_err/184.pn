@@ -1,3 +1,4 @@
+// expect: compiler error: file ends in the middle of a declaration at src_err/include/184_lib.pn:3
 // 字句解析エラー: 取り込むファイルは変数宣言の途中で終われない (取り込み元で続きを書いて内容をつなげると宣言として正しくてもエラー) (異常系)
 #include "include/184_lib.pn"
 = 1;

@@ -1,3 +1,4 @@
+// expect: compiler error: function 'add' expects 2 argument(s) but got 1 at src_err/53.pn:7
 // 意味解析エラー: 関数呼び出しの引数の数が一致しない (異常系)
 int add(int a, int b) {
     return a + b;

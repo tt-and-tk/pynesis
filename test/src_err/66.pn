@@ -1,3 +1,4 @@
+// expect: compiler error: instruction count (16801) exceeds maximum (16384)
 // 生成エラー: 命令数が上限(16384命令)を超える (異常系)
 int x;
 void main(void) {

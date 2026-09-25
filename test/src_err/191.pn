@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'ALL' is out of range for its type at src_err/191.pn:4
 // 意味解析エラー: ~0はint型の-1のため，unsigned int型のconst変数の範囲外になる (異常系)
 void main(void) {
     const unsigned int ALL = ~0;

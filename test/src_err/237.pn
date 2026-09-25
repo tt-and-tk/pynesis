@@ -1,3 +1,4 @@
+// expect: compiler error: initializer of global pointer 'p' must be nullptr, an address of a global variable or function, or an integer constant cast to a pointer at src_err/237.pn:5
 // 意味解析エラー: グローバルのポインタの初期化子には，番地が意味解析で確定しない式(変数の値)を書けない (異常系)
 int g;
 int *q = &g;

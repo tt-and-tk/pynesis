@@ -1,3 +1,4 @@
+// expect: compiler error: cannot redeclare hardware register 'LED' at src_err/124.pn:4
 // 意味解析エラー: ハードウェア変数と同名のローカルのconst変数は宣言できない (異常系)
 void main(void) {
     const int LED = 1;

@@ -1,3 +1,4 @@
+// expect: compiler error: cannot convert 'int' to 'int *' in return (use nullptr for a null pointer) at src_err/244.pn:4
 // 意味解析エラー: ポインタを返す関数から整数は返せない (異常系)
 int *find(void) {
     return 1;

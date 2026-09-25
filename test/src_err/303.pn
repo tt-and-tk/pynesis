@@ -1,3 +1,4 @@
+// expect: compiler error: cannot cast 'void (*)(void)' to 'int (*)(int)' (function pointer types differ) at src_err/303.pn:7
 // 意味解析エラー: 型の異なる関数ポインタへは直接キャストできない(呼び出す関数と引数・戻り値の型が食い違うため) (異常系)
 void (*entry)(void);
 int (*op)(int);

@@ -1,3 +1,4 @@
+// expect: compiler error: integer literal out of range: 2147483648 at src_err/82.pn:5
 // 構文解析エラー: 整数リテラルがintの範囲を1超える (異常系)
 void main(void) {
     int x;

@@ -1,3 +1,4 @@
+// expect: compiler error: circular reference in declaration of 'S' at src_err/137.pn:3
 // 意味解析エラー: 構造体メンバの配列サイズとconst変数の初期化子のsizeofが互いに依存して循環している (異常系)
 struct S { int m[N]; };
 struct S s;

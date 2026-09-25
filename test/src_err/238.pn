@@ -1,3 +1,4 @@
+// expect: compiler error: cannot take the address of 'main' at src_err/238.pn:3
 // 意味解析エラー: mainはプログラムの開始点であり，番地を取って呼び出すことはできない (異常系)
 void (*entry)(void) = main;
 void main(void) {

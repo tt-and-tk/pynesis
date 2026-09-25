@@ -1,3 +1,4 @@
+// expect: compiler error: scan target array must have at least 2 elements (1 for content plus 1 for null terminator) at src_err/61.pn:5
 // 意味解析エラー: scanの対象配列は最低2要素(内容1+ヌル終端1)必要 (異常系)
 void main(void) {
     char buf[1];

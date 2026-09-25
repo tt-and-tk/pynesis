@@ -1,3 +1,4 @@
+// expect: compiler error: division by zero at src_err/201.pn:3
 // 意味解析エラー: 定数式の符号なしの剰余でも0で割ることはできない (異常系)
 unsigned int g = 0xFFFFFFFF % 0;
 void main(void) {

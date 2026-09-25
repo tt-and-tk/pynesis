@@ -1,3 +1,4 @@
+// expect: compiler error: struct variable initializer is not supported at src_err/86.pn:7
 // 構造体変数の初期化子は非対応
 struct Tag {
     int v;

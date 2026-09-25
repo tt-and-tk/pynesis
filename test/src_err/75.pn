@@ -1,3 +1,4 @@
+// expect: compiler error: cannot use void value in expression at src_err/75.pn:7
 // 意味解析エラー: 配列インデックスにvoid値(scanの戻り値)は使えない (異常系)
 char buf[8];
 int arr[4];

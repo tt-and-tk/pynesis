@@ -1,3 +1,4 @@
+// expect: compiler error: newline in char literal at src_err/114.pn:4
 // 字句解析エラー: 文字リテラル中に改行がある (異常系)
 void main(void) {
     char c = '

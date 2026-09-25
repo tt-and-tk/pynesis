@@ -1,3 +1,4 @@
+// expect: compiler error: parameter cannot be void at src_err/246.pn:3
 // 構文解析エラー: void型の引数は宣言できない(関数ポインタの戻り値型としてのみvoidを書ける) (異常系)
 void f(void x) {
 }

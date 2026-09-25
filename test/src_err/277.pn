@@ -1,3 +1,4 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/277.pn:6
 // 意味解析エラー: 式文でも，戻り値のない関数呼び出しは++の対象にできない(書き込み先を持たないため) (異常系)
 void f(void) {
 }

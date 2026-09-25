@@ -1,3 +1,4 @@
+// expect: compiler error: 'zero' is a function and cannot be modified at src_err/255.pn:10
 // 意味解析エラー: 関数名へは代入できない(関数の番地を入れ替えるには関数ポインタの変数を使う) (異常系)
 int zero(void) {
     return 0;

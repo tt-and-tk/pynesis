@@ -1,3 +1,4 @@
+// expect: compiler error: cannot redeclare hardware register 'LED' at src_err/36.pn:4
 // 意味解析エラー: ハードウェアレジスタと同名のローカル変数は宣言できない (異常系)
 void main(void) {
     int LED;

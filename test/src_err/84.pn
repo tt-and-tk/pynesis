@@ -1,3 +1,4 @@
+// expect: compiler error: duplicate member 'x' in struct 'Dup' at src_err/84.pn:5
 // 構造体メンバ名の重複は禁止
 struct Dup {
     int x;

@@ -1,3 +1,4 @@
+// expect: compiler error: cannot convert 'int' to 'int *' in argument 1 (use nullptr for a null pointer) at src_err/54.pn:7
 // 意味解析エラー: ポインタのパラメータへ整数は渡せない (異常系)
 int first(int *arr) {
     return arr[0];

@@ -1,3 +1,4 @@
+// expect: compiler error: struct cannot be used as a value; access a member or take its address at src_err/249.pn:9
 // 意味解析エラー: 構造体へのポインタの指す先(構造体そのもの)は値として読めない．メンバを参照する (異常系)
 struct Tag {
     int x;

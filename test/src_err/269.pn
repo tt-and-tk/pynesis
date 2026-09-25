@@ -1,3 +1,4 @@
+// expect: compiler error: cannot dereference a function pointer; call it directly at src_err/269.pn:9
 // 意味解析エラー: 関数ポインタは間接参照できない(呼び出しは*を付けずにf(x)と書く) (異常系)
 int twice(int a) {
     return a * 2;

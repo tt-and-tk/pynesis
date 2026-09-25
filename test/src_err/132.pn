@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of 'LED' at src_err/132.pn:3
 // 意味解析エラー: ハードウェア変数と同名のグローバルのconst変数は宣言できない (異常系)
 const int LED = 1;
 void main(void) {

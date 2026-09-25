@@ -1,3 +1,4 @@
+// expect: compiler error: streq requires a char array at src_err/103.pn:6
 // 意味解析エラー: streqはchar配列にのみ対応 (int変数を渡すと異常系)
 void main(void) {
     int x;

@@ -1,3 +1,4 @@
+// expect: compiler error: struct 'Tag' has no member 'unknown' at src_err/87.pn:9
 // 存在しないメンバへのアクセスは禁止
 struct Tag {
     int v;

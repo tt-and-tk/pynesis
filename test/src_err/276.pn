@@ -1,3 +1,4 @@
+// expect: compiler error: cannot use void value in expression at src_err/276.pn:6
 // 意味解析エラー: 式文でも，式の途中で戻り値のない関数呼び出しの値は使えない(式全体がvoidである場合だけ許す) (異常系)
 void f(void) {
 }

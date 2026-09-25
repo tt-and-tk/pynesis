@@ -1,3 +1,4 @@
+// expect: compiler error: assignment is not supported for array or struct at src_err/156.pn:8
 // 意味解析エラー: 構造体変数そのものへ代入できない (グローバル，異常系)
 struct Tag {
     int x;
