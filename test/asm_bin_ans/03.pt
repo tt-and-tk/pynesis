@@ -32,6 +32,7 @@ main:
     rm fh r0 r0 65520
     rm fh r0 r0
     wm fh r0 r0 65504
+    mov fh r0 r30 0
     ret
 
 zero:

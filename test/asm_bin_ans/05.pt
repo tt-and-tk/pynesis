@@ -2,5 +2,6 @@
 
 main:
     mov fh r0 r0 1
-    wm fh r0 r0 32792
+    wm fh r0 r0 32800
+    mov fh r0 r30 0
     ret

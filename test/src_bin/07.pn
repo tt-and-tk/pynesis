@@ -1,0 +1,13 @@
+// 実行ファイル用: mainはシェルが渡したargc・argvを通常の関数と同じく引数領域から読み，return文の値をRAXに置いて戻る
+// (countは0xFFFC番地，firstは0xFFF8番地)
+int count;
+char first;
+
+int main(int argc, char **argv) {
+    count = argc;
+    // 引数が無ければ1を返して終える
+    if (argc < 2) {
+        return 1;
+    }
+    first = argv[1][0];
+}

@@ -1,0 +1,4 @@
+// 意味解析エラー: 実行ファイルのmainの引数の型は，符号まで含めてint・char **に限る (異常系)
+int main(unsigned int argc, char **argv) {
+    return 0;
+}

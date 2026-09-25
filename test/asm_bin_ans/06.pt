@@ -2,6 +2,7 @@
 
 main:
     call f
+    mov fh r0 r30 0
     ret
 
 f:

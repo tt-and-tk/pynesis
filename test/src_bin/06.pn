@@ -4,6 +4,6 @@ int table[8000];                  // 32000バイト
 void f(void) {
     int buf[1000];                // 4000バイト
 }
-void main(void) {
+int main(void) {
     f();
 }

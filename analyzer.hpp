@@ -155,6 +155,8 @@ private:
     symbol_t *register_const_var(const node_t *decl);
     // 型に構造体名が現れる場合(ポインタの指す先・関数ポインタの引数と戻り値を含む)，その構造体が定義済みであることを確かめる
     void check_type_exists(const type_t &type, const loc_t &loc) const;
+    // mainの定義が，出力先で許す形(ROMはvoid main(void)，実行ファイルはint main(void)かint main(int, char **))であることを確かめる
+    void check_main_signature(const node_t *func) const;
     // ポインタ型のグローバル変数の初期化子が，コンパイル時に値が決まる番地の式であることを確かめる
     // (変数の値・ローカル変数の番地・関数呼び出しを使う初期化子はエラーにする)
     void check_global_pointer_inits();

@@ -1,0 +1,4 @@
+// 意味解析エラー: 実行ファイルのmainの引数は，argcとargvの2つを揃えて受け取る形に限る (異常系)
+int main(int argc) {
+    return argc;
+}

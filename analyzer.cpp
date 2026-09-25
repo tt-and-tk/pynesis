@@ -448,17 +448,10 @@ void Analyzer::collect_globals() {
         // 全関数のシグネチャをここ(2パス目)で揃えておく．3パス目(analyze_functions)は，ここで作った引数の
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
-            // mainの場合 (プログラムの開始点であり，値を受け渡す呼び出し元が存在しないため，戻り値型はvoidで引数は取らない．
-            //  voidへのポインタは構文解析で拒否済みのため，基本型だけでvoidそのものかを判定できる)
+            // mainの場合 (出力先ごとに決まった形でだけ定義できる．ROMは値を受け渡す呼び出し元が存在しないため戻り値も引数も持たず，
+            //  実行ファイルはシェルが呼び出し元になり引数を渡して戻り値を受け取る)
             if (child->sval == "main") {
-                if (child->type.base != BASE_VOID) {
-                    throw std::string("compiler error: 'main' must return void at ") + loc_to_string(child->loc);
-                }
-                // 最後の子は関数本体ブロックのため，それより前に子があれば仮引数を持つ
-                if (child->children.size() > 1) {
-                    throw std::string("compiler error: 'main' cannot take parameters at ")
-                          + loc_to_string(child->loc);
-                }
+                this->check_main_signature(child);
             }
             // 戻り値型に構造体が現れる場合はその定義が済んでいるか確かめる
             this->check_type_exists(child->type, child->loc);
@@ -717,6 +710,31 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
         for (const type_t &param_type : type.func_sig->param_types) {
             this->check_type_exists(param_type, loc);
         }
+    }
+}
+
+// mainの定義が出力先で許す形であることを確かめる
+// 型は表記で比べる (仮引数にはconstを付けられないため，表記が一致すれば型も一致する)
+void Analyzer::check_main_signature(const node_t *func) const {
+    std::string signature = type_to_string(func->type) + " main(";   // 仮引数の名前を除いた定義の形
+    // 最後の子は関数本体ブロックのため，それより前の子を仮引数として並べる (仮引数が無ければ(void)と書く)
+    if (func->children.size() == 1) signature += "void";
+    for (size_t i = 0; i + 1 < func->children.size(); i++) {
+        if (i > 0) signature += ", ";
+        signature += type_to_string(func->children[i]->type);
+    }
+    signature += ")";
+
+    // 実行ファイルの場合 (シェルが引数を渡すため，引数を使わない形と受け取る形のどちらかにする)
+    if (this->is_bin_mode_) {
+        if (signature != "int main(void)" && signature != "int main(int, char **)") {
+            throw std::string("compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at ")
+                  + loc_to_string(func->loc);
+        }
+    }
+    // ROMの場合 (リセット後に実行が始まり，値を受け渡す呼び出し元が存在しないため)
+    else if (signature != "void main(void)") {
+        throw std::string("compiler error: 'main' must be 'void main(void)' at ") + loc_to_string(func->loc);
     }
 }
 

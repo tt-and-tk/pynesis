@@ -21,6 +21,6 @@ int zero(void) {
     return 0;
 }
 
-void main(void) {
+int main(void) {
     g = *p3;
 }

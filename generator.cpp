@@ -228,6 +228,10 @@ void Generator::gen_func_body(node_t *func) {
         this->gen_global_inits();
     }
     this->gen_block(func->children.back());   // 本体ブロック(最後の子)の文を生成する
+    // 実行ファイルのmainがreturn文を通らずに終端へ達した場合は，C言語と同じく0を返す (シェルへ不定の値を返さないため)
+    if (func->sval == "main" && this->analysis_.is_bin_mode) {
+        (*this->out_) << "    mov fh r0 " << RAX_REGISTER << " 0\n";   // RAX = 0
+    }
     // 関数末尾のret (全関数にretが1つ以上必要)．return文を通らずに終端へ達した場合の復帰でもある
     this->gen_frame_leave();
     (*this->out_) << "    ret\n";
