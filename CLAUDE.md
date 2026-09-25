@@ -67,7 +67,7 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2SV_NO_MAIN -o pn2sv.exe pn2sv.cpp pn2asm.c
 | `test/asm_ans/` | 期待値アセンブリ(`NN.pt`，手動作成) |
 | `test/src_bin/`・`test/asm_bin/`・`test/asm_bin_ans/` | Qosmosの実行ファイル用(`--bin-mode`)としてコンパイルする正常系の入力・出力・期待値．役割は`src/`・`asm/`・`asm_ans/`と同じで，連番は独立 |
 | `test/test.py` | 正常系テストスクリプト |
-| `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．1行目に書いたコンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
+| `test/src_err/` | 異常系Pynesisソースファイル(`NN.pn`．1行目に書いたメッセージのコンパイルエラーになることを確認する．正常系`src/`とは独立した連番) |
 | `test/src_err/include/` | 異常系のソースファイルが`#include`で取り込むファイル(`NN_<役割>.pn`．単独ではコンパイルしない) |
 | `test/test_err.py` | 異常系テストスクリプト |
 
