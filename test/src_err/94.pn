@@ -1,3 +1,4 @@
+// expect: compiler error: struct definition is only allowed at global scope at src_err/94.pn:4
 // 構造体定義は関数内(グローバル直下以外)では禁止
 void main(void) {
     struct Foo {

@@ -1,3 +1,4 @@
+// expect: compiler error: 'p' is a pointer to struct; use '->' to access its member at src_err/228.pn:9
 // 意味解析エラー: 構造体へのポインタのメンバは.ではなく->で参照する (異常系)
 struct Tag {
     int x;

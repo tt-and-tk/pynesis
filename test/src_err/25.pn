@@ -1,3 +1,4 @@
+// expect: compiler error: expression must be a constant expression at src_err/25.pn:6
 // 意味解析エラー: グローバル変数の初期化子は定数式でなければならない (関数呼び出しは不可，異常系)
 int f(void) {
     return 1;

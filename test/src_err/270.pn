@@ -1,3 +1,4 @@
+// expect: compiler error: 'other' is already declared as a function at src_err/270.pn:7
 // 意味解析エラー: 関数と同名のローカル変数は宣言できない(呼び出しの名前が関数と変数のどちらを指すか一意にするため) (異常系)
 int other(void) {
     return 3;

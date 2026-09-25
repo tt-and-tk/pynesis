@@ -1,3 +1,4 @@
+// expect: compiler error: '++' is not supported for array or struct at src_err/149.pn:8
 // 意味解析エラー: 構造体変数のメンバ配列そのものに++を適用できない (グローバル，異常系)
 struct Tag {
     int arr[4];

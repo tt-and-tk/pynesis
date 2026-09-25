@@ -1,3 +1,4 @@
+// expect: compiler error: cannot convert 'nullptr' to 'int' in initialization at src_err/259.pn:4
 // 意味解析エラー: nullptrは整数の変数へ代入できない (異常系)
 void main(void) {
     int x = nullptr;

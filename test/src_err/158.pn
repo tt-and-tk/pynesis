@@ -1,3 +1,4 @@
+// expect: compiler error: expression too complex (out of registers) at src_err/158.pn:5
 // 生成エラー: char変数の読み出しが最後の汎用レジスタ(r15)で行われ，符号拡張の作業用レジスタが枯渇する (異常系)
 char c;
 void main(void) {

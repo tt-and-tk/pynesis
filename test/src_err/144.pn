@@ -1,3 +1,4 @@
+// expect: compiler error: 'N' is not writable at src_err/144.pn:5
 // 意味解析エラー: const変数には代入できない (異常系)
 const int N = 1;
 void main(void) {

@@ -1,3 +1,4 @@
+// expect: compiler error: member access requires a pointer to struct, but got 'int *' at src_err/227.pn:6
 // 意味解析エラー: ->は構造体へのポインタにのみ使える (異常系)
 int g;
 void main(void) {

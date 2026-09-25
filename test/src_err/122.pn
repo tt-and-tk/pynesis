@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'C' is out of range for its type at src_err/122.pn:3
 // 意味解析エラー: char型のconst変数の値が型の範囲(-128〜127)を超える (異常系)
 const char C = 128;
 void main(void) {

@@ -1,3 +1,4 @@
+// expect: compiler error: cannot convert 'int *' to 'int' in initialization at src_err/212.pn:6
 // 意味解析エラー: ポインタを整数の変数へ代入することはできない (異常系)
 int g;
 void main(void) {

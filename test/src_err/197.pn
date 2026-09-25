@@ -1,3 +1,4 @@
+// expect: compiler error: incompatible pointer types in argument 1: expected 'char *' but got 'unsigned char *' at src_err/197.pn:7
 // 意味解析エラー: charへのポインタのパラメータへ符号の異なる要素型の配列(unsigned char)は渡せない (異常系)
 unsigned char buf[4];
 void f(char *s) {

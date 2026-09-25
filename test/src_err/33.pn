@@ -1,3 +1,4 @@
+// expect: compiler error: duplicate case value at src_err/33.pn:8
 // 意味解析エラー: switch文でcase値が重複している (異常系)
 void main(void) {
     int x = 1;

@@ -1,3 +1,4 @@
+// expect: compiler error: use of undeclared struct 'Unknown' at src_err/91.pn:4
 // 未定義の構造体タグの使用は禁止
 void main(void) {
     struct Unknown v;

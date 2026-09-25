@@ -1,3 +1,4 @@
+// expect: compiler error: use of undeclared identifier 'UNDEF' at src_err/139.pn:3
 // 意味解析エラー: 配列サイズの定数式に未宣言の名前は使えない (異常系)
 int a[UNDEF];
 void main(void) {

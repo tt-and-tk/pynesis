@@ -1,3 +1,4 @@
+// expect: compiler error: cannot take the address of an array; use the array itself or the address of its first element at src_err/217.pn:5
 // 意味解析エラー: 配列そのものの番地は取れない(配列へのポインタは非対応)．配列の名前が先頭要素の番地になる (異常系)
 int arr[4];
 void main(void) {

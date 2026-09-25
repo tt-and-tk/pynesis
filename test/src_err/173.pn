@@ -1,3 +1,4 @@
+// expect: compiler error: expected "file name" after '#include' at src_err/173.pn:3
 // 字句解析エラー: #includeに取り込むファイルのパスが無い (異常系)
 #include
 void main(void) {

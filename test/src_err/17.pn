@@ -1,4 +1,5 @@
-// 意味解析エラー: 変数の総アドレスが28ビットアドレス空間を超える (異常系)
+// expect: compiler error: global variables (268435460 bytes) exceed half of memory (32768 bytes)
+// 意味解析エラー: 変数の総サイズが28ビットアドレス空間も超えるほど大きい場合も，メモリの前半(32768バイト)の超過として検出する (異常系)
 int big[67108865];
 void main(void) {
 }

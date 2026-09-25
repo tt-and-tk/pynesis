@@ -1,3 +1,4 @@
+// expect: compiler error: unexpected text after directive at src_err/186.pn:3
 // 字句解析エラー: 指令の後ろの同じ行に，改行ではない単独のCRを挟んで宣言は書けない (異常系)
 #pragma onceint g;
 void main(void) {

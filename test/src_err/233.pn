@@ -1,3 +1,4 @@
+// expect: compiler error: invalid operands to binary '+' ('nullptr' and 'int') at src_err/233.pn:5
 // 意味解析エラー: nullptrに整数は足せない (異常系)
 int *q;
 void main(void) {

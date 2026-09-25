@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of 'N' at src_err/128.pn:4
 // 意味解析エラー: グローバルのconst変数と同名の変数は宣言できない (異常系)
 const int N = 1;
 int N;

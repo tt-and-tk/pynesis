@@ -1,3 +1,4 @@
+// expect: compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at src_err_bin/03.pn:3
 // 意味解析エラー: 実行ファイルのmainはシェルへ戻り値を返すため，戻り値型をvoidにできない (異常系)
 void main(void) {
 }

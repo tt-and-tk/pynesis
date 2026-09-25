@@ -1,3 +1,4 @@
+// expect: compiler error: use of undeclared struct 'Missing' at src_err/245.pn:4
 // 意味解析エラー: 定義されていない構造体へのポインタは宣言できない (異常系)
 void main(void) {
     struct Missing *p = nullptr;

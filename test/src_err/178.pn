@@ -1,3 +1,4 @@
+// expect: compiler error: directive must be at the beginning of a line at src_err/178.pn:3
 // 字句解析エラー: 指令は行頭に書く (宣言の後ろの同じ行には書けない) (異常系)
 int g; #include "include/178_lib.pn"
 void main(void) {

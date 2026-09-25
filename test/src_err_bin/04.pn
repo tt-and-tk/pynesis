@@ -1,3 +1,4 @@
+// expect: compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at src_err_bin/04.pn:3
 // 意味解析エラー: 実行ファイルのmainの引数は，argcとargvの2つを揃えて受け取る形に限る (異常系)
 int main(int argc) {
     return argc;

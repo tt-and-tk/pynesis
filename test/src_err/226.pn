@@ -1,3 +1,4 @@
+// expect: compiler error: switch condition must be an integer at src_err/226.pn:6
 // 意味解析エラー: switchの条件式にポインタは使えない (異常系)
 int g;
 void main(void) {

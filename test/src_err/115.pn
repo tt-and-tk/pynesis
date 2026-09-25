@@ -1,3 +1,4 @@
+// expect: compiler error: expression must be a constant expression at src_err/115.pn:3
 // 意味解析エラー: const変数の初期化子にハードウェア変数は使えない (異常系)
 const int N = DIPSW;
 void main(void) {

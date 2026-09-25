@@ -1,3 +1,4 @@
+// expect: compiler error: circular reference in declaration of 'S' at src_err/142.pn:3
 // 意味解析エラー: 構造体メンバの配列サイズが，その構造体の変数のsizeofに依存して循環している (異常系)
 struct S { int m[sizeof(s)]; };
 struct S s;

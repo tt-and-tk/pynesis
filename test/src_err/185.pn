@@ -1,3 +1,4 @@
+// expect: compiler error: directive must be at the beginning of a line at src_err/185.pn:3
 // 字句解析エラー: 指令の#は行の1文字目に書く (前に空白を置けない) (異常系)
     #include "include/185_lib.pn"
 void main(void) {

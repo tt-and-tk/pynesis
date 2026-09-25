@@ -1,3 +1,4 @@
+// expect: compiler error: print does not support pointers (the array size is unknown) at src_err/57.pn:4
 // 意味解析エラー: printはポインタ(指す先の配列のサイズ不明)には対応しない (異常系)
 void show(char *arr) {
     print(arr);

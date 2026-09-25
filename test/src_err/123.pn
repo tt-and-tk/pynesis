@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'S' is out of range for its type at src_err/123.pn:4
 // 意味解析エラー: short型のconst変数の値が型の範囲(-32768〜32767)を下回る (異常系)
 void main(void) {
     const short S = -32769;

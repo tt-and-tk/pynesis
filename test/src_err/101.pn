@@ -1,3 +1,4 @@
+// expect: compiler error: member access requires a struct, but got 'char' at src_err/101.pn:10
 // メンバ配列アクセスの結果(常にスカラー)に対する多段の.連鎖は非対応
 struct Entry {
     char name[4];

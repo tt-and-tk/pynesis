@@ -1,3 +1,4 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/214.pn:5
 // 意味解析エラー: 番地を持たない式(演算の結果)の番地は取れない (異常系)
 int a;
 void main(void) {

@@ -1,3 +1,4 @@
+// expect: compiler error: cannot cast 'void (*)(void)' to 'int *' (convert through an integer) at src_err/291.pn:9
 // 意味解析エラー: 関数ポインタはデータのポインタへ直接キャストできない (異常系)
 int *p;
 

@@ -1,3 +1,4 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/293.pn:7
 // 意味解析エラー: キャストの結果は番地を持たないため&を付けられない (異常系)
 int *p;
 

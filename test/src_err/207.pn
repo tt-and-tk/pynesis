@@ -1,3 +1,4 @@
+// expect: compiler error: expression too complex (out of registers) at src_err/207.pn:13
 // 生成エラー: 呼び出しを含む引数を保持するレジスタ(16本)が足りない (異常系)
 // 最後に呼び出しを含む引数までを同時に保持するため，引数が多いほどレジスタを使う
 int one(void) {

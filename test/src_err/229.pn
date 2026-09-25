@@ -1,3 +1,4 @@
+// expect: compiler error: print does not support an array member whose address is determined at run time at src_err/229.pn:9
 // 意味解析エラー: 番地が実行時に決まるメンバ配列(構造体ポインタの指す先のメンバ配列)はprintに渡せない (異常系)
 struct Entry {
     char name[4];

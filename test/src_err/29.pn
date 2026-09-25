@@ -1,3 +1,4 @@
+// expect: compiler error: non-void function 'f' must return a value at src_err/29.pn:4
 // 意味解析エラー: 非void関数はreturnで値を返さなければならない (異常系)
 int f(void) {
     return;

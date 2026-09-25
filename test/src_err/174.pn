@@ -1,3 +1,4 @@
+// expect: compiler error: unknown directive '#' at src_err/174.pn:3
 // 字句解析エラー: #と指令名の間に空白を書けない (異常系)
 # include "include/174_lib.pn"
 void main(void) {

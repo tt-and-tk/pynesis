@@ -1,3 +1,4 @@
+// expect: compiler error: cannot dereference 'nullptr' at src_err/219.pn:5
 // 意味解析エラー: nullptrは指す先の型を持たないため間接参照できない (異常系)
 int g;
 void main(void) {

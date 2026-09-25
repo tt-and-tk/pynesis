@@ -1,3 +1,4 @@
+// expect: compiler error: invalid operands to binary '<<' ('int *' and 'int') at src_err/225.pn:7
 // 意味解析エラー: ポインタはシフトできない (異常系)
 int arr[4];
 int *q;

@@ -1,3 +1,4 @@
+// expect: compiler error: struct cannot be used as a function parameter type at src_err/88.pn:7
 // 構造体を関数パラメータにすることは非対応
 struct Tag {
     int v;

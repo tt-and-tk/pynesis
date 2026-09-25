@@ -1,3 +1,4 @@
+// expect: compiler error: cannot take the address of 'main' at src_err/280.pn:4
 // 意味解析エラー: mainはプログラムの開始点であり，関数の中で番地を取って関数ポインタから呼び出すこともできない (異常系)
 void main(void) {
     void (*entry)(void) = main;
