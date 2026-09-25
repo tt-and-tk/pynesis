@@ -56,7 +56,7 @@ def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
         # 結果の表示では，どの組のテストかが分かるようディレクトリ名を付ける
         case_name = f"{src_name}/{src_file}"
         src_path = os.path.join(src_dir, src_file)
-        asm_name = src_file.replace(".pn", ".pt")
+        asm_name = os.path.splitext(src_file)[0] + ".pt"
         asm_path = os.path.join(asm_dir, asm_name)
         ans_path = os.path.join(ans_dir, asm_name)
 
