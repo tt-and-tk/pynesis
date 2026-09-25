@@ -1,0 +1,1 @@
+compiler error: invalid operands to binary '*' ('int *' and 'int') at src_err/224.pn:5

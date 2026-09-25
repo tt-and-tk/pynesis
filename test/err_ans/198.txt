@@ -1,0 +1,1 @@
+compiler error: incompatible pointer types in argument 1: expected 'int *' but got 'char *' at src_err/198.pn:6

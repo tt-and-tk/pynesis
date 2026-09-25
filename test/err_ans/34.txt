@@ -1,0 +1,1 @@
+compiler error: multiple default labels at src_err/34.pn:7

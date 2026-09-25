@@ -1,0 +1,1 @@
+compiler error: expected 'int', 'char' or 'short' after 'signed' at src_err/188.pn:3

@@ -1,0 +1,1 @@
+compiler error: cannot cast 'void (*)(void)' to 'int (*)(int)' (function pointer types differ) at src_err/303.pn:6

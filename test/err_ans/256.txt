@@ -1,0 +1,1 @@
+compiler error: expected identifier but got 'struct' at src_err/256.pn:7

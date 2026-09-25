@@ -1,0 +1,1 @@
+compiler error: const variable 'N' requires an initializer at src_err/146.pn:2

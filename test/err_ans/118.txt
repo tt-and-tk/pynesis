@@ -1,0 +1,1 @@
+compiler error: struct variable cannot be const at src_err/118.pn:3

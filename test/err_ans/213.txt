@@ -1,0 +1,1 @@
+compiler error: incompatible pointer types in initialization: expected 'char *' but got 'int *' at src_err/213.pn:4

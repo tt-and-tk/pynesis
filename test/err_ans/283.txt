@@ -1,0 +1,1 @@
+compiler error: 'main' must return void at src_err/283.pn:2

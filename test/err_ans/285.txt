@@ -1,0 +1,1 @@
+compiler error: cast to struct is not supported at src_err/285.pn:7

@@ -1,0 +1,1 @@
+compiler error: global variables (268435460 bytes) exceed memory capacity (65536 bytes)

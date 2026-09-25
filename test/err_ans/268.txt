@@ -1,0 +1,1 @@
+compiler error: cannot apply '&' to function 'zero'; write the function name alone to get its address at src_err/268.pn:6

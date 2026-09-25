@@ -1,0 +1,1 @@
+compiler error: initializer of global pointer 'p' must be nullptr, an address of a global variable or function, or an integer constant cast to a pointer at src_err/261.pn:4

@@ -1,0 +1,1 @@
+compiler error: cannot convert 'int *' to 'int' in initialization at src_err/212.pn:5

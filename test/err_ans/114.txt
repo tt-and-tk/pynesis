@@ -1,0 +1,1 @@
+compiler error: newline in char literal at src_err/114.pn:3

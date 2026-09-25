@@ -1,0 +1,1 @@
+compiler error: global variables (49152 bytes) and stack (19208 bytes) exceed memory capacity (65536 bytes)

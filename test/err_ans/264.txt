@@ -1,0 +1,1 @@
+compiler error: function pointer cannot be indexed at src_err/264.pn:8

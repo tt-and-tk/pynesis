@@ -1,0 +1,1 @@
+compiler error: comparison between 'int *' and 'int' at src_err/252.pn:6

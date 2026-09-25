@@ -1,0 +1,1 @@
+compiler error: 'zero' is a function and cannot be modified at src_err/255.pn:9

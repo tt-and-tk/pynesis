@@ -1,0 +1,1 @@
+compiler error: function pointer expects 1 argument(s) but got 2 at src_err/221.pn:7

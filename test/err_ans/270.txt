@@ -1,0 +1,1 @@
+compiler error: 'other' is already declared as a function at src_err/270.pn:6

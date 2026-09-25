@@ -1,0 +1,1 @@
+compiler error: invalid operands to '*=' ('int *' and 'int') at src_err/247.pn:5

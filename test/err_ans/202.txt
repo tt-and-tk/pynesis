@@ -1,0 +1,1 @@
+compiler error: expected identifier after type at src_err/202.pn:2

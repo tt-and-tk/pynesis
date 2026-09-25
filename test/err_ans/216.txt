@@ -1,0 +1,1 @@
+compiler error: cannot take the address of 'N' (it has no memory address) at src_err/216.pn:4

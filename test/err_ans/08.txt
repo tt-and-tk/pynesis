@@ -1,0 +1,1 @@
+compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/08.pn:3

@@ -1,0 +1,1 @@
+compiler error: cast type cannot be const at src_err/286.pn:6

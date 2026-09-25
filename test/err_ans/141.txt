@@ -1,0 +1,1 @@
+compiler error: circular reference in declaration of 'buf' at src_err/141.pn:2

@@ -1,0 +1,1 @@
+compiler error: 'undefined_var' is not declared at src_err/45.pn:3

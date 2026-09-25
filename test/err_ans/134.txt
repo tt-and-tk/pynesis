@@ -1,0 +1,1 @@
+compiler error: redefinition of 'N' at src_err/134.pn:4

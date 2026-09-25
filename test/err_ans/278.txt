@@ -1,0 +1,1 @@
+compiler error: cannot call 'main' at src_err/278.pn:3

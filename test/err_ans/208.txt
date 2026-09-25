@@ -1,0 +1,1 @@
+compiler error: array parameter is not supported; declare it as a pointer 'int *a' at src_err/208.pn:2

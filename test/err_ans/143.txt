@@ -1,0 +1,1 @@
+compiler error: circular reference in declaration of anonymous struct at src_err/143.pn:2

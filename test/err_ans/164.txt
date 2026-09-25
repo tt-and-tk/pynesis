@@ -1,0 +1,1 @@
+compiler error: redefinition of 'f' at src_err/164.pn:3

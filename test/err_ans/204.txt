@@ -1,0 +1,1 @@
+compiler error: value of const variable 'US' is out of range for its type at src_err/204.pn:2

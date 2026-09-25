@@ -1,0 +1,1 @@
+compiler error: print does not support pointers (the array size is unknown) at src_err/57.pn:3

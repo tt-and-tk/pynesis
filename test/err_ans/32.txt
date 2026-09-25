@@ -1,0 +1,1 @@
+compiler error: 'continue' outside loop at src_err/32.pn:3

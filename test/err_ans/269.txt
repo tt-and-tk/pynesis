@@ -1,0 +1,1 @@
+compiler error: cannot dereference a function pointer; call it directly at src_err/269.pn:8

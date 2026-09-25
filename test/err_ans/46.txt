@@ -1,0 +1,1 @@
+compiler error: 'BTN' is not writable at src_err/46.pn:3

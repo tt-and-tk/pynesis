@@ -1,0 +1,1 @@
+compiler error: expression must be a constant expression at src_err/115.pn:2

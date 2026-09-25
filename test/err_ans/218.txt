@@ -1,0 +1,1 @@
+compiler error: cannot dereference 'int' at src_err/218.pn:4

@@ -1,0 +1,1 @@
+compiler error: expected function or variable declaration at src_err/07.pn:2

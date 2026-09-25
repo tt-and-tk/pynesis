@@ -1,0 +1,1 @@
+compiler error: circular reference in declaration of 'a' at src_err/140.pn:2

@@ -1,0 +1,1 @@
+compiler error: cannot take the address of 'main' at src_err/280.pn:3

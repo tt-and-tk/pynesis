@@ -1,0 +1,1 @@
+compiler error: anonymous struct must declare a variable at src_err/90.pn:6

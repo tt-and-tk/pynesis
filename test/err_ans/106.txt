@@ -1,0 +1,1 @@
+compiler error: strcopy does not support an array member whose address is determined at run time at src_err/106.pn:10

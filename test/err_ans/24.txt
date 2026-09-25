@@ -1,0 +1,1 @@
+compiler error: division by zero at src_err/24.pn:2

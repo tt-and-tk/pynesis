@@ -1,0 +1,1 @@
+compiler error: use of undeclared identifier 'undefined_var' at src_err/62.pn:3

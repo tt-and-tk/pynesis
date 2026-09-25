@@ -1,0 +1,1 @@
+compiler error: streq does not support pointers (the array size is unknown) at src_err/104.pn:4

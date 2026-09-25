@@ -1,0 +1,1 @@
+compiler error: 'src_err/include/168_common.pn' is included more than once (add '#pragma once' to it) at src_err/include/168_b.pn:2

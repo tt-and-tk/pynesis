@@ -1,0 +1,1 @@
+compiler error: expected identifier but got '1' at src_err/22.pn:2

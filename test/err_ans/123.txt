@@ -1,0 +1,1 @@
+compiler error: value of const variable 'S' is out of range for its type at src_err/123.pn:3

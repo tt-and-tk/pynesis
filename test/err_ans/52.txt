@@ -1,0 +1,1 @@
+compiler error: call to undefined function 'undefined_func' at src_err/52.pn:3

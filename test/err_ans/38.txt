@@ -1,0 +1,1 @@
+compiler error: array size must be positive at src_err/38.pn:3

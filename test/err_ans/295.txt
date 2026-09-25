@@ -1,0 +1,1 @@
+compiler error: struct cannot be used as a value; access a member or take its address at src_err/295.pn:7

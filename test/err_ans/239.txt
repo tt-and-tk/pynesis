@@ -1,0 +1,1 @@
+compiler error: pointer to function pointer is not supported at src_err/239.pn:7

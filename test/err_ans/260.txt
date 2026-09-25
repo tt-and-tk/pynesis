@@ -1,0 +1,1 @@
+compiler error: cannot convert 'nullptr' to 'int' in return at src_err/260.pn:3

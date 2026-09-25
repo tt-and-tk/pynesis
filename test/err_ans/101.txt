@@ -1,0 +1,1 @@
+compiler error: member access requires a struct, but got 'char' at src_err/101.pn:9

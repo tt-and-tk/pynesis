@@ -1,0 +1,1 @@
+compiler error: cast to void is not supported at src_err/284.pn:4

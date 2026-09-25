@@ -1,0 +1,1 @@
+compiler error: redefinition of 'x' at src_err/35.pn:4

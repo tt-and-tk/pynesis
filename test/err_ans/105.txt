@@ -1,0 +1,1 @@
+compiler error: streq does not support an array member whose address is determined at run time at src_err/105.pn:10

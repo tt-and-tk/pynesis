@@ -1,0 +1,1 @@
+compiler error: scan does not support pointers (the array size is unknown) at src_err/60.pn:3

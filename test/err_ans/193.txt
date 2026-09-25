@@ -1,0 +1,1 @@
+compiler error: value of const variable 'X' is out of range for its type at src_err/193.pn:2

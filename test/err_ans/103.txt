@@ -1,0 +1,1 @@
+compiler error: streq requires a char array at src_err/103.pn:5

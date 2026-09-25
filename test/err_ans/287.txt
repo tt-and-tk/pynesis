@@ -1,0 +1,1 @@
+compiler error: void pointer is not supported at src_err/287.pn:6

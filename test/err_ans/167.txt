@@ -1,0 +1,1 @@
+compiler error: 'src_err/include/167_lib.pn' is included more than once (add '#pragma once' to it) at src_err/167.pn:3

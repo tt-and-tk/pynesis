@@ -1,0 +1,1 @@
+compiler error: unterminated char literal at src_err/67.pn:6

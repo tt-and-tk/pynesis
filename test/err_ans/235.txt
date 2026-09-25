@@ -1,0 +1,1 @@
+compiler error: invalid operands to binary '-' ('int *' and 'char *') at src_err/235.pn:8

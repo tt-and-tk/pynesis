@@ -1,0 +1,1 @@
+compiler error: cannot take the address of an array; use the array itself or the address of its first element at src_err/217.pn:4

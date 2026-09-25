@@ -1,0 +1,1 @@
+compiler error: expected type at src_err/12.pn:2

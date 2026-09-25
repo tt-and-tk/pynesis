@@ -1,0 +1,1 @@
+compiler error: invalid operands to binary '+' ('int (*)(void)' and 'int') at src_err/230.pn:7

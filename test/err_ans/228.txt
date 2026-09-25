@@ -1,0 +1,1 @@
+compiler error: 'p' is a pointer to struct; use '->' to access its member at src_err/228.pn:8

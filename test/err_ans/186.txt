@@ -1,0 +1,1 @@
+compiler error: unexpected text after directive at src_err/186.pn:2

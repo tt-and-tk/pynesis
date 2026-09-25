@@ -1,0 +1,1 @@
+compiler error: nested struct members are not supported at src_err/83.pn:6

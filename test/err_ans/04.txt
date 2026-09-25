@@ -1,0 +1,1 @@
+compiler error: unknown character '@' at src_err/04.pn:3

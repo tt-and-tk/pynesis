@@ -1,0 +1,1 @@
+compiler error: type name in cast cannot have a declarator name 'fp' at src_err/297.pn:5

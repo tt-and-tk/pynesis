@@ -1,0 +1,1 @@
+compiler error: cannot redeclare hardware register 'LED' at src_err/36.pn:3

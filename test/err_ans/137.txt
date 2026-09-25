@@ -1,0 +1,1 @@
+compiler error: circular reference in declaration of 'S' at src_err/137.pn:2

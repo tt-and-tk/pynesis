@@ -1,0 +1,1 @@
+compiler error: duplicate case value at src_err/33.pn:7
