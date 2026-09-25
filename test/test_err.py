@@ -90,15 +90,17 @@ def main():
     detected = []    # エラー検出成功(コンパイラが正しくコンパイルエラーを報告した)
     failed = []      # 失敗(エラー未検出・異常終了・エラーメッセージの出力漏れ)
 
+    # 全ての組を実行する (テストケースのない組があっても，残りの組は実行してから失敗とする)
+    all_found = True
     with tempfile.TemporaryDirectory() as tmpdir:
         for src_name, extra_args in SUITES:
             if not run_suite(src_name, extra_args, tmpdir, detected, failed):
-                sys.exit(1)
+                all_found = False
 
     print()
     print(f"成功(エラー検出): {len(detected)} 件 / 失敗: {len(failed)} 件")
 
-    if failed:
+    if not all_found or failed:
         sys.exit(1)
 
 if __name__ == "__main__":
