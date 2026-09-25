@@ -1457,7 +1457,8 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (sym == nullptr) {
                 // 関数名の場合 (呼び出しの括弧を付けずに書いた関数名は，その関数の番地(関数ポインタ)として扱う)
                 if (this->func_names_.count(expr->sval)) {
-                    // mainの場合 (プログラムの開始点としてだけ実行する関数のため，呼び出す手段を与えない．理由は直接呼び出しの検査と同じ)
+                    // mainの場合 (プログラムの開始点としてだけ実行する関数のため，呼び出す手段を与えない．
+                    //  呼び出せない理由は直接呼び出しの検査と同じ)
                     if (expr->sval == "main") {
                         throw std::string("compiler error: cannot take the address of 'main' at ")
                               + loc_to_string(expr->loc);
