@@ -9,7 +9,7 @@ main:
     add r1 r2 r1
     wm fh r1 r0
     mov fh r0 r0 2
-    mov fh r0 r1 16383
+    mov fh r0 r1 8191
     mov fh r0 r2 2
     sll r1 r2 r1
     mov fh r0 r2 0

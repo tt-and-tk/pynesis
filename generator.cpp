@@ -98,7 +98,7 @@ Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ofstr
 // コード生成を実行して .pt に書き出す
 void Generator::operator()() {
     this->gen_program();
-    // 全関数のフレームの大きさが確定したので，メモリ容量に収まるか検査する
+    // 全関数のフレームの大きさが確定したので，グローバル変数と合わせてメモリの前半に収まるか検査する
     this->check_memory_usage();
 }
 
@@ -1719,11 +1719,14 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
           + "' at " + loc_to_string(member_access->loc);
 }
 
-// グローバル変数とスタックがメモリ容量に収まるか検査する
-// ROM用ではスタックはメモリの上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
-// 互いの値を壊す(ハードウェアは検出しない)．実行ファイル用ではグローバル変数がスタックと別の領域
-// (メモリの後半)にあるため，この検査は合計がメモリ全体に収まることを確かめるだけで，重なりは検出しない
+// ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
+// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
+// 互いの値を壊す(ハードウェアは検出しない)
 void Generator::check_memory_usage() {
+    // 実行ファイル用の場合 (グローバル変数はスタックと別のメモリの後半にあり，スタックの空きは
+    //  呼び出された時点のSPで決まりコンパイル時に分からないため，検査しない)
+    if (this->analysis_.is_bin_mode) return;
+
     std::set<std::string> path;                // 現在の探索経路(再帰の検出用)
     std::map<std::string, int> recorded;       // 関数ごとに求めたスタック使用量
     bool is_recursive = false;                 // 探索中に再帰を見つけたか
@@ -1732,11 +1735,11 @@ void Generator::check_memory_usage() {
     // 再帰がある場合 (深さが実行時にしか決まらず使用量を見積もれないため，検査しない)
     if (is_recursive) return;
 
-    if (this->analysis_.global_size + stack_bytes > RAM_SIZE) {
+    if (this->analysis_.global_size + stack_bytes > RAM_HALF_SIZE) {
         throw std::string("compiler error: global variables (")
               + std::to_string(this->analysis_.global_size) + " bytes) and stack ("
-              + std::to_string(stack_bytes) + " bytes) exceed memory capacity ("
-              + std::to_string(RAM_SIZE) + " bytes)";
+              + std::to_string(stack_bytes) + " bytes) exceed first half of memory ("
+              + std::to_string(RAM_HALF_SIZE) + " bytes)";
     }
 }
 
