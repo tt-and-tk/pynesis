@@ -1204,7 +1204,8 @@ void Analyzer::analyze_call(node_t *expr) {
     }
     // 直接呼び出しの場合 (関数と同名の変数は宣言できないため，関数名は常に関数を指す)
     if (is_direct) {
-        // mainの場合 (プログラムの開始点であり，呼び出し元へ復帰できないため呼び出せない)
+        // mainの場合 (プログラムの開始点としてだけ実行する関数のため呼び出せない．
+        //  ROMのmainは呼び出し元へ復帰せず，実行ファイルのmainも先頭でグローバル変数の初期化をやり直してしまう)
         if (callee->sval == "main") {
             throw std::string("compiler error: cannot call 'main' at ") + loc_to_string(expr->loc);
         }
@@ -1455,7 +1456,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             if (sym == nullptr) {
                 // 関数名の場合 (呼び出しの括弧を付けずに書いた関数名は，その関数の番地(関数ポインタ)として扱う)
                 if (this->func_names_.count(expr->sval)) {
-                    // mainの場合 (プログラムの開始点であり，呼び出し元へ復帰できないため呼び出す手段を与えない)
+                    // mainの場合 (プログラムの開始点としてだけ実行する関数のため，呼び出す手段を与えない．理由は直接呼び出しの検査と同じ)
                     if (expr->sval == "main") {
                         throw std::string("compiler error: cannot take the address of 'main' at ")
                               + loc_to_string(expr->loc);
