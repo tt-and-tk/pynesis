@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include "pn2asm.hpp"
-#include "../assembler/asm2sv_main.hpp"
+#include "../assembler/asm2mc_main.hpp"
 
 // ファイル名が指定の拡張子で終わっているか判定する(短い名前での範囲外アクセスを防ぐ)
 static bool has_extension(const std::string &name, const std::string &ext) {
@@ -93,15 +93,15 @@ static bool check_args(int argc, char **argv, bool &is_bin) {
 }
 
 // メイン関数
-// compile_pn_to_asm(Pynesisソース→アセンブリ)とassemble_asm_to_sv(アセンブリ→SystemVerilog ROMまたは実行ファイル)を
+// compile_pn_to_asm(Pynesisソース→アセンブリ)とassemble_asm_to_mc(アセンブリ→SystemVerilog ROMまたは実行ファイル)を
 // 順に呼び出す入口．これが今後のコンパイラの入口となる(このプロジェクトのテスト対象はpn2asm.cppのままとする)．
 //
 // CLI: -pn(入力Pynesisファイル) -pt(中間アセンブリファイル) と，出力先として
 // -sv(出力SystemVerilog ROMファイル)・-bin(出力する実行ファイル)のどちらか一方(どちらも省略可)．
-// compile_pn_to_asmは-pn/-ptを，assemble_asm_to_svは-pt/-sv/-binを見て，互いに関係ないフラグは無視するため，
+// compile_pn_to_asmは-pn/-ptを，assemble_asm_to_mcは-pt/-sv/-binを見て，互いに関係ないフラグは無視するため，
 // 引数の検査を通過した後は同じargv一式を両方へ渡す．
 // ただし実行ファイルを出力する場合は，実行ファイル用のアセンブリを生成させるため，compile_pn_to_asmへ--bin-modeを足して渡す．
-// (--bin-modeは値を取らないが，assemble_asm_to_svは-で始まる引数の次を値として読むため，そちらへは渡さない)
+// (--bin-modeは値を取らないが，assemble_asm_to_mcは-で始まる引数の次を値として読むため，そちらへは渡さない)
 // 処理に成功したら0，失敗したら1を返す
 int main(int argc, char **argv) {
     bool is_bin = false;   // 実行ファイルを出力するか
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     if (compile_pn_to_asm(static_cast<int>(compile_argv.size()), compile_argv.data()) != 0) {
         return 1;
     }
-    if (assemble_asm_to_sv(argc, argv) != 0) {
+    if (assemble_asm_to_mc(argc, argv) != 0) {
         return 1;
     }
     return 0;
