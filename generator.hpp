@@ -130,7 +130,7 @@ private:
     // arg_count個の引数のindex番目を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
     static int calc_arg_offset(int arg_count, int index);
     int calc_spill_size(node_t *func);      // 関数が必要とするレジスタ退避領域のバイト数を求める
-    void check_memory_usage();   // グローバル変数とスタックがメモリ容量に収まるか検査する
+    void check_memory_usage();   // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
     // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
     // path: 現在の探索経路(再帰の検出用)．recorded: 関数ごとに求めた使用量(再訪時に使い回す)
     // 再帰を見つけた場合はis_recursiveをtrueにする

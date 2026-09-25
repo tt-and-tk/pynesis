@@ -67,7 +67,7 @@ int compile_pn_to_asm(int argc, char **argv) {
         asm_file.flush();
         asm_file.close();
 
-        // 出力命令数がROMの上限(MAX_INSTRUCTION_COUNT)を超えていないか確認する
+        // 出力命令数を数え，出力先の置き場所に収まるか確認する
         // (命令行は先頭が半角スペース．ラベル行・.global行は先頭にスペースを付けない規約で判定する．
         //  ただしコメント行(先頭の空白を除いた最初の文字が';')は命令行に含めない)
         std::ifstream check_file(args.pt_file_name);
@@ -80,7 +80,20 @@ int compile_pn_to_asm(int argc, char **argv) {
             }
         }
         check_file.close();
-        if (instruction_count > MAX_INSTRUCTION_COUNT) {
+        // 実行ファイル用の場合 (命令列はメモリの後半の先頭から上へ，グローバル変数は後半の上端から下へ伸びるため，
+        //  両者の合計が後半に収まる必要がある)
+        if (args.is_bin_mode) {
+            const int code_bytes = instruction_count * INSTRUCTION_BYTES;    // 命令列が占めるバイト数
+            const int global_bytes = analyzer.result().global_size;         // グローバル変数が占めるバイト数
+            if (code_bytes + global_bytes > RAM_HALF_SIZE) {
+                throw std::string("compiler error: instructions (")
+                      + std::to_string(code_bytes) + " bytes) and global variables ("
+                      + std::to_string(global_bytes) + " bytes) exceed second half of memory ("
+                      + std::to_string(RAM_HALF_SIZE) + " bytes)";
+            }
+        }
+        // ROM用の場合
+        else if (instruction_count > MAX_INSTRUCTION_COUNT) {
             throw std::string("compiler error: instruction count (")
                   + std::to_string(instruction_count) + ") exceeds maximum ("
                   + std::to_string(MAX_INSTRUCTION_COUNT) + ")";
