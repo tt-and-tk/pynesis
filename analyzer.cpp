@@ -122,13 +122,13 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->call_graph_[caller].insert(this->addr_taken_funcs_.begin(), this->addr_taken_funcs_.end());
     }
 
-    // グローバル変数・文字列リテラルだけでメモリを使い切っていないか確認する
-    // (スタックはメモリの上端から下へ伸びるため，残りがなければ関数を1つも呼び出せない．
-    //  スタックまで含めた容量の検査は，フレームの大きさが確定するコード生成で行う)
-    if (this->global_size_ > RAM_SIZE) {
+    // グローバル変数・文字列リテラルだけで，置き場所となるメモリの半分(ROM用は前半，実行ファイル用は後半)を
+    // 使い切っていないか確認する
+    // (ROM用のスタック・実行ファイル用の命令列と合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
+    if (this->global_size_ > RAM_HALF_SIZE) {
         throw std::string("compiler error: global variables (")
-              + std::to_string(this->global_size_) + " bytes) exceed memory capacity ("
-              + std::to_string(RAM_SIZE) + " bytes)";
+              + std::to_string(this->global_size_) + " bytes) exceed half of memory ("
+              + std::to_string(RAM_HALF_SIZE) + " bytes)";
     }
 
     return this->symbols_;
@@ -137,7 +137,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 // コード生成が参照する解析結果を返す
 analysis_result_t Analyzer::result() const {
     return {this->func_params_, this->struct_defs_, this->func_local_sizes_,
-            this->call_graph_, this->global_size_};
+            this->call_graph_, this->global_size_, this->is_bin_mode_};
 }
 
 // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
