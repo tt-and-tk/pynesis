@@ -1,1 +1,0 @@
-compiler error: scan requires a char array at src_err/59.pn:4

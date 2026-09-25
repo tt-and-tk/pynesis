@@ -1,3 +1,4 @@
+// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/09.pn:3
 // 構文解析エラー: 符号修飾子(unsigned)はvoidに付けられない (異常系)
 unsigned void f(void) {
 }

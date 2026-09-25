@@ -1,3 +1,4 @@
+// expect: compiler error: invalid operands to binary '-' ('int *' and 'char *') at src_err/235.pn:9
 // 意味解析エラー: 指す先の型が異なるポインタどうしの差は求められない (異常系)
 int ia[4];
 char ca[4];

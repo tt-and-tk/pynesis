@@ -1,3 +1,4 @@
+// expect: compiler error: nested struct members are not supported at src_err/102.pn:9
 // 構造体配列をメンバに持つこと(構造体のメンバとしての構造体配列)も，単一のネスト構造体メンバと
 // 同じ理由(ネスト構造体は非対応)で非対応．メンバの型を読んだ時点でBASE_STRUCTを弾くため，
 // 配列かどうか([要素数])を見るより前にエラーになる

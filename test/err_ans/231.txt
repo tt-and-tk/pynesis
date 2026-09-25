@@ -1,1 +1,0 @@
-compiler error: comparison between 'int (*)(void)' and 'int (*)(void)' at src_err/231.pn:8

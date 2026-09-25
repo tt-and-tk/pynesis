@@ -1,1 +1,0 @@
-compiler error: redefinition of 'LED' at src_err/132.pn:2

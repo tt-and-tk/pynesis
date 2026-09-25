@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of struct 'Tag' at src_err/93.pn:6
 // 構造体タグの再定義は禁止
 struct Tag {
     int v;

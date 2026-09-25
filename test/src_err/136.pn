@@ -1,3 +1,4 @@
+// expect: compiler error: 'N' is not readable and writable at src_err/136.pn:5
 // 意味解析エラー: グローバルのconst変数にも++は使えない (異常系)
 const int N = 1;
 void main(void) {

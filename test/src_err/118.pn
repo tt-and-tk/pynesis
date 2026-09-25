@@ -1,3 +1,4 @@
+// expect: compiler error: struct variable cannot be const at src_err/118.pn:4
 // 構文解析エラー: 構造体変数はconstにできない (異常系)
 struct S { int a; };
 const struct S s;

@@ -1,1 +1,0 @@
-compiler error: expected ')' but got '[' at src_err/240.pn:2

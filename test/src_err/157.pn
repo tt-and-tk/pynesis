@@ -1,3 +1,4 @@
+// expect: compiler error: assignment is not supported for array or struct at src_err/157.pn:8
 // 意味解析エラー: 構造体配列要素のメンバ配列そのものへ代入できない (ローカル，異常系)
 struct Entry {
     char name[4];

@@ -1,3 +1,4 @@
+// expect: compiler error: '++' is not supported for array or struct at src_err/150.pn:8
 // 意味解析エラー: 構造体変数そのものに++を適用できない (ローカル，異常系)
 struct Tag {
     int x;

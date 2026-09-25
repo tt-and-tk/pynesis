@@ -1,1 +1,0 @@
-compiler error: expected identifier but got 'strcopy' at src_err/111.pn:3

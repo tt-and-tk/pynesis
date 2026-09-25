@@ -1,1 +1,0 @@
-compiler error: expected identifier but got 'streq' at src_err/108.pn:3

@@ -1,1 +1,0 @@
-compiler error: 'main' cannot take parameters at src_err/282.pn:2

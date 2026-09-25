@@ -1,1 +1,0 @@
-compiler error: incompatible pointer types in initialization: expected 'int (*)(int)' but got 'void (*)(int)' at src_err/262.pn:5

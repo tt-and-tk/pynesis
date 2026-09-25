@@ -1,1 +1,0 @@
-compiler error: '++' is not supported for array or struct at src_err/150.pn:7

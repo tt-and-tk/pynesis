@@ -1,3 +1,4 @@
+// expect: compiler error: duplicate case value at src_err/196.pn:8
 // 意味解析エラー: ビット列が同じcase値(-1と0xFFFFFFFF)は重複になる (異常系)
 void main(void) {
     unsigned int x = 0;

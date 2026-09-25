@@ -1,1 +1,0 @@
-compiler error: newline in string literal at src_err/02.pn:3

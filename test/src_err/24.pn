@@ -1,3 +1,4 @@
+// expect: compiler error: division by zero at src_err/24.pn:3
 // 意味解析エラー: グローバル初期化子でのゼロ除算 (異常系)
 int x = 1 / 0;
 void main(void) {

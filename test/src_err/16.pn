@@ -1,3 +1,4 @@
+// expect: compiler error: 'main' function is not defined
 // 意味解析エラー: main関数が定義されていない (異常系)
 void f(void) {
 }

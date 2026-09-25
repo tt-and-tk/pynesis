@@ -1,1 +1,0 @@
-compiler error: circular reference in declaration of 'N' at src_err/126.pn:2

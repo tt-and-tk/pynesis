@@ -1,1 +1,0 @@
-compiler error: function return type cannot be const at src_err/120.pn:2

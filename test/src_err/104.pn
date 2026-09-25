@@ -1,3 +1,4 @@
+// expect: compiler error: streq does not support pointers (the array size is unknown) at src_err/104.pn:5
 // 意味解析エラー: streqはポインタ(指す先の配列のサイズ不明)には対応しない (異常系)
 void compare(char *arr) {
     char buf[4];

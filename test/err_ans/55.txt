@@ -1,1 +1,0 @@
-compiler error: cannot convert 'int *' to 'int' in argument 1 at src_err/55.pn:7

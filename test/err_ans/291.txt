@@ -1,1 +1,0 @@
-compiler error: cannot cast 'void (*)(void)' to 'int *' (convert through an integer) at src_err/291.pn:8

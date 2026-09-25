@@ -1,3 +1,4 @@
+// expect: compiler error: cannot cast nullptr at src_err/288.pn:6
 // 意味解析エラー: nullptrはポインタへキャストできない(キャストせずにどのポインタへも格納できるため) (異常系)
 int *p;
 

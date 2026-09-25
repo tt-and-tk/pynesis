@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of 'f' at src_err/164.pn:4
 // 意味解析エラー: 取り込んだファイルで定義した関数と同名の関数を定義する (異常系)
 #include "include/164_lib.pn"
 int f(void) {

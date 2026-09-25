@@ -1,1 +1,0 @@
-compiler error: redefinition of struct 'Tag' at src_err/93.pn:5

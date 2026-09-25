@@ -1,3 +1,4 @@
+// expect: compiler error: expected identifier but got 'struct' at src_err/256.pn:8
 // 構文解析エラー: sizeofに構造体へのポインタの型名は書けない(構造体の型名はsizeofの対象外のため) (異常系)
 struct Tag {
     int x;

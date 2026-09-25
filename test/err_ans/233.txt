@@ -1,1 +1,0 @@
-compiler error: invalid operands to binary '+' ('nullptr' and 'int') at src_err/233.pn:4

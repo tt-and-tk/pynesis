@@ -1,3 +1,4 @@
+// expect: compiler error: circular include of 'src_err/170.pn' at src_err/include/170_lib.pn:3
 // 字句解析エラー: #pragma onceを取り込み指令より後ろに書いたファイルが，循環して取り込まれる (異常系)
 #include "include/170_lib.pn"
 #pragma once

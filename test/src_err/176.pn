@@ -1,3 +1,4 @@
+// expect: compiler error: file ends in the middle of a declaration at src_err/include/176_open.pn:3
 // 字句解析エラー: 取り込むファイルは関数本体を開いたまま終われない (取り込み元で閉じて内容をつなげると関数定義として正しくてもエラー) (異常系)
 #include "include/176_open.pn"
 }

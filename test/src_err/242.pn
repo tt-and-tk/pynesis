@@ -1,3 +1,4 @@
+// expect: compiler error: invalid operand to unary '-' ('int *') at src_err/242.pn:7
 // 意味解析エラー: ポインタに単項マイナスは使えない (異常系)
 int arr[4];
 int *q;

@@ -1,1 +1,0 @@
-compiler error: cannot take the address of 'BTN' (it has no memory address) at src_err/215.pn:3

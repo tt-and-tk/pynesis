@@ -1,1 +1,0 @@
-compiler error: struct variable initializer is not supported at src_err/86.pn:6

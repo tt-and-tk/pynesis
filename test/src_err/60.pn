@@ -1,3 +1,4 @@
+// expect: compiler error: scan does not support pointers (the array size is unknown) at src_err/60.pn:4
 // 意味解析エラー: scanはポインタ(指す先の配列のサイズ不明)には対応しない (異常系)
 void read_line(char *arr) {
     scan(arr);

@@ -1,3 +1,4 @@
+// expect: compiler error: incompatible pointer types in initialization: expected 'int (*)(int)' but got 'void (*)(int)' at src_err/262.pn:6
 // 意味解析エラー: 戻り値型が異なる関数の番地は，関数ポインタへ代入できない (void (*)(int) → int (*)(int)) (異常系)
 void nothing(int a) {
 }

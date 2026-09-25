@@ -1,3 +1,4 @@
+// expect: compiler error: expression too complex (out of registers) at src_err/65.pn:4
 // 生成エラー: 式のネストが深くレジスタ(16本)が枯渇する (異常系)
 void main(void) {
     int x = (1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+(1+1))))))))))))))))))));

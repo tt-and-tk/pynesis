@@ -1,1 +1,0 @@
-compiler error: void function 'f' cannot return a value at src_err/30.pn:3

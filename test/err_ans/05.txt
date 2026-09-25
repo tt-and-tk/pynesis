@@ -1,1 +1,0 @@
-compiler error: expected ';' but got '}' at src_err/05.pn:4

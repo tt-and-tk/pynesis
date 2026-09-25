@@ -1,1 +1,0 @@
-compiler error: circular include of 'src_err/169.pn' at src_err/include/169_lib.pn:2

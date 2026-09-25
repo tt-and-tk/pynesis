@@ -1,1 +1,0 @@
-compiler error: assignment is not supported for array or struct at src_err/152.pn:4

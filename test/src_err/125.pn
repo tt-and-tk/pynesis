@@ -1,3 +1,4 @@
+// expect: compiler error: expected identifier after type at src_err/125.pn:3
 // 構文解析エラー: constは型名より前にのみ書ける (異常系)
 int const N = 1;
 void main(void) {

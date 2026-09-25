@@ -1,3 +1,4 @@
+// expect: compiler error: cannot cast nullptr at src_err/289.pn:6
 // 意味解析エラー: nullptrは整数へキャストできない (異常系)
 unsigned int r;
 

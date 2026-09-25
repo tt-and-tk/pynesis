@@ -1,3 +1,4 @@
+// expect: compiler error: initializer of global pointer 'p' must be nullptr, an address of a global variable or function, or an integer constant cast to a pointer at src_err/299.pn:4
 // 意味解析エラー: 変数の値をポインタへキャストした式は，ポインタのグローバル変数の初期化子に書けない (異常系)
 int x;
 int *p = (int *)x;

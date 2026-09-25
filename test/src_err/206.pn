@@ -1,3 +1,4 @@
+// expect: compiler error: global variables (32768 bytes) and stack (32780 bytes) exceed memory capacity (65536 bytes)
 // 生成エラー: グローバル変数とスタックの合計がメモリ容量(65536バイト)を超える (異常系)
 // 呼び出しの段ごとにローカル変数のフレームが積まれるため，深いほどスタックを多く使う
 int table[8192];

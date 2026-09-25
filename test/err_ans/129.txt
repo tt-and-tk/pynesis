@@ -1,1 +1,0 @@
-compiler error: struct member cannot be const at src_err/129.pn:2

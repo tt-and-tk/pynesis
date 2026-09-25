@@ -1,1 +1,0 @@
-compiler error: 'LED' is not readable and writable at src_err/51.pn:3

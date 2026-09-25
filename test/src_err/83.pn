@@ -1,3 +1,4 @@
+// expect: compiler error: nested struct members are not supported at src_err/83.pn:7
 // ネスト構造体メンバは非対応
 struct Inner {
     int v;

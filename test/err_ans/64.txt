@@ -1,1 +1,0 @@
-compiler error: 'x' is not an array or pointer at src_err/64.pn:4

@@ -1,3 +1,4 @@
+// expect: compiler error: redefinition of 'f' at src_err/133.pn:4
 // 意味解析エラー: グローバルのconst変数と同名の関数は定義できない (異常系)
 const int f = 1;
 void f(void) {

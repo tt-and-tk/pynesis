@@ -1,1 +1,0 @@
-compiler error: cannot shadow hardware register 'LED' at src_err/69.pn:2

@@ -1,1 +1,0 @@
-compiler error: string literal can only initialize char array at src_err/19.pn:2

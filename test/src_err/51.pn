@@ -1,3 +1,4 @@
+// expect: compiler error: 'LED' is not readable and writable at src_err/51.pn:4
 // 意味解析エラー: 書き込み専用ハードウェア変数(LED)への++は読み書き両方が必要なため不可 (異常系)
 void main(void) {
     LED++;

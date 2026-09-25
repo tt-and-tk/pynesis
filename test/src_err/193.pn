@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'X' is out of range for its type at src_err/193.pn:3
 // 意味解析エラー: 0xFFFFFFFFはunsigned int型のため，int型のconst変数の範囲外になる (異常系)
 const int X = 0xFFFFFFFF;
 void main(void) {

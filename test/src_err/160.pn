@@ -1,3 +1,4 @@
+// expect: compiler error: unknown directive '#define' at src_err/160.pn:3
 // 字句解析エラー: #includeと#pragma以外の指令は書けない (異常系)
 #define N 1
 void main(void) {

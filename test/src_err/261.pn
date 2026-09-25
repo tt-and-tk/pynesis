@@ -1,3 +1,4 @@
+// expect: compiler error: initializer of global pointer 'p' must be nullptr, an address of a global variable or function, or an integer constant cast to a pointer at src_err/261.pn:5
 // 意味解析エラー: グローバルのポインタの初期化子で，配列要素の添字は定数式でなければならない (異常系)
 int n = 1;
 int table[4];

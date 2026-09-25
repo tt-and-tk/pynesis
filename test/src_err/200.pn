@@ -1,3 +1,4 @@
+// expect: compiler error: array size is too large at src_err/200.pn:3
 // 意味解析エラー: 配列の要素数がintで表せない (異常系)
 char buf[0x80000000];
 void main(void) {

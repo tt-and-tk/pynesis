@@ -1,1 +1,0 @@
-compiler error: unknown pragma 'pack' at src_err/171.pn:2

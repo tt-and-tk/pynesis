@@ -1,3 +1,4 @@
+// expect: compiler error: circular include of 'src_err/169.pn' at src_err/include/169_lib.pn:2
 // 字句解析エラー: #pragma onceが無いファイルどうしで循環して取り込む (異常系)
 #include "include/169_lib.pn"
 void main(void) {

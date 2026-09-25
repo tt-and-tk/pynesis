@@ -1,3 +1,4 @@
+// expect: compiler error: unterminated char literal at src_err/67.pn:7
 // 字句解析エラー: 文字リテラルに2文字入っている (異常系)
 // 01.cと同じthrow箇所(unterminated char literal)に落ちる．
 // 字句解析器は文字本体を常に1文字(またはエスケープ1つ)だけ消費して閉じ'を期待するため，

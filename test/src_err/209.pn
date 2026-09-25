@@ -1,3 +1,4 @@
+// expect: compiler error: void pointer is not supported at src_err/209.pn:4
 // 構文解析エラー: voidへのポインタは非対応 (異常系)
 void main(void) {
     void *p;

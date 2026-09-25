@@ -1,3 +1,4 @@
+// expect: compiler error: cannot call 'main' at src_err/279.pn:4
 // 意味解析エラー: mainはプログラムの開始点であり，他の関数から呼び出すことはできない (異常系)
 void restart(void) {
     main();

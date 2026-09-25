@@ -1,1 +1,0 @@
-compiler error: duplicate member 'x' in struct 'Dup' at src_err/84.pn:4

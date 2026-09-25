@@ -1,1 +1,0 @@
-compiler error: scan target array must have at least 2 elements (1 for content plus 1 for null terminator) at src_err/61.pn:4

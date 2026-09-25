@@ -1,1 +1,0 @@
-compiler error: parameter cannot be void at src_err/246.pn:2

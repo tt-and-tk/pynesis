@@ -1,3 +1,4 @@
+// expect: compiler error: circular reference in declaration of 'buf' at src_err/141.pn:3
 // 意味解析エラー: 配列のサイズが自身のsizeofに依存して循環している (異常系)
 int buf[sizeof(buf)];
 void main(void) {

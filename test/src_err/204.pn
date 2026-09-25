@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'US' is out of range for its type at src_err/204.pn:3
 // 意味解析エラー: unsigned short型のconst変数の値が型の範囲(0〜65535)を超える (異常系)
 const unsigned short US = 65536;
 void main(void) {

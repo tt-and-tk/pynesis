@@ -1,1 +1,0 @@
-compiler error: print requires a char array at src_err/56.pn:4

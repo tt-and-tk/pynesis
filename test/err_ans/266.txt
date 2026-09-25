@@ -1,1 +1,0 @@
-compiler error: expected identifier but got 'const' at src_err/266.pn:4

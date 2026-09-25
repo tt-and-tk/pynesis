@@ -1,1 +1,0 @@
-compiler error: expected identifier after type at src_err/110.pn:2

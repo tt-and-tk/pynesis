@@ -1,1 +1,0 @@
-compiler error: included file 'include/166_lib.txt' must have .pn extension at src_err/166.pn:2

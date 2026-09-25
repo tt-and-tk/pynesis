@@ -1,1 +1,0 @@
-compiler error: cannot convert 'int' to 'int *' in initialization (use nullptr for a null pointer) at src_err/211.pn:3

@@ -1,1 +1,0 @@
-compiler error: 'value' is already declared as a function at src_err/271.pn:5

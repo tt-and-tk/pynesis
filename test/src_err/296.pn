@@ -1,3 +1,4 @@
+// expect: compiler error: cannot use void value in expression at src_err/296.pn:9
 // 意味解析エラー: 戻り値のない関数呼び出しはキャストできない(値を持たないため) (異常系)
 int r;
 

@@ -1,1 +1,0 @@
-compiler error: comparison between 'int *' and 'nullptr' at src_err/234.pn:6

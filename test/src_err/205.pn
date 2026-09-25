@@ -1,3 +1,4 @@
+// expect: compiler error: global variables (65540 bytes) exceed memory capacity (65536 bytes)
 // 意味解析エラー: グローバル変数だけでメモリ容量(65536バイト)を超える (異常系)
 int table[16385];
 void main(void) {

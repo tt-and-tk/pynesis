@@ -1,3 +1,4 @@
+// expect: compiler error: void function 'f' cannot return a value at src_err/30.pn:4
 // 意味解析エラー: void関数は値を返してはいけない (異常系)
 void f(void) {
     return 1;

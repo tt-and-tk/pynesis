@@ -1,1 +1,0 @@
-compiler error: 'break' outside loop or switch at src_err/31.pn:3

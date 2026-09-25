@@ -1,3 +1,4 @@
+// expect: compiler error: '#include' is only allowed between global declarations at src_err/175.pn:4
 // 字句解析エラー: #includeは構造体定義の中に書けない (異常系)
 struct S {
 #include "include/175_member.pn"

@@ -1,3 +1,4 @@
+// expect: compiler error: value of const variable 'C' is out of range for its type at src_err/192.pn:3
 // 意味解析エラー: unsigned char型のconst変数の値が型の範囲(0〜255)を超える (異常系)
 const unsigned char C = 256;
 void main(void) {

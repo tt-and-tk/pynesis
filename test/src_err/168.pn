@@ -1,3 +1,4 @@
+// expect: compiler error: 'src_err/include/168_common.pn' is included more than once (add '#pragma once' to it) at src_err/include/168_b.pn:2
 // 字句解析エラー: #pragma onceが無いファイルを，別々のファイルを経由して間接的に2回取り込む (異常系)
 #include "include/168_a.pn"
 #include "include/168_b.pn"

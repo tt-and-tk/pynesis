@@ -1,1 +1,0 @@
-compiler error: struct cannot be used as a function parameter type at src_err/88.pn:6

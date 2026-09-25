@@ -1,1 +1,0 @@
-compiler error: array size is too large at src_err/200.pn:2

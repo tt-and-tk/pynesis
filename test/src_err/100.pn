@@ -1,3 +1,4 @@
+// expect: compiler error: expected ';' but got '=' at src_err/100.pn:8
 // 構造体配列の初期化子は非対応 (単一構造体変数と同様，メンバ初期化の仕組みが無い)
 struct Tag {
     int v;

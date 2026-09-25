@@ -1,1 +1,0 @@
-compiler error: type mismatch in conditional expression ('int *' and 'int') at src_err/243.pn:6

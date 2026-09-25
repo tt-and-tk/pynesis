@@ -1,1 +1,0 @@
-compiler error: cannot use void value in expression at src_err/72.pn:5

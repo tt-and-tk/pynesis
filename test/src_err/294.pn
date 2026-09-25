@@ -1,3 +1,4 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/294.pn:5
 // 意味解析エラー: キャストの結果は左辺値ではないため++できない (異常系)
 void main(void) {
     int x = 0;

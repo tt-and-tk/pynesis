@@ -1,3 +1,4 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/49.pn:4
 // 意味解析エラー: ++/--の対象は変数でなければならない (異常系)
 void main(void) {
     1++;
