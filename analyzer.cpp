@@ -1205,7 +1205,8 @@ void Analyzer::analyze_call(node_t *expr) {
     // 直接呼び出しの場合 (関数と同名の変数は宣言できないため，関数名は常に関数を指す)
     if (is_direct) {
         // mainの場合 (プログラムの開始点としてだけ実行する関数のため呼び出せない．
-        //  ROMのmainは呼び出し元へ復帰せず，実行ファイルのmainも先頭でグローバル変数の初期化をやり直してしまう)
+        //  ROMのmainは呼び出し元へ復帰しない．
+        //  実行ファイルのmainは先頭でグローバル変数の初期化をやり直してしまう)
         if (callee->sval == "main") {
             throw std::string("compiler error: cannot call 'main' at ") + loc_to_string(expr->loc);
         }
