@@ -27,7 +27,6 @@ main:
     sll r0 r1 r0
     sra r0 r1 r0
     wm 1h r0 r0 65528
-    mov fh r0 r30 0
     mov fh r0 r0 8
     add r16 r0 r16
     ret

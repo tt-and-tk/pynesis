@@ -23,5 +23,4 @@ main:
     mov fh r0 r1 1
     add r0 r1 r0
     wm fh r0 r0 65532
-    mov fh r0 r30 0
     ret

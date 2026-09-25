@@ -33,5 +33,4 @@ main:
     add r0 r5 r0
     jmp .L2
 .L3:
-    mov fh r0 r30 0
     ret
