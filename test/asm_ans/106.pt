@@ -1,0 +1,12 @@
+.global f, main
+
+main:
+    call f
+    ret
+
+f:
+    mov fh r0 r0 4092
+    sub r16 r0 r16
+    mov fh r0 r0 4092
+    add r16 r0 r16
+    ret
