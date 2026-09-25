@@ -2,6 +2,6 @@
 // tableは0x801C番地，lastは0x8018番地に置かれ，命令列の末尾(0x8017番地)のすぐ上に接する
 int table[8185];
 int last;
-void main(void) {
+int main(void) {
     last = 1;
 }

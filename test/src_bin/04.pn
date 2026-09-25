@@ -2,7 +2,7 @@
 // (countは0xFFFC番地，"OK"は0xFFF8番地)．どちらもmainの先頭で書き込む
 int count = 3;
 
-void main(void) {
+int main(void) {
     print("OK");
     count = count + 1;
 }

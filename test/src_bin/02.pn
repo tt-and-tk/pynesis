@@ -8,7 +8,7 @@ void set(int *p, int v) {
     *p = v;
 }
 
-void main(void) {
+int main(void) {
     int x = 1;
     int *lp = &x;
     gp = &g;

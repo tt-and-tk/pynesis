@@ -1,6 +1,6 @@
 // expect: compiler error: global variables (32772 bytes) exceed half of memory (32768 bytes)
 // 意味解析エラー: グローバル変数だけでメモリの後半(32768バイト)を超える (異常系)
 int table[8193];
-void main(void) {
+int main(void) {
     table[0] = 0;
 }

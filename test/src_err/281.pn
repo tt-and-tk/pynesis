@@ -1,5 +1,5 @@
-// expect: compiler error: 'main' must return void at src_err/281.pn:3
-// 意味解析エラー: mainには値を受け取る呼び出し元が存在しないため，戻り値型はvoidに限る (異常系)
+// expect: compiler error: 'main' must be 'void main(void)' at src_err/281.pn:3
+// 意味解析エラー: ROMのmainには値を受け取る呼び出し元が存在しないため，戻り値型はvoidに限る (異常系)
 int main(void) {
     return 0;
 }

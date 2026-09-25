@@ -1,0 +1,5 @@
+// expect: compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at src_err_bin/06.pn:3
+// 意味解析エラー: 実行ファイルのmainのargvは，ポインタの段数まで含めてchar **に限る (異常系)
+int main(int argc, char *argv) {
+    return 0;
+}
