@@ -162,7 +162,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 実行ファイル用なら，メモリの後半の上端から下へ詰める
+        // 実行ファイル用なら，メモリの後半のうち実行ファイルが使える範囲の末尾から下へ詰める
         // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はメモリの後半の先頭から上へ伸びるため)
         if (this->is_bin_mode_) return g_bin_global_end_addr - this->global_size_;
         // ROM用なら，0番地から上へ詰める
