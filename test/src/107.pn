@@ -1,0 +1,24 @@
+// 関数ポインタを通した呼び出しで，呼び出す関数ポインタと型が一致する関数どうしが互いを呼ぶ場合は，
+// 呼び出しが循環する(再帰である)とみなし，スタック使用量の検査を行わずにコンパイルできる
+// (循環を見落とすと，pingのフレームとグローバル変数の合計がメモリの前半を超えるとしてコンパイルエラーになる)
+int table[6144];                  // 24576バイト
+int ping(int n) {
+    int buf[2400];                // 9600バイト (フレームを大きくする)
+    int (*next)(int) = pong;
+    buf[0] = n;
+    if (n > 0) {
+        return next(n - 1) + buf[0];
+    }
+    return 0;
+}
+int pong(int n) {
+    int (*next)(int) = ping;
+    if (n > 0) {
+        return next(n - 1);
+    }
+    return 0;
+}
+void main(void) {
+    int (*start)(int) = ping;
+    table[0] = start(3);
+}
