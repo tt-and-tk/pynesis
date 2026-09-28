@@ -8,30 +8,30 @@ main:
     mov fh r0 r0 0
     add r16 r0 r0
     wmr fh r16 r0 4
-    mov fh r0 r0 65532
-    wm fh r0 r0 65528
+    mov fh r0 r0 65528
+    wm fh r0 r0 65524
     mov fh r0 r0 5
-    rm fh r0 r1 65528
+    rm fh r0 r1 65524
     wm fh r1 r0
     rmr fh r16 r0 4
     wmr fh r16 r0 -12
-    rm fh r0 r0 65528
+    rm fh r0 r0 65524
     rm fh r0 r0
     mov fh r0 r1 1
     add r0 r1 r0
     wmr fh r16 r0 -8
     call set
     rmr fh r16 r0 0
-    wm fh r0 r0 65524
+    wm fh r0 r0 65520
     mov fh r0 r0 80000000h
     wmr fh r16 r0 4
     rmr fh r16 r0 4
     mov fh r0 r1 80000000h
     ne r0 r1 .L0
-    rm fh r0 r0 65524
+    rm fh r0 r0 65520
     mov fh r0 r1 10
     add r0 r1 r0
-    wm fh r0 r0 65524
+    wm fh r0 r0 65520
 .L0:
     rmr fh r16 r0 4
     mov fh r0 r1 80000000h
@@ -43,12 +43,12 @@ main:
 .L3:
     mov fh r0 r1 0
     eq r0 r1 .L1
-    rm fh r0 r0 65524
+    rm fh r0 r0 65520
     mov fh r0 r1 100
     add r0 r1 r0
-    wm fh r0 r0 65524
+    wm fh r0 r0 65520
 .L1:
-    rm fh r0 r0 65528
+    rm fh r0 r0 65524
     mov fh r0 r1 80000000h
     eq r0 r1 .L5
     rmr fh r16 r0 4
@@ -62,7 +62,7 @@ main:
     mov fh r0 r1 0
     eq r0 r1 .L4
     mov fh r0 r0 0
-    wm fh r0 r0 65524
+    wm fh r0 r0 65520
 .L4:
     mov fh r0 r0 8
     add r16 r0 r16

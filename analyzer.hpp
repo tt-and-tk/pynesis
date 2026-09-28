@@ -12,6 +12,9 @@ const int RAM_SIZE = 65536;
 // メインメモリの前半・後半それぞれの大きさ(バイト)
 // (ROM用ではグローバル変数とスタックが前半に，実行ファイル用ではグローバル変数と命令列が後半に収まる必要がある)
 const int RAM_HALF_SIZE = RAM_SIZE / 2;
+// Qosmosの取り決め: メインメモリの後半のうち，実行ファイルの命令列とグローバル変数を置ける大きさ(バイト)
+// (後半の末尾のワードは，シェルがシステムコールの入口の番地を書き込むため使えない)
+const int BIN_AREA_SIZE = RAM_HALF_SIZE - 4;
 // ハードウェア制約: ROM用のプログラムの最大命令数
 // (ROM自体に固定容量は無く，ROM_SIZEはコンパイル対象プログラムのサイズに応じてアセンブラが自動算出する．
 //  プログラムカウンタのビット幅(14ビット)がちょうど表現できる命令数であり，アセンブラの上限とも揃える．
@@ -84,7 +87,7 @@ struct analysis_result_t {
     // 関数名→ローカル変数領域のバイト数 (コード生成がスタックフレームの大きさを決めるのに使う)
     const std::map<std::string, int> &func_local_sizes;
     // 関数名→呼び出しうる関数名の集合 (コード生成が最大スタック使用量を求めるのに使う．
-    //  関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された全関数を呼びうるものとして含める)
+    //  関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された関数のうち型が一致するものを呼びうるものとして含める)
     const std::map<std::string, std::set<std::string>> &call_graph;
     int global_size;   // グローバル変数・文字列リテラルが占めるバイト数
     bool is_bin_mode;  // Qosmosの実行ファイル用に解析したか (falseならROM用)
@@ -113,7 +116,7 @@ private:
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, std::shared_ptr<func_sig_t>> func_sigs_;  // 関数名→シグネチャ (関数の番地の型と呼び出しの引数検査に使う)
     std::set<std::string> addr_taken_funcs_;             // 番地を取得された関数名 (関数ポインタを通して呼ばれうる関数)
-    std::set<std::string> indirect_callers_;             // 関数ポインタを通した呼び出しを含む関数(呼び出し元)の名前
+    std::map<std::string, std::vector<type_t>> indirect_call_types_;  // 関数ポインタを通した呼び出しを含む関数(呼び出し元)の名前→呼び出した関数ポインタの型の並び
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)

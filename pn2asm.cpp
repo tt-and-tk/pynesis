@@ -80,16 +80,16 @@ int compile_pn_to_asm(int argc, char **argv) {
             }
         }
         check_file.close();
-        // 実行ファイル用の場合 (命令列はメモリの後半の先頭から上へ，グローバル変数は後半の上端から下へ伸びるため，
-        //  両者の合計が後半に収まる必要がある)
+        // 実行ファイル用の場合 (命令列はメモリの後半の先頭から上へ，グローバル変数は後半のうち実行ファイルが使える範囲の
+        //  末尾から下へ伸びるため，両者の合計がその範囲に収まる必要がある)
         if (args.is_bin_mode) {
             const int code_bytes = instruction_count * INSTRUCTION_BYTES;    // 命令列が占めるバイト数
             const int global_bytes = analyzer.result().global_size;         // グローバル変数が占めるバイト数
-            if (code_bytes + global_bytes > RAM_HALF_SIZE) {
+            if (code_bytes + global_bytes > BIN_AREA_SIZE) {
                 throw std::string("compiler error: instructions (")
                       + std::to_string(code_bytes) + " bytes) and global variables ("
-                      + std::to_string(global_bytes) + " bytes) exceed second half of memory ("
-                      + std::to_string(RAM_HALF_SIZE) + " bytes)";
+                      + std::to_string(global_bytes) + " bytes) exceed area for executable ("
+                      + std::to_string(BIN_AREA_SIZE) + " bytes)";
             }
         }
         // ROM用の場合

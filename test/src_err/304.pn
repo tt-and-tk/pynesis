@@ -1,0 +1,20 @@
+// expect: compiler error: global variables (24576 bytes) and stack (9632 bytes) exceed first half of memory (32768 bytes)
+// コード生成エラー: 関数ポインタを通した呼び出しは，番地を取得された関数のうち呼び出した関数ポインタと型が一致するものだけを呼びうるものとして見積もる
+// walkが呼ぶvisitの型(int (*)(int))とdispatchの型(int (*)(int, int))は異なるため，walkからdispatchへ戻る循環は無いとみなし，
+// 再帰として検査を諦めずに，dispatchのフレームを含むスタックとグローバル変数の合計がメモリの前半を超えることを検出する (異常系)
+int table[6144];                  // 24576バイト
+int walk(int (*visit)(int)) {
+    return visit(1);
+}
+int on_item(int x) {
+    return x;
+}
+int dispatch(int number, int value) {
+    int buf[2400];                // 9600バイト (フレームを大きくする)
+    buf[0] = value;
+    return walk(on_item) + buf[0];
+}
+void main(void) {
+    int (*entry)(int, int) = dispatch;
+    table[0] = entry(0, 1);
+}
