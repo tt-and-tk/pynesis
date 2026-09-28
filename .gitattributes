@@ -1,0 +1,4 @@
+# コンパイラはLFで出力するため，期待値もgitの改行コード設定(core.autocrlf)によらずLFでチェックアウトする
+# 入力の.pnはCRLFのものも読めることをテストで確かめているため(取り込むファイルの改行コードなど)，対象を期待値に限り改行コードを固定しない
+test/asm_ans/*.pt text eol=lf
+test/asm_bin_ans/*.pt text eol=lf
