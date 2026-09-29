@@ -1,4 +1,8 @@
 # コンパイラはLFで出力するため，期待値もgitの改行コード設定(core.autocrlf)によらずLFでチェックアウトする
-# 入力の.pnはCRLFのものも読めることをテストで確かめているため(取り込むファイルの改行コードなど)，対象を期待値に限り改行コードを固定しない
 test/asm_ans/*.pt text eol=lf
 test/asm_bin_ans/*.pt text eol=lf
+# 正常系の入力はLFで書き，LFのソースをコンパイルできることを確かめる
+test/src/**/*.pn text eol=lf
+test/src_bin/*.pn text eol=lf
+# CRLFのソースもコンパイルできることを確かめるため，CRLFで書いた取り込みファイルは改行コードを変換せずに保つ
+test/src/include/51_comment.pn -text
