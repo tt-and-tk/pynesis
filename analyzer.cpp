@@ -120,8 +120,11 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     // 型が一致するものを呼びうるものとして呼び出しグラフに加える (スタック使用量を少なく見積もらないため)
     // 型が異なる関数は，言語仕様によりその関数ポインタへ格納できず，呼ばれることがないため加えない
     // (整数を経由したキャストでは格納できてしまうが，型が食い違う呼び出しの結果は保証しない)
+    // 関数ポインタを通した呼び出しを含む関数(呼び出し元)ごとに調べる
     for (const auto &[caller, call_types] : this->indirect_call_types_) {
+        // 呼び出し元が行う関数ポインタを通した呼び出しごとに，呼び出した関数ポインタの型を調べる
         for (const type_t &call_type : call_types) {
+            // 番地を取得された関数ごとに，呼び出した関数ポインタと型が一致するかを調べる
             for (const std::string &func : this->addr_taken_funcs_) {
                 // 呼び出した関数ポインタと，関数を指す関数ポインタの型が一致する場合
                 if (Analyzer::is_same_type(call_type, this->func_pointer_type(func))) {
