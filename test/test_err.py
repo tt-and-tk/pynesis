@@ -1,5 +1,6 @@
 """
 test/src_err/*.pn・test/src_err_bin/*.pn を全てコンパイルし，コンパイラが期待どおりのコンパイルエラーを報告することを確認するテストスクリプト．
+コンパイラをビルドしてから各 .pn をコンパイルする．
 src_err/ はROM用，src_err_bin/ はQosmosの実行ファイル用(--bin-mode)としてコンパイルする．
 - 各ファイルの1行目に「// expect: <期待するメッセージ>」の形で期待するエラーメッセージを書く．
 - 終了コードが1，かつ出力が期待するメッセージと完全に一致した場合を「成功(エラー検出)」とする．
@@ -17,9 +18,9 @@ import subprocess
 import sys
 import tempfile
 
+from compiler_build import PN2ASM, build_compiler
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-COMPILER_DIR = os.path.dirname(SCRIPT_DIR)
-PN2ASM = os.path.join(COMPILER_DIR, "pn2asm.exe")
 ERROR_RETURNCODE = 1                    # コンパイルエラー時の終了コード
 ERROR_PREFIX = "compiler error:"        # コンパイルエラー時に出力される行の接頭辞
 TEST_DIR_PREFIX = SCRIPT_DIR.replace(os.sep, "/") + "/"  # 出力中のパスのうちtestディレクトリまでの部分(コンパイラはパス区切りを/で出力する)
@@ -121,6 +122,10 @@ def run_suite(src_name, extra_args, tmpdir, detected, failed):
     return True
 
 def main():
+    # まずコンパイラをビルドする
+    if not build_compiler():
+        sys.exit(1)
+
     detected = []    # エラー検出成功(コンパイラが期待どおりのコンパイルエラーを報告した)
     failed = []      # 失敗(エラー未検出・異常終了・エラーメッセージの出力漏れ・期待と異なるエラー)
 

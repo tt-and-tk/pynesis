@@ -10,30 +10,15 @@ import os
 import subprocess
 import sys
 
+from compiler_build import PN2ASM, build_compiler
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-COMPILER_DIR = os.path.dirname(SCRIPT_DIR)
-PN2ASM = os.path.join(COMPILER_DIR, "pn2asm.exe")
 
 # テストの組: (入力ディレクトリ, 出力ディレクトリ, 期待値ディレクトリ, コンパイラへ追加で渡す引数)
 SUITES = [
     ("src", "asm", "asm_ans", []),
     ("src_bin", "asm_bin", "asm_bin_ans", ["--bin-mode"]),
 ]
-
-# ビルド対象のソース一式
-SOURCES = ["lexer.cpp", "parser.cpp", "analyzer.cpp", "generator.cpp", "pn2asm.cpp"]
-
-def build_compiler():
-    """コンパイラをビルドする。成功すれば True を返す。"""
-    cmd = ["g++", "-Wall", "-Wextra", "-std=c++17", "-o", PN2ASM]
-    cmd += [os.path.join(COMPILER_DIR, s) for s in SOURCES]
-    # g++の警告はソース中の日本語コメントを引用するため，Windows既定のcp932ではなくUTF-8で読む
-    result = subprocess.run(cmd, capture_output=True, encoding="utf-8", errors="backslashreplace")
-    if result.returncode != 0:
-        print("[BUILD FAIL] コンパイラのビルドに失敗しました")
-        print(result.stderr.strip())
-        return False
-    return True
 
 def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
               compile_success, compile_fail, compare_pass, compare_fail):
