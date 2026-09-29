@@ -1,0 +1,95 @@
+.global ping, pong, main
+
+main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 ping
+    wmr fh r16 r0 0
+    rmr fh r16 r0 0
+    mov fh r0 r1 3
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
+    wm fh r1 r0
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+ping:
+    mov fh r0 r0 9608
+    sub r16 r0 r16
+    mov fh r0 r0 pong
+    wmr fh r16 r0 9600
+    rmr fh r16 r0 9604
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    wm fh r1 r0
+    rmr fh r16 r0 9604
+    mov fh r0 r1 0
+    elt r0 r1 .L0
+    rmr fh r16 r0 9600
+    rmr fh r16 r1 9604
+    mov fh r0 r2 1
+    sub r1 r2 r1
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r1 0
+    mov fh r0 r2 2
+    sll r1 r2 r1
+    mov fh r0 r2 0
+    add r16 r2 r2
+    add r1 r2 r1
+    rm fh r1 r1
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 9608
+    add r16 r0 r16
+    ret
+.L0:
+    mov fh r0 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 9608
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 9608
+    add r16 r0 r16
+    ret
+
+pong:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+    mov fh r0 r0 ping
+    wmr fh r16 r0 0
+    rmr fh r16 r0 4
+    mov fh r0 r1 0
+    elt r0 r1 .L1
+    rmr fh r16 r0 0
+    rmr fh r16 r1 4
+    mov fh r0 r2 1
+    sub r1 r2 r1
+    wmr fh r16 r1 -8
+    call r0
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+.L1:
+    mov fh r0 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret

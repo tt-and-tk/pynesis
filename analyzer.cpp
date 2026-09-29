@@ -5,8 +5,8 @@
 
 // ROM用のグローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
 static const int g_global_base_addr = 0x0000000;
-// 実行ファイル用のグローバル変数の配置終了アドレス (メモリの末尾の直後．ここから下へ順次割り当てる)
-static const int g_bin_global_end_addr = RAM_SIZE;
+// 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
+static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
 // ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
 // 読み書き可否はハードウェア実装(mypc/alu.svh)に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
@@ -116,10 +116,22 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
 
-    // 関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された全関数を呼びうるものとして
-    // 呼び出しグラフに加える (スタック使用量を少なく見積もらないため)
-    for (const std::string &caller : this->indirect_callers_) {
-        this->call_graph_[caller].insert(this->addr_taken_funcs_.begin(), this->addr_taken_funcs_.end());
+    // 関数ポインタを通した呼び出しは呼び出し先が実行時に決まるため，番地を取得された関数のうち，呼び出した関数ポインタと
+    // 型が一致するものを呼びうるものとして呼び出しグラフに加える (スタック使用量を少なく見積もらないため)
+    // 型が異なる関数は，言語仕様によりその関数ポインタへ格納できず，呼ばれることがないため加えない
+    // (整数を経由したキャストでは格納できてしまうが，型が食い違う呼び出しの結果は保証しない)
+    // 関数ポインタを通した呼び出しを含む関数(呼び出し元)ごとに調べる
+    for (const auto &[caller, call_types] : this->indirect_call_types_) {
+        // 呼び出し元が行う関数ポインタを通した呼び出しごとに，呼び出した関数ポインタの型を調べる
+        for (const type_t &call_type : call_types) {
+            // 番地を取得された関数ごとに，呼び出した関数ポインタと型が一致するかを調べる
+            for (const std::string &func : this->addr_taken_funcs_) {
+                // 呼び出した関数ポインタと，関数を指す関数ポインタの型が一致する場合
+                if (Analyzer::is_same_type(call_type, this->func_pointer_type(func))) {
+                    this->call_graph_[caller].insert(func);
+                }
+            }
+        }
     }
 
     // グローバル変数・文字列リテラルだけで，置き場所となるメモリの半分(ROM用は前半，実行ファイル用は後半)を
@@ -153,7 +165,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 実行ファイル用なら，メモリの後半の上端から下へ詰める
+        // 実行ファイル用なら，メモリの後半のうち実行ファイルが使える範囲の末尾から下へ詰める
         // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はメモリの後半の先頭から上へ伸びるため)
         if (this->is_bin_mode_) return g_bin_global_end_addr - this->global_size_;
         // ROM用なら，0番地から上へ詰める
@@ -1225,7 +1237,7 @@ void Analyzer::analyze_call(node_t *expr) {
             throw std::string("compiler error: called object is not a function or function pointer at ")
                   + loc_to_string(expr->loc);
         }
-        this->indirect_callers_.insert(this->current_function_);
+        this->indirect_call_types_[this->current_function_].push_back(callee->type);
     }
 
     // 渡す引数の数が，呼び出す関数の引数の数と一致するか検証する

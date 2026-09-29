@@ -2,10 +2,10 @@
 
 main:
     mov fh r0 r0 3
-    wm fh r0 r0 65532
-    mov fh r0 r0 19279
     wm fh r0 r0 65528
-    mov fh r0 r1 65528
+    mov fh r0 r0 19279
+    wm fh r0 r0 65524
+    mov fh r0 r1 65524
     mov fh r0 r0 0
     mov fh r0 r3 3
     mov fh r0 r4 0
@@ -19,8 +19,8 @@ main:
     add r0 r5 r0
     jmp .L0
 .L1:
-    rm fh r0 r0 65532
+    rm fh r0 r0 65528
     mov fh r0 r1 1
     add r0 r1 r0
-    wm fh r0 r0 65532
+    wm fh r0 r0 65528
     ret
