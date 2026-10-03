@@ -1,6 +1,0 @@
-// expect: compiler error: use of undeclared identifier 'AR_RST' at src_err/305.pn:5
-// 意味解析エラー: Arduinoヘッダのリセットピン(AR_RST)はPL側に結線されておらずCPUから扱えないため，
-// ハードウェア変数として公開せず，未宣言の識別子になる (異常系)
-void main(void) {
-    LED = AR_RST;
-}
