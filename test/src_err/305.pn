@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared identifier 'AR_RST' at src_err/305.pn:4
+// 意味解析エラー: 空き番地(6'h29)はハードウェア変数として公開しないため，AR_RSTは未宣言の識別子になる (異常系)
+void main(void) {
+    LED = AR_RST;
+}
