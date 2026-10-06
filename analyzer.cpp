@@ -656,9 +656,16 @@ const_value_t Analyzer::eval_const_binop(const node_t *expr, const const_value_t
     else if (op == "&")  result = lv & rv;
     else if (op == "|")  result = lv | rv;
     else if (op == "^")  result = lv ^ rv;
-    // シフト量は実行時と同じく下位5ビット(0〜31)のみを使う．右シフトは符号付きなら算術，符号なしなら論理になる
-    else if (op == "<<") result = static_cast<long long>((ulv << (rv & 31)) & 0xFFFFFFFFULL);
-    else if (op == ">>") result = lv >> (rv & 31);
+    // シフト量は実行時と同じく，右辺の32ビットのビット列を符号なし整数とみなした値を使う(負の値も32以上になる)．
+    // 32以上なら全ビットがあふれ，左シフトは0，右シフトは左辺の符号ビットで埋めた値になる．
+    // 32以上をC++のシフト演算子へそのまま渡さないのは，64以上で未定義動作になるため．
+    // 右シフトは符号付きなら算術，符号なしなら論理になる(符号なしの左辺は負にならないため，符号ビットで埋めた値は0になる)
+    else if (op == "<<" || op == ">>") {
+        const unsigned long long amount = urv & 0xFFFFFFFFULL;   // シフト量
+        if (amount >= 32)    result = (op == ">>" && lv < 0) ? -1 : 0;
+        else if (op == "<<") result = static_cast<long long>((ulv << amount) & 0xFFFFFFFFULL);
+        else                 result = lv >> amount;
+    }
     else {
         throw std::string("compiler error: expression must be a constant expression at ")
               + loc_to_string(expr->loc);
