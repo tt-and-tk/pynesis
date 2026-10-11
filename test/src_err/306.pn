@@ -1,0 +1,5 @@
+// expect: compiler error: 'PMOD_B' is not readable at src_err/306.pn:4
+// 意味解析エラー: 書き込み専用ハードウェア変数(PMOD_B)は読み取れない (異常系)
+void main(void) {
+    int x = PMOD_B;
+}

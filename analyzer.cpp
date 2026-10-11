@@ -16,16 +16,16 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"DIPSW",     {BASE_INT, false}, LOC_REGISTER, 0x21, true,  false},  // DIPスイッチ
     {"LED",       {BASE_INT, false}, LOC_REGISTER, 0x22, false, true},   // LED
     {"RGBLED",    {BASE_INT, false}, LOC_REGISTER, 0x23, false, true},   // RGB LED
-    {"PMOD_A",    {BASE_INT, false}, LOC_REGISTER, 0x24, true,  true},   // Pmod A
-    {"PMOD_B",    {BASE_INT, false}, LOC_REGISTER, 0x25, true,  true},   // Pmod B
-    {"AR8_13",    {BASE_INT, false}, LOC_REGISTER, 0x26, true,  true},   // Arduinoピン AR8～AR13
-    {"AR_I2C",    {BASE_INT, false}, LOC_REGISTER, 0x27, true,  true},   // A，AR_SDA，AR_SCL
-    {"AR0_7",     {BASE_INT, false}, LOC_REGISTER, 0x28, true,  true},   // Arduinoピン AR0～AR7
+    {"PMOD_A",    {BASE_INT, false}, LOC_REGISTER, 0x24, false, true},   // Pmod A
+    {"PMOD_B",    {BASE_INT, false}, LOC_REGISTER, 0x25, false, true},   // Pmod B
+    {"AR8_13",    {BASE_INT, false}, LOC_REGISTER, 0x26, false, true},   // Arduinoピン AR8～AR13
+    {"AR_I2C",    {BASE_INT, false}, LOC_REGISTER, 0x27, false, true},   // A，AR_SDA，AR_SCL
+    {"AR0_7",     {BASE_INT, false}, LOC_REGISTER, 0x28, false, true},   // Arduinoピン AR0～AR7
     {"AR_SPI",    {BASE_INT, false}, LOC_REGISTER, 0x2a, true,  true},   // AR_MISO，AR_SCK，AR_MOSI，AR_SS
-    {"GPIO0_7",   {BASE_INT, false}, LOC_REGISTER, 0x2d, true,  true},   // GPIO0～7
-    {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, true,  true},   // GPIO8～15
-    {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, true,  true},   // GPIO16～23
-    {"GPIO24_27", {BASE_INT, false}, LOC_REGISTER, 0x30, true,  true},   // GPIO24～27
+    {"GPIO0_7",   {BASE_INT, false}, LOC_REGISTER, 0x2d, false, true},   // GPIO0～7
+    {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, false, true},   // GPIO8～15
+    {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, false, true},   // GPIO16～23
+    {"GPIO24_27", {BASE_INT, false}, LOC_REGISTER, 0x30, false, true},   // GPIO24～27
 };
 
 // 値を32ビットで折り返し，符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に正規化する
