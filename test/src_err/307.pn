@@ -1,5 +1,5 @@
-// expect: compiler error: 'AR8_13' is not readable at src_err/307.pn:4
-// 意味解析エラー: 書き込み専用ハードウェア変数(AR8_13)は読み取れない (異常系)
+// expect: compiler error: 'AR_I2C' is not readable at src_err/307.pn:4
+// 意味解析エラー: 書き込み専用ハードウェア変数(AR_I2C)は読み取れない (異常系)
 void main(void) {
-    int x = AR8_13;
+    int x = AR_I2C;
 }

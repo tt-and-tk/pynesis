@@ -18,7 +18,7 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"RGBLED",    {BASE_INT, false}, LOC_REGISTER, 0x23, false, true},   // RGB LED
     {"PMOD_A",    {BASE_INT, false}, LOC_REGISTER, 0x24, false, true},   // Pmod A
     {"PMOD_B",    {BASE_INT, false}, LOC_REGISTER, 0x25, false, true},   // Pmod B
-    {"AR8_13",    {BASE_INT, false}, LOC_REGISTER, 0x26, false, true},   // Arduinoピン AR8～AR13
+    {"ETH_SPI",   {BASE_INT, false}, LOC_REGISTER, 0x26, true,  true},   // Ethernetモジュール(W5100S)のSCK，MISO，MOSI，CSn，RSTn，INTn(Arduinoピン AR8～AR13)
     {"AR_I2C",    {BASE_INT, false}, LOC_REGISTER, 0x27, false, true},   // A，AR_SDA，AR_SCL
     {"AR0_7",     {BASE_INT, false}, LOC_REGISTER, 0x28, false, true},   // Arduinoピン AR0～AR7
     {"AR_SPI",    {BASE_INT, false}, LOC_REGISTER, 0x2a, true,  true},   // AR_MISO，AR_SCK，AR_MOSI，AR_SS
