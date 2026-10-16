@@ -8,7 +8,7 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (ボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
+// ハードウェア変数の定義表 (公開するのはピンへ入出力するボードI/Oレジスタだけで，CPU内部レジスタは含めない)
 // 読み書き可否はレジスタの仕様に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
@@ -22,10 +22,9 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"AR_I2C",    {BASE_INT, false}, LOC_REGISTER, 0x27, false, true},   // A，AR_SDA，AR_SCL
     {"AR0_7",     {BASE_INT, false}, LOC_REGISTER, 0x28, false, true},   // Arduinoピン AR0～AR7
     {"AR_SPI",    {BASE_INT, false}, LOC_REGISTER, 0x2a, true,  true},   // AR_MISO，AR_SCK，AR_MOSI，AR_SS
-    {"GPIO0_7",   {BASE_INT, false}, LOC_REGISTER, 0x2d, false, true},   // GPIO0～7
     {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, false, true},   // GPIO8～15
     {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, false, true},   // GPIO16～23
-    {"GPIO24_27", {BASE_INT, false}, LOC_REGISTER, 0x30, false, true},   // GPIO24～27
+    {"GPIO24_26", {BASE_INT, false}, LOC_REGISTER, 0x30, false, true},   // GPIO24～26
 };
 
 // 値を32ビットで折り返し，符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に正規化する

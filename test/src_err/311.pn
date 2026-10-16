@@ -1,5 +1,5 @@
-// expect: compiler error: 'GPIO16_23' is not readable at src_err/311.pn:4
-// 意味解析エラー: 書き込み専用ハードウェア変数(GPIO16_23)は読み取れない (異常系)
+// expect: compiler error: 'GPIO24_26' is not readable at src_err/311.pn:4
+// 意味解析エラー: 書き込み専用ハードウェア変数(GPIO24_26)は読み取れない (異常系)
 void main(void) {
-    int x = GPIO16_23;
+    int x = GPIO24_26;
 }

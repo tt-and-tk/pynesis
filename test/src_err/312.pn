@@ -1,5 +1,0 @@
-// expect: compiler error: 'GPIO24_27' is not readable at src_err/312.pn:4
-// 意味解析エラー: 書き込み専用ハードウェア変数(GPIO24_27)は読み取れない (異常系)
-void main(void) {
-    int x = GPIO24_27;
-}
