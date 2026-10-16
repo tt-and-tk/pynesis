@@ -1,0 +1,5 @@
+// expect: compiler error: 'GPIO24_27' is not declared at src_err/313.pn:4
+// 意味解析エラー: GPIO24〜26を割り当てたハードウェア変数の名前はGPIO24_26であり，存在しないGPIO27を含むGPIO24_27は未宣言 (異常系)
+void main(void) {
+    GPIO24_27 = 1;
+}

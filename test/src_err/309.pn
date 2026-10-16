@@ -1,5 +1,5 @@
-// expect: compiler error: 'GPIO0_7' is not readable at src_err/309.pn:4
-// 意味解析エラー: 書き込み専用ハードウェア変数(GPIO0_7)は読み取れない (異常系)
+// expect: compiler error: 'GPIO8_15' is not readable at src_err/309.pn:4
+// 意味解析エラー: 書き込み専用ハードウェア変数(GPIO8_15)は読み取れない (異常系)
 void main(void) {
-    int x = GPIO0_7;
+    int x = GPIO8_15;
 }
