@@ -8,7 +8,7 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (ピンへ入出力するボードI/Oレジスタのみ公開，CPU内部レジスタは非公開)
+// ハードウェア変数の定義表 (公開するのはピンへ入出力するボードI/Oレジスタだけで，CPU内部レジスタは含めない)
 // 読み書き可否はレジスタの仕様に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
