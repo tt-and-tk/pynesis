@@ -1,5 +1,5 @@
 // expect: compiler error: 'GPIO0_7' is not declared at src_err/312.pn:4
-// 意味解析エラー: どのピンにも出力しないレジスタ(6'h2d)はハードウェア変数として公開しないため，GPIO0_7は未宣言 (異常系)
+// 意味解析エラー: ハードウェア変数はピンへ出力するレジスタだけであり，出力先のピンを持たないGPIO0〜7に当たるGPIO0_7は未宣言 (異常系)
 void main(void) {
     GPIO0_7 = 1;
 }
