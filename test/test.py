@@ -1,8 +1,8 @@
 """
-test/src/*.pn・test/src_bin/*.pn を全てコンパイルして test/asm/・test/asm_bin/ へ出力するテストスクリプト。
-コンパイラをビルドしてから各 .pn を .pt に変換し、期待値と一致するか確認する。
-src/ はROM用、src_bin/ はQosmosの実行ファイル用(--bin-mode)としてコンパイルする。
-期待値ファイル(asm_ans/・asm_bin_ans/)がなければ FAIL とする。
+test/src/*.pn・test/src_bin/*.pn を全てコンパイルして test/asm/・test/asm_bin/ へ出力するテストスクリプト．
+コンパイラをビルドしてから各 .pn を .pt に変換し，期待値と一致するか確認する．
+src/ はROM用，src_bin/ はQosmosの実行ファイル用(--bin-mode)としてコンパイルする．
+期待値ファイル(asm_ans/・asm_bin_ans/)がなければ FAIL とする．
 """
 
 import difflib
@@ -22,7 +22,7 @@ SUITES = [
 
 def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
               compile_success, compile_fail, compare_pass, compare_fail):
-    """1組のテストを実行し，結果を各リストへ追加する。テストケースが1件もなければ False を返す。"""
+    """1組のテストを実行し，結果を各リストへ追加する．テストケースが1件もなければ False を返す．"""
     src_dir = os.path.join(SCRIPT_DIR, src_name)
     asm_dir = os.path.join(SCRIPT_DIR, asm_name_dir)
     ans_dir = os.path.join(SCRIPT_DIR, ans_name_dir)
@@ -34,7 +34,7 @@ def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
     )
 
     if not src_files:
-        print(f"テストケースが見つかりません。({src_name}/)")
+        print(f"テストケースが見つかりません．({src_name}/)")
         return False
 
     for src_file in src_files:

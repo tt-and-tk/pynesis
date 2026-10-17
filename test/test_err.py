@@ -82,7 +82,7 @@ def run_suite(src_name, extra_args, tmpdir, detected, failed):
     )
 
     if not src_files:
-        print(f"異常系テストケースが見つかりません。({src_name}/)")
+        print(f"異常系テストケースが見つかりません．({src_name}/)")
         return False
 
     for src_file in src_files:
