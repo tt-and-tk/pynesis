@@ -8,8 +8,8 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (公開するのはピンへ入出力するボードI/Oレジスタだけで，CPU内部レジスタは含めない)
-// 読み書き可否はレジスタの仕様に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
+// ハードウェア変数の定義表 (公開するのはピンへ入出力するボードI/Oレジスタと周辺回路を操作するレジスタだけで，CPU内部レジスタは含めない)
+// 読み書き可否はレジスタの仕様に従う．型はピンや周辺回路の状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
@@ -25,6 +25,7 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, false, true},   // GPIO8～15
     {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, false, true},   // GPIO16～23
     {"GPIO24_26", {BASE_INT, false}, LOC_REGISTER, 0x30, false, true},   // GPIO24～26
+    {"UART",      {BASE_INT, false}, LOC_REGISTER, 0x31, true,  true},   // USBのシリアル通信(PSのUART0)の送受信
 };
 
 // 値を32ビットで折り返し，符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に正規化する
