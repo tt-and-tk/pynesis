@@ -9,6 +9,6 @@ unsigned char first(unsigned char *s) {
 
 void main(void) {
     strcopy(copy, name);
-    print(copy);
+    g = streq(copy, name);
     g = first(name);
 }

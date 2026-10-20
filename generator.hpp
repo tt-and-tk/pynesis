@@ -104,8 +104,6 @@ private:
     void gen_store_indirect(int addr_reg, int val_reg, const type_t &type);
     // 文字列をchar配列に書き込む初期化コードを生成する (作業用にr0を使う)
     void gen_string_init(const symbol_t *sym, const std::string &str);
-    void gen_print_string(const symbol_t *sym, int reg);  // char配列をヌル終端まで1文字ずつ出力するループを生成する
-    void gen_scan_line(const symbol_t *sym, int reg);     // 標準入力を改行まで読み込みchar配列へヌル終端付きで格納するループを生成する
     void gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg);  // 2つのchar配列の内容を比較しr{reg}へ0/1を格納する
     void gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg);   // char配列srcの内容をヌル終端付きでdstへコピーする
     void gen_compare(node_t *expr, int reg);   // 比較演算を0/1の値としてr{reg}に生成
