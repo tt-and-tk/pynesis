@@ -1272,7 +1272,7 @@ node_t *Parser::parse_primary() {
         return node;
     }
 
-    // 変数参照・関数呼び出し (streq/strcopyは予約語のため専用トークンで上で処理済み)
+    // 変数参照・関数呼び出し (組み込み関数は予約語の専用トークンになるため，識別子として届かない)
     if (this->token_kind_is(TK_IDENT)) {
         node_t *node = this->new_node(ND_VAR);
         node->sval = this->get_token().value;
