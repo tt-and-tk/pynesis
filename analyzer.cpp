@@ -9,7 +9,7 @@ static const int g_global_base_addr = 0x0000000;
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
 // ハードウェア変数の定義表 (公開するのはボード上の周辺機器を操作するレジスタだけで，CPU内部レジスタは含めない)
-// 読み書き可否はレジスタの仕様(specificationのregister.md)に従う．型は周辺機器の状態を表すビット列として扱うため，全てunsigned int
+// 読み書き可否は，CPUがそのレジスタを読み書きできるかに合わせる．型は周辺機器の状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
