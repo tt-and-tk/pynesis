@@ -609,33 +609,6 @@ node_t *Parser::parse_continue() {
     return node;
 }
 
-// 組み込み関数printを解析してND_PRINTを返す
-// 構文: print ( char配列 )  ※ ヌル終端までを標準出力へ出力する
-node_t *Parser::parse_print() {
-    node_t *node = this->new_node(ND_PRINT);
-    this->get_token(TK_PRINT);                       // print
-    this->get_token(TK_LPAREN);                      // (
-    node->children.push_back(this->parse_expr());    // 出力する配列
-    this->get_token(TK_RPAREN);                      // )
-    return node;
-}
-
-// 組み込み関数scanを解析してND_SCANを返す
-// 構文: scan ( char配列 )  ※ 改行までの1行をヌル終端付きで配列へ格納する
-// 対象は識別子1個(TK_IDENT)の配列変数のみで，構造体のメンバ配列(単一の構造体変数のものも含む)へは
-// 未対応．メンバ配列はコンパイル時に確定したアドレスに配置されるため技術的には書き込み先にできるが，
-// printやstreq/strcopyのように任意の式(parse_expr)を受け付ける構文にはまだ拡張していない(将来対応予定)
-node_t *Parser::parse_scan() {
-    node_t *node = this->new_node(ND_SCAN);
-    this->get_token(TK_SCAN);                         // scan
-    this->get_token(TK_LPAREN);                       // (
-    node_t *var = this->new_node(ND_VAR);             // 格納先配列
-    var->sval = this->get_token(TK_IDENT).value;
-    node->children.push_back(var);
-    this->get_token(TK_RPAREN);                       // )
-    return node;
-}
-
 // 組み込み関数streqを解析してND_STREQを返す
 // 構文: streq ( char配列 , char配列 )  ※ 両方の内容が一致するか比較する
 node_t *Parser::parse_streq() {
@@ -1274,9 +1247,7 @@ node_t *Parser::parse_primary() {
         return this->parse_sizeof();
     }
 
-    // 組み込み関数print/scan/streq/strcopy (予約語のため専用トークンで判定する)
-    if (this->token_kind_is(TK_PRINT))   return this->parse_print();
-    if (this->token_kind_is(TK_SCAN))    return this->parse_scan();
+    // 組み込み関数streq/strcopy (予約語のため専用トークンで判定する)
     if (this->token_kind_is(TK_STREQ))   return this->parse_streq();
     if (this->token_kind_is(TK_STRCOPY)) return this->parse_strcopy();
 
@@ -1301,7 +1272,7 @@ node_t *Parser::parse_primary() {
         return node;
     }
 
-    // 変数参照・関数呼び出し (print/scanは予約語のため専用トークンで上で処理済み)
+    // 変数参照・関数呼び出し (組み込み関数は予約語の専用トークンになるため，識別子として届かない)
     if (this->token_kind_is(TK_IDENT)) {
         node_t *node = this->new_node(ND_VAR);
         node->sval = this->get_token().value;

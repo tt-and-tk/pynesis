@@ -376,90 +376,6 @@ void Generator::gen_string_init(const symbol_t *sym, const std::string &str) {
     }
 }
 
-// char配列をヌル終端(0)まで1文字ずつ標準出力へ出力するループを生成する
-// ヌル終端が見つからない不正な配列でも，配列の宣言サイズで安全に打ち切る
-// レジスタ使用: r{reg}=インデックス, r{reg+1}=ベースアドレス(不変), r{reg+2}=アドレス→文字値(作業用),
-//              r{reg+3}=配列サイズ(打ち切り境界，不変), r{reg+4}=0(ヌル終端比較用，不変), r{reg+5}=1(インデックス加算用，不変)
-void Generator::gen_print_string(const symbol_t *sym, int reg) {
-    if (reg + 5 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers)");
-    }
-    const std::string loop = this->new_label();
-    const std::string end = this->new_label();
-
-    // 必要な変数をレジスタに格納する
-    this->gen_var_addr(reg + 1, sym);                                           // r{reg+1} = ベースアドレス
-    (*this->out_) << "    mov fh r0 r" << reg << " 0\n";                        // r{reg}   = インデックス(0)
-    (*this->out_) << "    mov fh r0 r" << (reg + 3) << " " << sym->type.array_size << "\n";  // r{reg+3} = 配列サイズ(打ち切り境界)
-    (*this->out_) << "    mov fh r0 r" << (reg + 4) << " 0\n";                  // r{reg+4} = 0 (ヌル終端比較用)
-    (*this->out_) << "    mov fh r0 r" << (reg + 5) << " 1\n";                  // r{reg+5} = 1 (インデックス加算用)
-
-    (*this->out_) << loop << ":\n";
-    // 配列サイズに達したら打ち切る (ヌル終端がなくても無限ループ・範囲外読み出しを防ぐ)
-    (*this->out_) << "    egt r" << reg << " r" << (reg + 3) << " " << end << "\n";
-    // r{reg+2} = mem[base + index] (1バイト)
-    (*this->out_) << "    add r" << (reg + 1) << " r" << reg << " r" << (reg + 2) << "\n";
-    (*this->out_) << "    rm 1h r" << (reg + 2) << " r" << (reg + 2) << "\n";
-    // ヌル終端なら終了
-    (*this->out_) << "    eq r" << (reg + 2) << " r" << (reg + 4) << " " << end << "\n";
-    (*this->out_) << "    print r" << (reg + 2) << "\n";
-    (*this->out_) << "    add r" << reg << " r" << (reg + 5) << " r" << reg << "\n";
-    (*this->out_) << "    jmp " << loop << "\n";
-    (*this->out_) << end << ":\n";
-}
-
-// 標準入力を改行(\n=10)まで読み込み，char配列へヌル終端付きで格納するループを生成する
-// 改行だけの行は空文字列として格納する．配列サイズ-1文字を超えたら追加のscanを行わず打ち切る
-// (超過分は次にscanを実行したときに読み込まれる．そのためのscanが1回多く消費されることはない)
-// DEL(0x7F，バックスペース)を受け取った場合は，直前に格納した1文字分インデックスを戻す(先頭では何もしない)
-// レジスタ使用: r{reg}=読み込んだ文字, r{reg+1}=インデックス, r{reg+2}=ベースアドレス(不変), r{reg+3}=アドレス(作業用),
-//              r{reg+4}='\n'(不変), r{reg+5}=配列サイズ-1(格納できる最大文字数，不変), r{reg+6}=1(インデックス加算用，不変),
-//              r{reg+7}=0(ヌル終端書き込み用兼インデックス0判定用，不変), r{reg+8}=DEL(0x7F，不変)
-void Generator::gen_scan_line(const symbol_t *sym, int reg) {
-    if (reg + 8 >= MAX_REG) {
-        throw std::string("compiler error: expression too complex (out of registers)");
-    }
-    const std::string read_loop = this->new_label();
-    const std::string del_branch = this->new_label();
-    const std::string scan_next = this->new_label();
-    const std::string read_end = this->new_label();
-
-    // 必要な変数をレジスタに格納する
-    this->gen_var_addr(reg + 2, sym);                                                 // r{reg+2} = ベースアドレス
-    (*this->out_) << "    mov fh r0 r" << (reg + 4) << " 10\n";                       // r{reg+4} = '\n'
-    (*this->out_) << "    mov fh r0 r" << (reg + 5) << " " << (sym->type.array_size - 1) << "\n";  // r{reg+5} = 配列サイズ-1
-    (*this->out_) << "    mov fh r0 r" << (reg + 6) << " 1\n";                        // r{reg+6} = 1
-    (*this->out_) << "    mov fh r0 r" << (reg + 7) << " 0\n";                        // r{reg+7} = 0
-    (*this->out_) << "    mov fh r0 r" << (reg + 8) << " 7Fh\n";                      // r{reg+8} = DEL(0x7F)
-
-    // 格納ループは読み込み済みの文字から判定するため，最初の1文字を先に読み込む
-    (*this->out_) << "    scan r" << reg << "\n";
-
-    // 改行が来るまで1文字ずつ配列へ格納する
-    (*this->out_) << "    mov fh r0 r" << (reg + 1) << " 0\n";                        // r{reg+1} = インデックス(0)
-    (*this->out_) << read_loop << ":\n";
-    (*this->out_) << "    eq r" << reg << " r" << (reg + 4) << " " << read_end << "\n";  // 改行なら終了
-    (*this->out_) << "    eq r" << reg << " r" << (reg + 8) << " " << del_branch << "\n";  // DELならバックスペース処理へ
-    (*this->out_) << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 3) << "\n";  // アドレス = base+index
-    (*this->out_) << "    wm 1h r" << (reg + 3) << " r" << reg << "\n";                // buf[index] = 文字
-    (*this->out_) << "    add r" << (reg + 1) << " r" << (reg + 6) << " r" << (reg + 1) << "\n";  // index += 1
-    // 配列サイズ上限に達したら，これ以上scanせずに打ち切る (残りは次回のscanで読む)
-    (*this->out_) << "    egt r" << (reg + 1) << " r" << (reg + 5) << " " << read_end << "\n";
-    (*this->out_) << "    jmp " << scan_next << "\n";
-    // バックスペース: 先頭(インデックス0)なら取り消す文字が無いので何もしない
-    (*this->out_) << del_branch << ":\n";
-    (*this->out_) << "    eq r" << (reg + 1) << " r" << (reg + 7) << " " << scan_next << "\n";
-    (*this->out_) << "    sub r" << (reg + 1) << " r" << (reg + 6) << " r" << (reg + 1) << "\n";  // index -= 1
-    (*this->out_) << scan_next << ":\n";
-    (*this->out_) << "    scan r" << reg << "\n";
-    (*this->out_) << "    jmp " << read_loop << "\n";
-    (*this->out_) << read_end << ":\n";
-
-    // ヌル終端を書き込む
-    (*this->out_) << "    add r" << (reg + 2) << " r" << (reg + 1) << " r" << (reg + 3) << "\n";  // アドレス = base+index
-    (*this->out_) << "    wm 1h r" << (reg + 3) << " r" << (reg + 7) << "\n";           // buf[index] = 0
-}
-
 // char配列2つの内容を先頭から1文字ずつ比較し，一致すれば1，不一致なら0をr{reg}へ格納する
 // どちらかの宣言サイズに達してもヌル終端が見つからない場合は，安全のため不一致として打ち切る
 // レジスタ使用: r{reg}=結果, r{reg+1}=インデックス, r{reg+2}=ベースアドレスA(不変), r{reg+3}=ベースアドレスB(不変),
@@ -524,7 +440,7 @@ void Generator::gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg)
 }
 
 // char配列srcの先頭からヌル終端まで1文字ずつdstへコピーする
-// dstの宣言サイズ-1文字を超える場合は，そこで打ち切ってヌル終端を書き込む(scanと同じ安全な打ち切り)
+// dstの宣言サイズ-1文字を超える場合は，そこで打ち切ってヌル終端を書き込む(配列の範囲外へ書き込まないため)
 // レジスタ使用: r{reg}=コピー中の文字(作業用), r{reg+1}=インデックス, r{reg+2}=ベースアドレス(コピー先，不変),
 //              r{reg+3}=ベースアドレス(コピー元，不変), r{reg+4}=アドレス(作業用), r{reg+5}=0(ヌル終端書き込み用，不変),
 //              r{reg+6}=コピー先の配列サイズ-1(打ち切り境界，不変), r{reg+7}=1(インデックス加算用，不変)
@@ -1274,16 +1190,6 @@ void Generator::gen_expr(node_t *expr, int reg) {
         // 関数呼び出し
         case ND_CALL:
             this->gen_call(expr, reg);
-            break;
-
-        // 組み込み関数print: char配列をヌル終端まで1文字ずつ出力するループを生成する
-        case ND_PRINT:
-            this->gen_print_string(expr->children[0]->sym, reg);
-            break;
-
-        // 組み込み関数scan: 標準入力を改行まで読み込み，char配列へヌル終端付きで格納するループを生成する
-        case ND_SCAN:
-            this->gen_scan_line(expr->children[0]->sym, reg);
             break;
 
         // 組み込み関数streq: 2つのchar配列の内容を比較し，一致すれば1，不一致なら0をr{reg}に生成する

@@ -3,6 +3,6 @@
 int count = 3;
 
 int main(void) {
-    print("OK");
+    char *s = "OK";
     count = count + 1;
 }

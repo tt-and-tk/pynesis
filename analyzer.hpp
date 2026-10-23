@@ -194,7 +194,7 @@ private:
     // 指す先の型の違いをエラーにする(整数どうしは型が異なっても格納できる)．contextはエラーメッセージ用の格納の種類
     static void check_assignable(const type_t &dst, const node_t *src, const std::string &context);
     static bool is_same_type(const type_t &a, const type_t &b);   // 2つの型が(ポインタの指す先を含め)同じかを返す
-    // print/streq/strcopyに共通する引数検査を行う (builtin_nameはエラーメッセージ用の関数名)
+    // streq/strcopyに共通する引数検査を行う (builtin_nameはエラーメッセージ用の関数名)
     void check_char_array_operand(node_t *target, const std::string &builtin_name);
     // 演算の対象がスカラー(整数またはポインタ)であることを検査する (operationはエラーメッセージ用の演算名)
     static void check_scalar_operand(const node_t *target, const std::string &operation);

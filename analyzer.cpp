@@ -8,8 +8,8 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (公開するのはピンへ入出力するボードI/Oレジスタだけで，CPU内部レジスタは含めない)
-// 読み書き可否はレジスタの仕様に従う．型はピンの状態を表すビット列として扱うため，全てunsigned int
+// ハードウェア変数の定義表 (公開するのはボード上の周辺機器を操作するレジスタだけで，CPU内部レジスタは含めない)
+// 読み書き可否は，表の各レジスタをCPUの命令で読み出せるか・書き込めるかに合わせる．型は周辺機器の状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
@@ -25,6 +25,7 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"GPIO8_15",  {BASE_INT, false}, LOC_REGISTER, 0x2e, false, true},   // GPIO8～15
     {"GPIO16_23", {BASE_INT, false}, LOC_REGISTER, 0x2f, false, true},   // GPIO16～23
     {"GPIO24_26", {BASE_INT, false}, LOC_REGISTER, 0x30, false, true},   // GPIO24～26
+    {"UART",      {BASE_INT, false}, LOC_REGISTER, 0x31, true,  true},   // USBのシリアル通信(PSのUART0)の送受信
 };
 
 // 値を32ビットで折り返し，符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に正規化する
@@ -381,7 +382,7 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
     }
 
     // 値は32ビットのビット列としてintに保持し，読み出す際に型に応じて解釈する(const_symbol_value)
-    // 読み取り専用のシンボルにすることで，代入・++/--・scan等の書き込みを既存の検査でエラーにする
+    // 読み取り専用のシンボルにすることで，代入・++/--・strcopy等の書き込みを既存の検査でエラーにする
     const int bits = static_cast<int>(static_cast<unsigned int>(value));   // 値の32ビットのビット列
     return new symbol_t{decl->sval, decl->type, LOC_CONST, bits, true, false};
 }
@@ -1115,9 +1116,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
     }
 }
 
-// scan以外の組み込み関数の引数をチェックする(print/streq/strcopy)
-// scanは構文上，対象を識別子1個(TK_IDENT)に限定しているため構造体メンバ配列(arr[i].name)が
-// 現れず，書き込み可能性・最小サイズ等の固有要件も持つため，この共通検査ではなく専用の検査を別途行う
+// 組み込み関数(streq/strcopy)の引数をチェックする
 // 引数は配列のまま検査する(先頭要素へのポインタとして扱うと，打ち切りに使う宣言サイズが分からなくなるため)
 void Analyzer::check_char_array_operand(node_t *target, const std::string &builtin_name) {
     this->analyze_expr(target);
@@ -1777,15 +1776,6 @@ void Analyzer::analyze_expr(node_t *expr) {
             this->analyze_call(expr);
             return;
 
-        // 組み込み関数print: char配列(直接配列)のみ対応．ヌル終端まで出力する
-        case ND_PRINT: {
-            node_t *target = expr->children[0];
-            this->check_char_array_operand(target, "print");
-            // printは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
-            expr->type = type_t{BASE_VOID, true};
-            return;
-        }
-
         // 組み込み関数streq: 2つのchar配列(直接配列)の内容が一致するか比較する
         case ND_STREQ: {
             node_t *lhs = expr->children[0];
@@ -1808,41 +1798,6 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + "' is not writable at " + loc_to_string(dst->loc);
             }
             // strcopyは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
-            expr->type = type_t{BASE_VOID, true};
-            return;
-        }
-
-        // 組み込み関数scan: char配列(直接配列，2要素以上)のみ対応．改行までの1行をヌル終端付きで格納する
-        // 書き込み可能性・最小サイズの検査が必要なためcheck_char_array_operandは使わず専用の検査を行う
-        case ND_SCAN: {
-            node_t *target = expr->children[0];   // 格納先配列 (parserがND_VARで構築)
-            const symbol_t *sym = this->lookup_symbol(target->sval);
-            if (sym == nullptr) {
-                throw std::string("compiler error: use of undeclared identifier '")
-                      + target->sval + "' at " + loc_to_string(target->loc);
-            }
-            if (!sym->writable) {
-                throw std::string("compiler error: '") + target->sval
-                      + "' is not writable at " + loc_to_string(target->loc);
-            }
-            target->sym  = sym;        // 名前解決の結果を結びつける
-            target->type = sym->type;
-            // ポインタの場合 (指す先の配列の大きさが分からず，打ち切りの判定ができないため)
-            if (is_pointer_value(sym->type)) {
-                throw std::string("compiler error: scan does not support pointers (the array size is unknown) at ")
-                      + loc_to_string(target->loc);
-            }
-            // char型の配列でない場合 (charへのポインタの配列は，要素が文字ではないため対象外)
-            if (!sym->type.is_array || sym->type.base != BASE_CHAR || sym->type.pointer_depth > 0) {
-                throw std::string("compiler error: scan requires a char array at ")
-                      + loc_to_string(target->loc);
-            }
-            if (sym->type.array_size < 2) {
-                throw std::string("compiler error: scan target array must have at least 2 elements "
-                                   "(1 for content plus 1 for null terminator) at ")
-                      + loc_to_string(target->loc);
-            }
-            // scanは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
             expr->type = type_t{BASE_VOID, true};
             return;
         }
