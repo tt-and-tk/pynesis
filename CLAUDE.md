@@ -35,7 +35,10 @@ g++ -std=c++17 -DPN2ASM_NO_MAIN -DASM2MC_NO_MAIN -o pn2mc.exe pn2mc.cpp pn2asm.c
 
 ## コーディング規約
 
-`.claude/coding_conventions.md` に従うこと．  
+for-pynthesis-skillsプラグインのコーディング規約(セッション開始時に読み込まれる)に従うこと．このリポジトリでは，あわせて次のとおりにする．
+
+- エラー: `throw std::string("compiler error: <メッセージ>")`で投げる
+
 アセンブラ(`../assembler/`)のコードを実装の参考にすること．
 
 ## Issue対応の徹底
