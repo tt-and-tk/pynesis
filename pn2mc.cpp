@@ -50,10 +50,8 @@ static bool check_args(int argc, char **argv, bool &is_bin) {
     is_bin = !bin_file_name.empty();
     // -svは省略を許し，指定された場合だけ拡張子を確かめる
     const bool sv_name_ok = sv_file_name.empty() || has_extension(sv_file_name, ".sv");
-    // -binは指定された場合だけ，ディレクトリを除いたファイル名の部分をアセンブラと同じ規則で確かめる
-    // (ディレクトリ部分の.(../binなど)は名前に関わらないため問わない)
-    const bool bin_name_ok =
-        !is_bin || is_executable_name(bin_file_name.substr(bin_file_name.find_last_of("/\\") + 1));
+    // -binは指定された場合だけ，Qosmosの実行ファイル名として使えるかをアセンブラと同じ規則で確かめる
+    const bool bin_name_ok = !is_bin || is_executable_name(bin_file_name);
     // 出力先は-svと-binのどちらか一方だけを指定できる
     const bool both_output = is_bin && !sv_file_name.empty();
 
