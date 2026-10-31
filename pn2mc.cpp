@@ -1,4 +1,3 @@
-#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -9,22 +8,6 @@
 static bool has_extension(const std::string &name, const std::string &ext) {
     return name.length() >= ext.length()
         && name.substr(name.length() - ext.length()) == ext;
-}
-
-// Qosmosの実行ファイル名として使えるかを返す
-// アセンブラも出力の前に同じ規則で検査するが，その時点では中間アセンブリファイルが書き出し済みになるため，ここでも確かめる．
-// Qosmosは拡張子(.)を持たないファイルだけを実行ファイルとして探し，名前は8.3形式の短い名前で扱うため，
-// 基本名だけの1〜8文字で，FATの短い名前に使えない文字(制御文字・空白・記号)を含まないものに限る
-static bool is_executable_name(const std::string &name) {
-    // 基本名は1〜8文字
-    if (name.empty() || name.length() > 8) return false;
-
-    for (const unsigned char c : name) {
-        // 制御文字・空白と，拡張子の区切り・短い名前に使えない記号
-        if (c <= ' ' || c == 0x7f || strchr(".\"*+,/:;<=>?[\\]|", c) != nullptr) return false;
-    }
-
-    return true;
 }
 
 // コマンドライン引数を変換の前に検査する
@@ -67,10 +50,8 @@ static bool check_args(int argc, char **argv, bool &is_bin) {
     is_bin = !bin_file_name.empty();
     // -svは省略を許し，指定された場合だけ拡張子を確かめる
     const bool sv_name_ok = sv_file_name.empty() || has_extension(sv_file_name, ".sv");
-    // -binは指定された場合だけ，ディレクトリを除いたファイル名の部分を確かめる
-    // (ディレクトリ部分の.(../binなど)は名前に関わらないため問わない)
-    const bool bin_name_ok =
-        !is_bin || is_executable_name(bin_file_name.substr(bin_file_name.find_last_of("/\\") + 1));
+    // -binは指定された場合だけ，Qosmosの実行ファイル名として使えるかをアセンブラと同じ規則で確かめる
+    const bool bin_name_ok = !is_bin || is_executable_name(bin_file_name);
     // 出力先は-svと-binのどちらか一方だけを指定できる
     const bool both_output = is_bin && !sv_file_name.empty();
 
