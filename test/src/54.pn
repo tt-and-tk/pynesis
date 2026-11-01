@@ -1,4 +1,4 @@
-// 符号なし型の変数・配列要素・構造体メンバ・パラメータ・戻り値は，読み出し時に符号拡張しない(ゼロ拡張)
+// 符号なし型の変数・配列要素・構造体メンバ・引数・戻り値は，読み出し時に符号拡張しない(ゼロ拡張)
 unsigned char gc = 200;
 unsigned short gs;
 unsigned int gi;
@@ -22,5 +22,5 @@ void main(void) {
     gi = rec.w;              // 構造体メンバ
     gi = rec.b[i];           // 構造体のメンバ配列の要素
     gi = recs[i].w;          // 構造体配列要素のメンバ
-    gi = low(0xFFFFFFFF);    // パラメータ・戻り値
+    gi = low(0xFFFFFFFF);    // 引数・戻り値
 }

@@ -733,10 +733,10 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
 }
 
 // mainの定義が出力先で許す形であることを確かめる
-// 型は表記で比べる (仮引数にはconstを付けられないため，表記が一致すれば型も一致する)
+// 型は表記で比べる (引数にはconstを付けられないため，表記が一致すれば型も一致する)
 void Analyzer::check_main_signature(const node_t *func) const {
-    std::string signature = type_to_string(func->type) + " main(";   // 仮引数の名前を除いた定義の形
-    // 最後の子は関数本体ブロックのため，それより前の子を仮引数として並べる (仮引数が無ければ(void)と書く)
+    std::string signature = type_to_string(func->type) + " main(";   // 引数の名前を除いた定義の形
+    // 最後の子は関数本体ブロックのため，それより前の子を引数として並べる (引数が無ければ(void)と書く)
     if (func->children.size() == 1) signature += "void";
     for (size_t i = 0; i + 1 < func->children.size(); i++) {
         if (i > 0) signature += ", ";

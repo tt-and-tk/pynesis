@@ -1,4 +1,4 @@
-// unsigned char配列: 文字列リテラルによる初期化と組み込み関数はchar配列と同様に使え，同じ要素型へのポインタのパラメータへ渡せる
+// unsigned char配列: 文字列リテラルによる初期化と組み込み関数はchar配列と同様に使え，同じ要素型へのポインタの引数へ渡せる
 unsigned char name[] = "ab";
 unsigned char copy[4];
 int g;

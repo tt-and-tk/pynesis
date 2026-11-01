@@ -1,5 +1,5 @@
 // expect: compiler error: duplicate parameter name 'a' at src_err/68.pn:3
-// 意味解析エラー: 関数パラメータ名が重複している (異常系)
+// 意味解析エラー: 関数の引数名が重複している (異常系)
 void add(int a, int a) {
 }
 void main(void) {
