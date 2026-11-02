@@ -1,5 +1,5 @@
 // expect: compiler error: incompatible pointer types in argument 1: expected 'int *' but got 'char *' at src_err/198.pn:7
-// 意味解析エラー: intへのポインタのパラメータへ要素型の異なる配列(char)は渡せない (異常系)
+// 意味解析エラー: intへのポインタの引数へ要素型の異なる配列(char)は渡せない (異常系)
 char buf[4];
 void f(int *a) {
 }
