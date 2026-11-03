@@ -1830,7 +1830,7 @@ void Analyzer::analyze_expr(node_t *expr) {
 
         // 組み込み関数sysret: ユーザーモードへ戻る．値を返さない(void)
         case ND_SYSRET:
-            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動かす前提で，ユーザーモードでSYSRETを実行すると例外になるため)
+            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動かす前提で，ユーザーモードでsysret()を実行すると例外になるため)
             if (this->is_bin_mode_) {
                 throw std::string("compiler error: 'sysret' cannot be used in an executable at ")
                       + loc_to_string(expr->loc);

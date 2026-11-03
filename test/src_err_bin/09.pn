@@ -1,5 +1,5 @@
 // expect: compiler error: 'sysret' cannot be used in an executable at src_err_bin/09.pn:4
-// 意味解析エラー: 実行ファイルはユーザーモードで動かす前提で，ユーザーモードでSYSRET命令を実行すると例外になるため，sysret()は使えない (異常系)
+// 意味解析エラー: 実行ファイルはユーザーモードで動かす前提で，ユーザーモードでsysret()を実行すると例外になるため使えない (異常系)
 int main(void) {
     sysret();
     return 0;
