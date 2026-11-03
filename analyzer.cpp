@@ -1218,7 +1218,8 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 }
 
 // 実行ファイル用に解析する場合に，ハードウェア変数の読み書きをエラーにする
-// (実行ファイルはユーザーモードで動き，ハードウェア変数のレジスタを読み書きすると例外になるため．
+// (実行ファイルはユーザーモードで動かす前提で，SP以外のハードウェア変数のレジスタは読み書きすると例外になるため．
+//  SPはユーザーモードでも読み書きできるが，コンパイラがスタックフレームに使う値を実行ファイル自身が書き換えないよう禁止する．
 //  sizeofは型だけを使うため，この検査の対象外とする)
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
     if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
@@ -1829,7 +1830,7 @@ void Analyzer::analyze_expr(node_t *expr) {
 
         // 組み込み関数SYSRET: ユーザーモードへ戻る．値を返さない(void)
         case ND_SYSRET:
-            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動き，SYSRETを実行すると例外になるため)
+            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動かす前提で，ユーザーモードでSYSRETを実行すると例外になるため)
             if (this->is_bin_mode_) {
                 throw std::string("compiler error: 'SYSRET' cannot be used in an executable at ")
                       + loc_to_string(expr->loc);
