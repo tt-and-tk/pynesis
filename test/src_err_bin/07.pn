@@ -1,5 +1,5 @@
 // expect: compiler error: hardware variable 'KENTRY' cannot be used in an executable at src_err_bin/07.pn:4
-// 意味解析エラー: 実行ファイルはユーザーモードで動くため，カーネルモードで使うハードウェア変数へ代入できない (異常系)
+// 意味解析エラー: 実行ファイルはユーザーモードで動かす前提のため，カーネルモードで使うハードウェア変数へ代入できない (異常系)
 int main(void) {
     KENTRY = 0;
     return 0;
