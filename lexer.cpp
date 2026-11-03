@@ -53,6 +53,7 @@ const std::map<std::string, token_kind_t> g_keywords = {
     {"break",    TK_BREAK},    {"continue", TK_CONTINUE},
     {"return",   TK_RETURN},   {"sizeof",   TK_SIZEOF},   {"nullptr",  TK_NULLPTR},
     {"streq",    TK_STREQ},    {"strcopy",  TK_STRCOPY},
+    {"SYSCALL",  TK_SYSCALL},  {"SYSRET",   TK_SYSRET},
 };
 
 // 演算子・区切り文字文字列からトークン種別への変換表

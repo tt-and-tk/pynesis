@@ -1,0 +1,6 @@
+// expect: compiler error: 'SP' can be written only in a function without a stack frame at src_err/317.pn:5
+// コード生成エラー: ローカル変数を持つ関数(フレームを持つ関数)では，SPへ代入できない (異常系)
+void main(void) {
+    unsigned int x = 0;
+    SP = x;
+}

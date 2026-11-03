@@ -18,6 +18,7 @@ typedef enum {
     TK_NULLPTR,     // どのポインタも指していないことを表す定数
     // 組み込み関数キーワード (ユーザー定義の変数・関数名との衝突を防ぐため予約語にする)
     TK_STREQ, TK_STRCOPY,
+    TK_SYSCALL, TK_SYSRET,
     // リテラル
     TK_INT_LIT,     // 整数リテラル
     TK_CHAR_LIT,    // 文字リテラル

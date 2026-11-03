@@ -177,6 +177,12 @@ void Generator::gen_func(node_t *func) {
     this->param_size_ = static_cast<int>(this->analysis_.func_params.at(func->sval).size()) * 4;
     this->spill_size_ = this->calc_spill_size(func);
     this->func_frame_sizes_[func->sval] = this->calc_frame_size();
+    // フレームを持つ関数の場合，SPへの書き込みを禁止する
+    // (書き込んだ後もフレーム上の変数をSPからの位置で読み書きし，復帰の直前にはフレームの大きさだけSPを戻すため，
+    //  フレームの位置がずれて別の領域を壊す)
+    if (this->calc_frame_size() != 0) {
+        Generator::check_no_sp_write(func);
+    }
 
     // 関数ラベルを出力し，フレームを確保してから本体を生成する
     (*this->out_) << func->sval << ":\n";
@@ -219,6 +225,33 @@ int Generator::calc_spill_size(node_t *func) {
     this->label_count_ = label_count_before;
     this->spill_size_ = spill_size_before;
     return spill_size;
+}
+
+// node以下にSPのハードウェア変数へ書き込む式(代入・複合代入・++/--)があればエラーにする
+void Generator::check_no_sp_write(const node_t *node) {
+    if (node == nullptr) return;
+
+    // 書き込み先の式を求める
+    // 代入・複合代入の場合は左辺
+    // ++/--の場合は対象
+    // どちらにも当たらない場合は書き込み先を持たない
+    const node_t *target = nullptr;   // 書き込み先の式
+    if (node->kind == ND_ASSIGN) {
+        target = node->children[0];
+    } else if ((node->kind == ND_UNOP || node->kind == ND_POST_UNOP) && (node->sval == "++" || node->sval == "--")) {
+        target = node->children[0];
+    }
+    // 書き込み先がSPの場合
+    if (target != nullptr && target->sym != nullptr
+        && target->sym->location == LOC_REGISTER && target->sym->address == SP_ADDRESS) {
+        throw std::string("compiler error: 'SP' can be written only in a function without a stack frame at ")
+              + loc_to_string(node->loc);
+    }
+
+    // 子の式・文を調べる
+    for (const node_t *child : node->children) {
+        Generator::check_no_sp_write(child);
+    }
 }
 
 // 関数の本体と，末尾から関数を抜ける場合の復帰を生成する
@@ -937,7 +970,7 @@ int Generator::calc_arg_offset(int arg_count, int index) {
 
 // 変数の値をr{reg}へ読み込む
 void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
-    // レジスタ直結(LED等のI/Oレジスタ)の場合
+    // レジスタ直結(ハードウェア変数)の場合
     if (sym->location == LOC_REGISTER) {
         // mov rs1=番地, rd=r{reg} : r{reg} = register[番地] (即値を付けないとレジスタ間コピーになる)
         (*this->out_) << "    mov fh r" << sym->address << " r" << reg << "\n";
@@ -971,7 +1004,7 @@ void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
 
 // r{reg}の値を変数へ書き込む
 void Generator::gen_store(int reg, const symbol_t *sym) {
-    // レジスタ直結(LED等のI/Oレジスタ)の場合
+    // レジスタ直結(ハードウェア変数)の場合
     if (sym->location == LOC_REGISTER) {
         // mov rs1=r{reg}, rd=番地 : register[番地] = r{reg}
         (*this->out_) << "    mov fh r" << reg << " r" << sym->address << "\n";
@@ -1200,6 +1233,17 @@ void Generator::gen_expr(node_t *expr, int reg) {
         // 組み込み関数strcopy: 第2引数(src)の内容を第1引数(dst)へヌル終端付きでコピーする
         case ND_STRCOPY:
             this->gen_strcopy(expr->children[0]->sym, expr->children[1]->sym, reg);
+            break;
+
+        // 組み込み関数SYSCALL: カーネルモードへ入る命令1つを生成する
+        // (値を返さないため式の途中には現れず，命令の前後で保つべきレジスタの値はない)
+        case ND_SYSCALL:
+            (*this->out_) << "    syscall\n";
+            break;
+
+        // 組み込み関数SYSRET: ユーザーモードへ戻る命令1つを生成する
+        case ND_SYSRET:
+            (*this->out_) << "    sysret\n";
             break;
 
         // 代入: 右辺(複合代入は左辺の現在値と右辺の演算結果)をr{reg}に求め，変数へ書き込む

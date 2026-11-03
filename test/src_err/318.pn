@@ -1,0 +1,9 @@
+// expect: compiler error: 'SP' can be written only in a function without a stack frame at src_err/318.pn:4
+// コード生成エラー: 引数を持つ関数(フレームを持つ関数)では，++/--でもSPへ書き込めない (異常系)
+void shift(int n) {
+    SP++;
+}
+
+void main(void) {
+    shift(1);
+}

@@ -1,0 +1,5 @@
+// expect: compiler error: cannot take the address of 'KENTRY' (it has no memory address) at src_err/313.pn:4
+// 意味解析エラー: カーネルモードで使うハードウェア変数もレジスタに置かれるため，番地を取れない (異常系)
+void main(void) {
+    unsigned int *p = &KENTRY;
+}

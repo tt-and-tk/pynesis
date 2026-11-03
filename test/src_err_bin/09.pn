@@ -1,0 +1,6 @@
+// expect: compiler error: 'SYSRET' cannot be used in an executable at src_err_bin/09.pn:4
+// 意味解析エラー: 実行ファイルはユーザーモードで動き，SYSRETを実行すると例外になるため使えない (異常系)
+int main(void) {
+    SYSRET();
+    return 0;
+}

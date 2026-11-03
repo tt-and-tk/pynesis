@@ -1,0 +1,5 @@
+// expect: compiler error: hardware variable 'BTN' cannot be used in an executable at src_err_bin/08.pn:4
+// 意味解析エラー: 実行ファイルはユーザーモードで動くため，周辺機器のハードウェア変数も読み出せない (異常系)
+int main(void) {
+    return BTN;
+}

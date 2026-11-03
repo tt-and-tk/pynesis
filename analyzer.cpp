@@ -8,10 +8,18 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (公開するのはボード上の周辺機器を操作するレジスタだけで，CPU内部レジスタは含めない)
-// 読み書き可否は，表の各レジスタをCPUの命令で読み出せるか・書き込めるかに合わせる．型は周辺機器の状態を表すビット列として扱うため，全てunsigned int
+// ハードウェア変数の定義表 (公開するのは，OSがカーネルモードで使うCPU内部レジスタと，ボード上の周辺機器を操作するレジスタ)
+// 読み書き可否は，表の各レジスタをカーネルモードのCPUの命令で読み出せるか・書き込めるかに合わせる．
+// 型は番地や状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
+    {"SP",        {BASE_INT, false}, LOC_REGISTER, 0x10, true,  true},   // スタックポインタ
+    {"KENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x11, true,  true},   // システムコールハンドラの番地
+    {"KRET",      {BASE_INT, false}, LOC_REGISTER, 0x12, true,  true},   // カーネルモードからの戻り先
+    {"UBASE",     {BASE_INT, false}, LOC_REGISTER, 0x13, true,  true},   // ユーザーモードの領域の先頭の番地
+    {"USIZE",     {BASE_INT, false}, LOC_REGISTER, 0x14, true,  true},   // ユーザーモードの領域の大きさ
+    {"EENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x15, true,  true},   // 例外ハンドラの番地
+    {"ECAUSE",    {BASE_INT, false}, LOC_REGISTER, 0x16, true,  false},  // 例外の原因
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
     {"DIPSW",     {BASE_INT, false}, LOC_REGISTER, 0x21, true,  false},  // DIPスイッチ
     {"LED",       {BASE_INT, false}, LOC_REGISTER, 0x22, false, true},   // LED
@@ -486,7 +494,7 @@ void Analyzer::collect_globals() {
                     throw std::string("compiler error: '") + param->sval + "' is already declared as a function at "
                           + loc_to_string(param->loc);
                 }
-                // ハードウェア変数と同名の引数は禁止する (I/Oレジスタの誤上書き防止)
+                // ハードウェア変数と同名の引数は禁止する (ハードウェア変数のレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
                     throw std::string("compiler error: cannot shadow hardware register '") + param->sval
@@ -1071,7 +1079,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         throw std::string("compiler error: '") + decl->sval + "' is already declared as a function at "
               + loc_to_string(decl->loc);
     }
-    // ハードウェア変数と同名のローカル変数は宣言できない (I/Oレジスタを上書きしないように禁止する)
+    // ハードウェア変数と同名のローカル変数は宣言できない (ハードウェア変数のレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
         throw std::string("compiler error: cannot redeclare hardware register '") + decl->sval
@@ -1194,6 +1202,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
                                            : "' is not declared at ";   // エラーの理由
             throw std::string("compiler error: '") + expr->sval + reason + loc_to_string(expr->loc);
         }
+        this->check_register_access(sym, expr);
         expr->sym  = sym;
         expr->type = sym->type;
         return;
@@ -1206,6 +1215,16 @@ void Analyzer::analyze_lvalue(node_t *expr) {
     // それ以外(リテラル・演算や関数呼び出しの結果等)は番地を持たない
     throw std::string("compiler error: expression is not a variable, array element, struct member or dereference at ")
           + loc_to_string(expr->loc);
+}
+
+// 実行ファイル用に解析する場合に，ハードウェア変数の読み書きをエラーにする
+// (実行ファイルはユーザーモードで動き，ハードウェア変数のレジスタを読み書きすると例外になるため．
+//  型だけを使うsizeofはレジスタを読み書きしないため，この検査を通さない)
+void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
+    if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
+        throw std::string("compiler error: hardware variable '") + sym->name
+              + "' cannot be used in an executable at " + loc_to_string(expr->loc);
+    }
 }
 
 // 関数呼び出しを検査する (children: [呼び出す関数(関数名または関数ポインタの値を持つ式), 引数...])
@@ -1488,6 +1507,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: use of undeclared identifier '")
                       + expr->sval + "' at " + loc_to_string(expr->loc);
             }
+            this->check_register_access(sym, expr);
             if (!sym->readable) {
                 throw std::string("compiler error: '") + expr->sval
                       + "' is not readable at " + loc_to_string(expr->loc);
@@ -1801,6 +1821,21 @@ void Analyzer::analyze_expr(node_t *expr) {
             expr->type = type_t{BASE_VOID, true};
             return;
         }
+
+        // 組み込み関数SYSCALL: カーネルモードへ入る．値を返さない(void)
+        case ND_SYSCALL:
+            expr->type = type_t{BASE_VOID, true};
+            return;
+
+        // 組み込み関数SYSRET: ユーザーモードへ戻る．値を返さない(void)
+        case ND_SYSRET:
+            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動き，SYSRETを実行すると例外になるため)
+            if (this->is_bin_mode_) {
+                throw std::string("compiler error: 'SYSRET' cannot be used in an executable at ")
+                      + loc_to_string(expr->loc);
+            }
+            expr->type = type_t{BASE_VOID, true};
+            return;
 
         // 配列要素アクセス: 添字を付ける対象(配列またはポインタ)の名前解決とインデックス式の検査を行う
         // 配列変数・ポインタ変数はsval(変数名)で解決し，それ以外(メンバ・間接参照・ポインタの配列の要素)は

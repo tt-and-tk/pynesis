@@ -1,0 +1,24 @@
+// OSがカーネルモードで使うハードウェア変数と，動作状態を切り替える組み込み関数
+// (SP・KENTRY〜ECAUSEの読み出し・書き込みが番地0x10〜0x16のレジスタとの転送になり，
+//  SYSCALL()・SYSRET()がそれぞれsyscall・sysretの命令1つになる．フレームを持たない関数ではSPへ書き込める)
+unsigned int user_sp;
+unsigned int kernel_sp;
+
+// システムコールハンドラ: SPをカーネルのスタックへ切り替えてから，ユーザーのSPへ戻してSYSRETで戻る
+void handler(void) {
+    user_sp = SP;           // 番地0x10から読み出す
+    SP = kernel_sp;         // 番地0x10へ書き込む
+    KRET = KRET;            // 番地0x12の読み出しと書き込み
+    SP = user_sp;
+    SYSRET();
+}
+
+void main(void) {
+    KENTRY = (unsigned int)handler;   // 関数の番地(先頭の命令のindex)を番地0x11へ書き込む
+    EENTRY = (unsigned int)handler;   // 番地0x15へ書き込む
+    UBASE = 0x8000;                   // 番地0x13へ書き込む
+    USIZE = 0x4000;                   // 番地0x14へ書き込む
+    LED = ECAUSE;                     // 番地0x16から読み出す
+    LED = UBASE + USIZE;              // 番地0x13・0x14から読み出す
+    SYSCALL();
+}

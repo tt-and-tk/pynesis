@@ -12,6 +12,8 @@
 const std::string RAX_REGISTER = "r30";
 // ハードウェア制約: スタックポインタ(SP)のアセンブリ表記 (6'h10)
 const std::string SP_REGISTER = "r16";
+// ハードウェア制約: スタックポインタ(SP)のレジスタの番地 (SPのハードウェア変数を見分けるために使う)
+const int SP_ADDRESS = 0x10;
 // ヌルポインタの値 (アドレスバス幅を超える存在しえない番地のため，参照するとCPUが必ず停止する)
 const long long NULLPTR_VALUE = 0x80000000LL;
 
@@ -128,6 +130,8 @@ private:
     // arg_count個の引数のindex番目を書き込む位置の，呼び出し元の現在のSPから数えたオフセットを返す
     static int calc_arg_offset(int arg_count, int index);
     int calc_spill_size(node_t *func);      // 関数が必要とするレジスタ退避領域のバイト数を求める
+    // node以下にSPのハードウェア変数へ書き込む式があればエラーにする (フレームを持つ関数の本体に対して使う)
+    static void check_no_sp_write(const node_t *node);
     void check_memory_usage();   // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
     // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
     // path: 現在の探索経路(再帰の検出用)．recorded: 関数ごとに求めた使用量(再訪時に使い回す)

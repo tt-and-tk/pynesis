@@ -1,0 +1,9 @@
+// 実行ファイル用: SYSCALL()は実行ファイルでも使え，syscallの命令1つになる
+// ハードウェア変数の型だけを使うsizeofはレジスタを読み書きしないため，実行ファイルでも使える
+// sizeは0xFFF8番地(末尾のシステムコールの入口の直前)に置かれる
+int size;
+int main(void) {
+    SYSCALL();
+    size = sizeof(KENTRY);   // unsigned intの4バイト
+    return 0;
+}
