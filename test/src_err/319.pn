@@ -1,0 +1,14 @@
+// expect: compiler error: 'SP' can be written only in a function without a stack frame at src_err/319.pn:12
+// コード生成エラー: 引数・ローカル変数を持たなくても，レジスタの退避でフレームを持つ関数では，ループの中でもSPへ書き込めない (異常系)
+int g;
+
+int one(void) {
+    return 1;
+}
+
+void main(void) {
+    g = 1 + one();      // 関数呼び出しをまたいで1を退避するため，フレームを持つ
+    while (g) {
+        --SP;
+    }
+}

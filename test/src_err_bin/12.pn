@@ -1,0 +1,6 @@
+// expect: compiler error: hardware variable 'KENTRY' cannot be used in an executable at src_err_bin/12.pn:4
+// 意味解析エラー: 実行ファイルでは，番地を取ろうとした場合も，番地を持たない旨より先に実行ファイルで使えない旨のエラーになる (異常系)
+int main(void) {
+    unsigned int *p = &KENTRY;
+    return 0;
+}
