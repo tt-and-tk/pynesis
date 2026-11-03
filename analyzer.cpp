@@ -1219,7 +1219,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 
 // 実行ファイル用に解析する場合に，ハードウェア変数の読み書きをエラーにする
 // (実行ファイルはユーザーモードで動き，ハードウェア変数のレジスタを読み書きすると例外になるため．
-//  型だけを使うsizeofはレジスタを読み書きしないため，この検査を通さない)
+//  sizeofは型だけを使うため，この検査の対象外とする)
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
     if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
         throw std::string("compiler error: hardware variable '") + sym->name
