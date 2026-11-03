@@ -1235,13 +1235,13 @@ void Generator::gen_expr(node_t *expr, int reg) {
             this->gen_strcopy(expr->children[0]->sym, expr->children[1]->sym, reg);
             break;
 
-        // 組み込み関数SYSCALL: カーネルモードへ入る命令1つを生成する
+        // 組み込み関数syscall: カーネルモードへ入る命令1つを生成する
         // (値を返さないため式の途中には現れず，命令の前後で保つべきレジスタの値はない)
         case ND_SYSCALL:
             (*this->out_) << "    syscall\n";
             break;
 
-        // 組み込み関数SYSRET: ユーザーモードへ戻る命令1つを生成する
+        // 組み込み関数sysret: ユーザーモードへ戻る命令1つを生成する
         case ND_SYSRET:
             (*this->out_) << "    sysret\n";
             break;

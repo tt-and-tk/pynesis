@@ -1823,16 +1823,16 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 組み込み関数SYSCALL: カーネルモードへ入る．値を返さない(void)
+        // 組み込み関数syscall: カーネルモードへ入る．値を返さない(void)
         case ND_SYSCALL:
             expr->type = type_t{BASE_VOID, true};
             return;
 
-        // 組み込み関数SYSRET: ユーザーモードへ戻る．値を返さない(void)
+        // 組み込み関数sysret: ユーザーモードへ戻る．値を返さない(void)
         case ND_SYSRET:
             // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動かす前提で，ユーザーモードでSYSRETを実行すると例外になるため)
             if (this->is_bin_mode_) {
-                throw std::string("compiler error: 'SYSRET' cannot be used in an executable at ")
+                throw std::string("compiler error: 'sysret' cannot be used in an executable at ")
                       + loc_to_string(expr->loc);
             }
             expr->type = type_t{BASE_VOID, true};

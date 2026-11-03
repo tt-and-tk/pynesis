@@ -1,11 +1,11 @@
-.global syscall, sysret, main
+.global adjust_sp, read_regs, main
 
 main:
-    call syscall
-    call sysret
+    call adjust_sp
+    call read_regs
     ret
 
-syscall:
+adjust_sp:
     rm fh r0 r0 0
     mov fh r0 r1 0
     eq r0 r1 .L0
@@ -25,7 +25,7 @@ syscall:
 .L0:
     ret
 
-sysret:
+read_regs:
     mov fh r0 r0 4
     sub r16 r0 r16
     mov fh r16 r0
