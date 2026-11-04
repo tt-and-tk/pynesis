@@ -72,14 +72,14 @@ int compile_pn_to_asm(int argc, char **argv) {
         asm_file.close();
 
         // 実行ファイル用の場合 (命令列とグローバル変数は，シェルが割り振る領域の先頭から順に置くため，
-        //  両者の合計が領域に収まる必要がある)
+        //  両者の合計が，領域のうち実行ファイルが使える範囲に収まる必要がある)
         if (args.is_bin_mode) {
             const int code_bytes = instruction_count * INSTRUCTION_BYTES;    // 命令列が占めるバイト数
-            if (code_bytes + global_size > EXEC_REGION_SIZE) {
+            if (code_bytes + global_size > EXEC_AREA_SIZE) {
                 throw std::string("compiler error: instructions (")
                       + std::to_string(code_bytes) + " bytes) and global variables ("
-                      + std::to_string(global_size) + " bytes) exceed region for executable ("
-                      + std::to_string(EXEC_REGION_SIZE) + " bytes)";
+                      + std::to_string(global_size) + " bytes) exceed area for executable ("
+                      + std::to_string(EXEC_AREA_SIZE) + " bytes)";
             }
         }
         // ROM用の場合

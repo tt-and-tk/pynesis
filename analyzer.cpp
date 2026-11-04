@@ -136,14 +136,14 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         }
     }
 
-    // グローバル変数・文字列リテラルだけで，置き場所(ROM用はメモリの前半，実行ファイル用はシェルが割り振る領域)を
+    // グローバル変数・文字列リテラルだけで，置き場所(ROM用はメモリの前半，実行ファイル用は領域のうち実行ファイルが使える範囲)を
     // 使い切っていないか確認する
     // (ROM用のスタック・実行ファイル用の命令列と合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
     // 実行ファイル用の場合
-    if (this->is_bin_mode_ && this->global_size_ > EXEC_REGION_SIZE) {
+    if (this->is_bin_mode_ && this->global_size_ > EXEC_AREA_SIZE) {
         throw std::string("compiler error: global variables (")
-              + std::to_string(this->global_size_) + " bytes) exceed region for executable ("
-              + std::to_string(EXEC_REGION_SIZE) + " bytes)";
+              + std::to_string(this->global_size_) + " bytes) exceed area for executable ("
+              + std::to_string(EXEC_AREA_SIZE) + " bytes)";
     }
     // ROM用の場合
     if (!this->is_bin_mode_ && this->global_size_ > RAM_HALF_SIZE) {

@@ -1,6 +1,6 @@
-// expect: compiler error: instructions (72 bytes) and global variables (32700 bytes) exceed region for executable (32768 bytes)
-// 生成エラー: 命令列(9命令，72バイト)とグローバル変数(32700バイト)の合計が，シェルが割り振る領域(32768バイト)を超える (異常系)
-int table[8174];
+// expect: compiler error: instructions (72 bytes) and global variables (32444 bytes) exceed area for executable (32512 bytes)
+// 生成エラー: 命令列(9命令，72バイト)とグローバル変数(32444バイト)の合計が，領域のうち実行ファイルが使える範囲(32512バイト)を超える (異常系)
+int table[8110];
 int last;
 int main(void) {
     last = 1;
