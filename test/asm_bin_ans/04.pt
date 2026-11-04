@@ -4,15 +4,21 @@ main:
     mov fh r0 r0 4
     sub r16 r0 r16
     mov fh r0 r0 3
-    wm fh r0 r0 65528
+    wm fh r0 r0 168
     mov fh r0 r0 19279
-    wm fh r0 r0 65524
-    mov fh r0 r0 65524
+    wm fh r0 r0 172
+    mov fh r0 r0 172
     wmr fh r16 r0 0
-    rm fh r0 r0 65528
+    rm fh r0 r0 168
     mov fh r0 r1 1
     add r0 r1 r0
-    wm fh r0 r0 65528
+    wm fh r0 r0 168
     mov fh r0 r0 4
     add r16 r0 r16
+    mov fh r0 r0 24
+    sub r16 r0 r16
+    mov fh r0 r0 5
+    wmr fh r16 r0 4
+    wmr fh r16 r30 8
+    syscall
     ret

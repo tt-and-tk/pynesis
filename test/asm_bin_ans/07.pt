@@ -4,7 +4,7 @@ main:
     mov fh r0 r0 8
     sub r16 r0 r16
     rmr fh r16 r0 0
-    wm fh r0 r0 65528
+    wm fh r0 r0 312
     rmr fh r16 r0 0
     mov fh r0 r1 2
     egt r0 r1 .L0
@@ -12,7 +12,12 @@ main:
     mov fh r0 r30
     mov fh r0 r0 8
     add r16 r0 r16
-    ret
+    mov fh r0 r0 24
+    sub r16 r0 r16
+    mov fh r0 r0 5
+    wmr fh r16 r0 4
+    wmr fh r16 r30 8
+    syscall
 .L0:
     mov fh r0 r0 0
     mov fh r0 r1 1
@@ -26,7 +31,13 @@ main:
     mov fh r0 r1 24
     sll r0 r1 r0
     sra r0 r1 r0
-    wm 1h r0 r0 65524
+    wm 1h r0 r0 316
     mov fh r0 r0 8
     add r16 r0 r16
+    mov fh r0 r0 24
+    sub r16 r0 r16
+    mov fh r0 r0 5
+    wmr fh r16 r0 4
+    wmr fh r16 r30 8
+    syscall
     ret

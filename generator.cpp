@@ -92,10 +92,10 @@ static bool has_runtime_addr(const node_t *target) {
 }
 
 // コンストラクタ: AST・意味解析の結果・出力先を受け取る
-Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file)
-    : root_(root), analysis_(analysis), asm_file_(asm_file), out_(&asm_file) {}
+Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ostream &asm_out)
+    : root_(root), analysis_(analysis), asm_out_(asm_out), out_(&asm_out) {}
 
-// コード生成を実行して .pt に書き出す
+// コード生成を実行してアセンブリを出力先へ書き出す
 void Generator::operator()() {
     this->gen_program();
     // 全関数のフレームの大きさが確定したので，グローバル変数と合わせてメモリの前半に収まるか検査する
@@ -172,7 +172,8 @@ void Generator::collect_string_literals(node_t *node, std::vector<node_t *> &out
 
 // 関数定義を生成する
 void Generator::gen_func(node_t *func) {
-    // この関数のフレームの各領域の大きさを求める
+    // 生成中の関数の名前を控え，フレームの各領域の大きさを求める
+    this->func_name_ = func->sval;
     this->local_size_ = this->analysis_.func_local_sizes.at(func->sval);
     this->param_size_ = static_cast<int>(this->analysis_.func_params.at(func->sval).size()) * 4;
     this->spill_size_ = this->calc_spill_size(func);
@@ -221,7 +222,7 @@ int Generator::calc_spill_size(node_t *func) {
     const int spill_size = (this->max_spill_reg_ + 1) * 4;   // 退避したレジスタの本数から求めた大きさ
 
     // 出力先と，生成に伴って変わった状態を元へ戻す
-    this->out_ = &this->asm_file_;
+    this->out_ = &this->asm_out_;
     this->label_count_ = label_count_before;
     this->spill_size_ = spill_size_before;
     return spill_size;
@@ -265,9 +266,34 @@ void Generator::gen_func_body(node_t *func) {
         this->gen_global_inits();
     }
     this->gen_block(func->children.back());   // 本体ブロック(最後の子)の文を生成する
-    // 関数末尾のret (全関数にretが1つ以上必要)．return文を通らずに終端へ達した場合の復帰でもある
+    // return文を通らずに終端へ達した場合の復帰
+    this->gen_return();
+    // 実行ファイルのmainの末尾にretを置く
+    // (復帰は終了のシステムコールで行いretには到達しないが，アセンブリでは全関数にretが1つ以上必要なため)
+    if (this->analysis_.is_bin_mode && func->sval == "main") {
+        (*this->out_) << "    ret\n";
+    }
+}
+
+// フレームを解放して，生成中の関数から復帰する命令を出力する
+void Generator::gen_return() {
     this->gen_frame_leave();
-    (*this->out_) << "    ret\n";
+    // 実行ファイルのmainでない場合は，retで呼び出し元へ戻る
+    // (ROMのmainのretは，アセンブラがプログラムの終了を表す命令に置き換える)
+    if (!this->analysis_.is_bin_mode || this->func_name_ != "main") {
+        (*this->out_) << "    ret\n";
+        return;
+    }
+    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでシェルへ伝える
+    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない)
+    // SPを引数の並びのバイト数だけ下げてから，並びのうち番号の位置(SP+4)と最初の引数の位置(SP+8)へ書き込み，システムコールの命令を実行する
+    // (SPを先に下げるのは，シェルがSPより上に置いたコマンド名と引数の文字列を壊さないため)
+    (*this->out_) << "    mov fh r0 r0 " << SYSCALL_ARGS_BYTES << "\n";
+    (*this->out_) << "    sub " << SP_REGISTER << " r0 " << SP_REGISTER << "\n";
+    (*this->out_) << "    mov fh r0 r0 " << SYSCALL_EXIT_NUMBER << "\n";
+    (*this->out_) << "    wmr fh " << SP_REGISTER << " r0 4\n";
+    (*this->out_) << "    wmr fh " << SP_REGISTER << " " << RAX_REGISTER << " 8\n";
+    (*this->out_) << "    syscall\n";
 }
 
 // フレームを確保する命令を出力する
@@ -347,8 +373,7 @@ void Generator::gen_stmt(node_t *stmt) {
                 this->gen_expr(stmt->children[0], 0);                  // 戻り値の式 → r0
                 (*this->out_) << "    mov fh r0 " << RAX_REGISTER << "\n";  // r0 → RAX
             }
-            this->gen_frame_leave();
-            (*this->out_) << "    ret\n";
+            this->gen_return();
             break;
         // 式文，およびfor文の更新部: 最上位の種類によらず，含まれる副作用(代入・関数呼び出し・増減等)のため評価する．求まった値(r0)は使わない
         default:
@@ -1677,8 +1702,8 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
 // スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 void Generator::check_memory_usage() {
-    // 実行ファイル用の場合 (グローバル変数はスタックと別のメモリの後半にあり，スタックの空きは
-    //  呼び出された時点のSPで決まりコンパイル時に分からないため，検査しない)
+    // 実行ファイル用の場合 (スタックの空きは，シェルが領域の末尾に置くコマンド名と引数の文字列の長さで決まり
+    //  コンパイル時に分からないため，検査しない)
     if (this->analysis_.is_bin_mode) return;
 
     std::set<std::string> path;                // 現在の探索経路(再帰の検出用)

@@ -3,11 +3,6 @@
 
 #include "analyzer.hpp"
 
-// ROM用のグローバル変数の配置開始アドレス (1変数=1ワード(4バイト)で順次割り当てる)
-static const int g_global_base_addr = 0x0000000;
-// 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
-static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
-
 // ハードウェア変数の定義表 (公開するのは，CPU内部レジスタと，ボード上の周辺機器を操作するレジスタ．どちらも，変数として読み書きするのはカーネルモードで動くOSだけ)
 // 読み書き可否は，表の各レジスタをカーネルモードのCPUの命令で読み出せるか・書き込めるかに合わせる．
 // 型は番地や状態を表すビット列として扱うため，全てunsigned int
@@ -94,9 +89,9 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
     return is_signed_operation_by_signs(op, is_promoted_signed(lhs), is_promoted_signed(rhs));
 }
 
-// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかを受け取る
-Analyzer::Analyzer(node_t *root, bool is_bin_mode)
-    : root_(root), is_bin_mode_(is_bin_mode), global_size_(0), local_size_(0) {}
+// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかと，グローバル変数・文字列リテラルを置き始める番地を受け取る
+Analyzer::Analyzer(node_t *root, bool is_bin_mode, int global_base)
+    : root_(root), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
 
 // 意味解析を実行してシンボルテーブルを返す
 std::map<std::string, const symbol_t *> Analyzer::operator()() {
@@ -141,10 +136,17 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         }
     }
 
-    // グローバル変数・文字列リテラルだけで，置き場所となるメモリの半分(ROM用は前半，実行ファイル用は後半)を
+    // グローバル変数・文字列リテラルだけで，置き場所(ROM用はメモリの前半，実行ファイル用はシェルが割り振る領域)を
     // 使い切っていないか確認する
     // (ROM用のスタック・実行ファイル用の命令列と合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
-    if (this->global_size_ > RAM_HALF_SIZE) {
+    // 実行ファイル用の場合
+    if (this->is_bin_mode_ && this->global_size_ > EXEC_REGION_SIZE) {
+        throw std::string("compiler error: global variables (")
+              + std::to_string(this->global_size_) + " bytes) exceed region for executable ("
+              + std::to_string(EXEC_REGION_SIZE) + " bytes)";
+    }
+    // ROM用の場合
+    if (!this->is_bin_mode_ && this->global_size_ > RAM_HALF_SIZE) {
         throw std::string("compiler error: global variables (")
               + std::to_string(this->global_size_) + " bytes) exceed half of memory ("
               + std::to_string(RAM_HALF_SIZE) + " bytes)";
@@ -172,11 +174,8 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 実行ファイル用なら，メモリの後半のうち実行ファイルが使える範囲の末尾から下へ詰める
-        // (メモリの前半はシェルのグローバル変数とスタックが使い，命令列はメモリの後半の先頭から上へ伸びるため)
-        if (this->is_bin_mode_) return g_bin_global_end_addr - this->global_size_;
-        // ROM用なら，0番地から上へ詰める
-        return g_global_base_addr + this->global_size_ - bytes;
+        // 置き始める番地から上へ詰める
+        return this->global_base_ + this->global_size_ - bytes;
     }
     // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
     throw std::string("compiler error: cannot allocate memory for this kind of variable");
