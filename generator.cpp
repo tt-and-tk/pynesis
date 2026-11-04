@@ -172,8 +172,9 @@ void Generator::collect_string_literals(node_t *node, std::vector<node_t *> &out
 
 // 関数定義を生成する
 void Generator::gen_func(node_t *func) {
-    // 生成中の関数の名前を控え，フレームの各領域の大きさを求める
+    // 生成中の関数の名前を控える(復帰の命令を，実行ファイルのmainかどうかで変えるため)
     this->func_name_ = func->sval;
+    // この関数のフレームの各領域の大きさを求める
     this->local_size_ = this->analysis_.func_local_sizes.at(func->sval);
     this->param_size_ = static_cast<int>(this->analysis_.func_params.at(func->sval).size()) * 4;
     this->spill_size_ = this->calc_spill_size(func);

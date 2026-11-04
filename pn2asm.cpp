@@ -18,7 +18,7 @@ typedef struct {
 
 // 前宣言
 static void get_args(int argc, char **argv, args_t &args);     // コマンドライン引数を取得する
-// Pynesisソースをアセンブリに変換して返す(グローバル変数・文字列リテラルをglobal_base番地から置き，それらが占めるバイト数をglobal_sizeに返す)
+// Pynesisソースをアセンブリに変換して返す(グローバル変数・文字列リテラルを指定した番地から置き，それらが占めるバイト数を3つ目の引数へ返す)
 static std::string compile_to_asm(const args_t &args, int global_base, int &global_size);
 static int count_instructions(const std::string &asm_text);    // アセンブリの命令数を数える
 
@@ -102,7 +102,7 @@ int compile_pn_to_asm(int argc, char **argv) {
 }
 
 // Pynesisソースをアセンブリに変換して返す
-// グローバル変数・文字列リテラルはglobal_base番地から上へ置き，それらが占めるバイト数をglobal_sizeに返す
+// グローバル変数・文字列リテラルは2つ目の引数の番地から上へ置き，それらが占めるバイト数を3つ目の引数へ返す
 std::string compile_to_asm(const args_t &args, int global_base, int &global_size) {
     std::vector<token_t> tokens;    // トークン列 (字句解析結果)
     std::ostringstream asm_out;     // 生成したアセンブリの出力先
