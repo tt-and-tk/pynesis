@@ -3,15 +3,9 @@
 main:
     syscall
     mov fh r0 r0 4
-    wm fh r0 r0 144
+    wm fh r0 r0 96
     mov fh r0 r0 0
     mov fh r0 r30
-    mov fh r0 r0 24
-    sub r16 r0 r16
-    mov fh r0 r0 5
-    wmr fh r16 r0 4
-    wmr fh r16 r30 8
-    syscall
     mov fh r0 r0 24
     sub r16 r0 r16
     mov fh r0 r0 5

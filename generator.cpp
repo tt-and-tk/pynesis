@@ -268,7 +268,20 @@ void Generator::gen_func_body(node_t *func) {
     }
     this->gen_block(func->children.back());   // 本体ブロック(最後の子)の文を生成する
     // return文を通らずに終端へ達した場合の復帰
-    this->gen_return();
+    // 実行ファイルのmainで本体の最後の文がreturn文なら，終端へは達しないため省く
+    // (終了のシステムコールの命令列は6命令あり，実行ファイルが使える範囲を到達しない命令で消費しないため)
+    const std::vector<node_t *> &stmts = func->children.back()->children;    // 本体ブロックの文
+    // 終端へ達しない場合かを求める
+    const bool ends_with_return =
+        // 実行ファイル用である
+        this->analysis_.is_bin_mode
+        // かつ，mainである
+        && func->sval == "main"
+        // かつ，本体の最後の文がreturn文である
+        && !stmts.empty() && stmts.back()->kind == ND_RETURN;
+    if (!ends_with_return) {
+        this->gen_return();
+    }
     // 実行ファイルのmainの末尾にretを置く
     // (復帰は終了のシステムコールで行いretには到達しないが，アセンブリでは全関数にretが1つ以上必要なため)
     if (this->analysis_.is_bin_mode && func->sval == "main") {

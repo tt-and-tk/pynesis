@@ -61,18 +61,8 @@ int compile_pn_to_asm(int argc, char **argv) {
             }
         }
 
-        // 出力アセンブリファイルを開き，生成したアセンブリを書き出す
-        // (字句解析〜コード生成でエラーになった場合に空のファイルを残さないよう，生成を終えてから開く)
-        // (実行環境によらずLFで出力するよう，テキストモードによる改行コード変換(LF→CRLF)を避けてバイナリモードで開く)
-        asm_file.open(args.pt_file_name, std::ios::binary);
-        if (!asm_file) {
-            throw std::string("compiler error: cannot open file '") + args.pt_file_name + "'";
-        }
-        asm_file << asm_text;
-        asm_file.close();
-
         // 実行ファイル用の場合 (命令列とグローバル変数は，シェルが割り振る領域の先頭から順に置くため，
-        //  両者の合計が，領域のうち実行ファイルが使える範囲に収まる必要がある)
+        //  両者の合計が，実行ファイル用の範囲に収まる必要がある)
         if (args.is_bin_mode) {
             const int code_bytes = instruction_count * INSTRUCTION_BYTES;    // 命令列が占めるバイト数
             if (code_bytes + global_size > EXEC_AREA_SIZE) {
@@ -88,6 +78,16 @@ int compile_pn_to_asm(int argc, char **argv) {
                   + std::to_string(instruction_count) + ") exceeds maximum ("
                   + std::to_string(MAX_INSTRUCTION_COUNT) + ")";
         }
+
+        // 出力アセンブリファイルを開き，生成したアセンブリを書き出す
+        // (字句解析〜コード生成と大きさの検査でエラーになった場合にファイルを残さないよう，検査を終えてから開く)
+        // (実行環境によらずLFで出力するよう，テキストモードによる改行コード変換(LF→CRLF)を避けてバイナリモードで開く)
+        asm_file.open(args.pt_file_name, std::ios::binary);
+        if (!asm_file) {
+            throw std::string("compiler error: cannot open file '") + args.pt_file_name + "'";
+        }
+        asm_file << asm_text;
+        asm_file.close();
 
         // 正常終了を報告する
         std::cout << "compiled: " << args.pt_file_name << std::endl;
