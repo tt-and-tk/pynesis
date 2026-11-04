@@ -184,6 +184,8 @@ private:
     void analyze_discarded(node_t *expr);
     // 書き込み先・番地の取得対象になる式(左辺値)を検査し名前解決・型注釈する (値を読む側の検査は行わない)
     void analyze_lvalue(node_t *expr);
+    // 実行ファイル用に解析する場合に，ハードウェア変数の読み書きをエラーにする (実行ファイルはユーザーモードで動かす前提で，SP以外は例外になり，SPはコンパイラがスタックフレームに使うため)
+    void check_register_access(const symbol_t *sym, const node_t *expr) const;
     void analyze_call(node_t *expr);                        // 関数呼び出し(直接・関数ポインタ経由)を検査する
     void analyze_binop(node_t *expr);                       // 二項演算を検査し，結果の型を注釈する
     // 構造体のメンバを名前から探す (見つからなければexprの位置でエラー)

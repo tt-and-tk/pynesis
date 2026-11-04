@@ -635,6 +635,17 @@ node_t *Parser::parse_strcopy() {
     return node;
 }
 
+// 動作状態を切り替える組み込み関数を解析してND_SYSCALLまたはND_SYSRETを返す
+// 構文: syscall ( ) または sysret ( )  ※ 飛び先と戻り先はCPU内のレジスタが持つため引数を取らない
+node_t *Parser::parse_mode_switch() {
+    const bool is_syscall = this->token_kind_is(TK_SYSCALL);           // syscallか(falseならsysret)
+    node_t *node = this->new_node(is_syscall ? ND_SYSCALL : ND_SYSRET);
+    this->get_token(is_syscall ? TK_SYSCALL : TK_SYSRET);              // syscall または sysret
+    this->get_token(TK_LPAREN);                                        // (
+    this->get_token(TK_RPAREN);                                        // )
+    return node;
+}
+
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
 // 型名は整数型(符号修飾子付きを含む)のみ．型名の場合はnode->typeに型を格納し(children空)，
@@ -1247,9 +1258,10 @@ node_t *Parser::parse_primary() {
         return this->parse_sizeof();
     }
 
-    // 組み込み関数streq/strcopy (予約語のため専用トークンで判定する)
+    // 組み込み関数 (予約語のため専用トークンで判定する)
     if (this->token_kind_is(TK_STREQ))   return this->parse_streq();
     if (this->token_kind_is(TK_STRCOPY)) return this->parse_strcopy();
+    if (this->token_kind_is(TK_SYSCALL) || this->token_kind_is(TK_SYSRET)) return this->parse_mode_switch();
 
     // 整数リテラル
     if (this->token_kind_is(TK_INT_LIT)) {

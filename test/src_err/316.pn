@@ -1,0 +1,6 @@
+// expect: compiler error: expected identifier after type at src_err/316.pn:3
+// 構文エラー: syscallは予約語のため，同名の変数を宣言できない (異常系)
+int syscall;
+
+void main(void) {
+}

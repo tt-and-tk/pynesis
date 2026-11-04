@@ -1,0 +1,6 @@
+// expect: compiler error: hardware variable 'LED' cannot be used in an executable at src_err_bin/11.pn:4
+// 意味解析エラー: 実行ファイルでは，++/--でも周辺機器のハードウェア変数を読み書きできない (異常系)
+int main(void) {
+    LED++;
+    return 0;
+}

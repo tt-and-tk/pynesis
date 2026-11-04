@@ -1,0 +1,6 @@
+// expect: compiler error: hardware variable 'SP' cannot be used in an executable at src_err_bin/10.pn:4
+// 意味解析エラー: SPはユーザーモードでも読み書きできるが，コンパイラがスタックフレームに使うため，実行ファイルでは複合代入でも読み書きできない (異常系)
+int main(void) {
+    SP += 8;
+    return 0;
+}

@@ -1,0 +1,5 @@
+// expect: compiler error: 'ECAUSE' is not writable at src_err/312.pn:4
+// 意味解析エラー: 例外の原因のハードウェア変数ECAUSEは読み出し専用のため，代入できない (異常系)
+void main(void) {
+    ECAUSE = 0;
+}

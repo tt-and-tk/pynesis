@@ -82,6 +82,8 @@ typedef enum {
     ND_CALL,        // 関数呼び出し (children: [呼び出す関数(関数名または関数ポインタの値を持つ式), 引数...])
     ND_STREQ,       // 組み込み関数streq (char配列2つの内容比較)
     ND_STRCOPY,     // 組み込み関数strcopy (char配列のコピー)
+    ND_SYSCALL,     // 組み込み関数syscall (カーネルモードへ入る命令)
+    ND_SYSRET,      // 組み込み関数sysret (ユーザーモードへ戻る命令)
     ND_ASSIGN,      // 代入式
     ND_BINOP,       // 二項演算
     ND_UNOP,        // 前置単項演算
@@ -186,6 +188,7 @@ private:
     node_t *parse_param();      // 関数の引数 (型 名前)
     node_t *parse_streq();      // 組み込み関数streq(char配列, char配列)
     node_t *parse_strcopy();    // 組み込み関数strcopy(char配列, char配列)
+    node_t *parse_mode_switch();  // 動作状態を切り替える組み込み関数syscall() または sysret()
     node_t *parse_sizeof();     // sizeof(型名 または 変数名)
     node_t *parse_expr_stmt();  // 式文 (式 ;)
     // 式解析メソッド群

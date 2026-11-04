@@ -1,0 +1,7 @@
+// expect: compiler error: expected identifier but got 'sysret' at src_err/321.pn:3
+// 構文エラー: sysretは予約語のため，引数の名前にできない (異常系)
+void f(int sysret) {
+}
+
+void main(void) {
+}

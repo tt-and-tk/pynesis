@@ -1,0 +1,39 @@
+.global adjust_sp, read_regs, main
+
+main:
+    call adjust_sp
+    call read_regs
+    ret
+
+adjust_sp:
+    rm fh r0 r0 0
+    mov fh r0 r1 0
+    eq r0 r1 .L0
+    mov fh r16 r0
+    mov fh r0 r1 8
+    add r0 r1 r0
+    mov fh r0 r16
+    mov fh r16 r0
+    mov fh r0 r1 1
+    sub r0 r1 r1
+    mov fh r1 r16
+    mov fh r16 r0
+    mov fh r0 r1 1
+    add r0 r1 r0
+    mov fh r0 r16
+    syscall
+.L0:
+    ret
+
+read_regs:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r16 r0
+    wmr fh r16 r0 0
+    mov fh r17 r0
+    mov fh r21 r1
+    add r0 r1 r0
+    wm fh r0 r0 0
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
