@@ -1222,7 +1222,11 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 // (実行ファイルはユーザーモードで動かす前提で，ハードウェア変数はカーネルモードで動くOSだけが使うレジスタのため)
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
     // 実行ファイル用に解析していて，対象がハードウェア変数の場合
-    if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
+    if (
+        // 実行ファイル用に解析している
+        this->is_bin_mode_
+        // 対象がハードウェア変数
+        && sym->location == LOC_REGISTER) {
         throw std::string("compiler error: hardware variable '") + sym->name
               + "' cannot be used in an executable at " + loc_to_string(expr->loc);
     }
