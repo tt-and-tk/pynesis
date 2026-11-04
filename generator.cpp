@@ -178,8 +178,8 @@ void Generator::gen_func(node_t *func) {
     this->spill_size_ = this->calc_spill_size(func);
     this->func_frame_sizes_[func->sval] = this->calc_frame_size();
     // フレームを持つ関数の場合，SPへの書き込みを禁止する
-    // (書き込んだ後もフレーム上の変数をSPからの位置で読み書きし，復帰の直前にはフレームの大きさだけSPを戻すため，
-    //  フレームの位置がずれて別の領域を壊す)
+    // (書き込んだ後もフレーム上の変数をSPからの位置で読み書きし，復帰の直前にはフレームの大きさだけSPを戻すので，
+    //  フレームとは別の領域を壊してしまうため)
     if (this->calc_frame_size() != 0) {
         Generator::check_no_sp_write(func);
     }
@@ -232,18 +232,30 @@ void Generator::check_no_sp_write(const node_t *node) {
     if (node == nullptr) return;
 
     // 書き込み先の式を求める
+    const node_t *target = nullptr;   // 書き込み先の式 (書き込みを伴わない式では空のまま)
     // 代入・複合代入の場合は左辺
-    // ++/--の場合は対象
-    // どちらにも当たらない場合は書き込み先を持たない
-    const node_t *target = nullptr;   // 書き込み先の式
     if (node->kind == ND_ASSIGN) {
         target = node->children[0];
-    } else if ((node->kind == ND_UNOP || node->kind == ND_POST_UNOP) && (node->sval == "++" || node->sval == "--")) {
+    }
+    // ++/--の場合は対象
+    else if (
+        // 前置または後置の単項演算子
+        (node->kind == ND_UNOP || node->kind == ND_POST_UNOP)
+        // 演算子が++か--
+        && (node->sval == "++" || node->sval == "--")) {
         target = node->children[0];
     }
+
     // 書き込み先がSPの場合
-    if (target != nullptr && target->sym != nullptr
-        && target->sym->location == LOC_REGISTER && target->sym->address == SP_ADDRESS) {
+    if (
+        // 書き込みを伴う式
+        target != nullptr
+        // 書き込み先が名前解決済みの変数
+        && target->sym != nullptr
+        // 書き込み先がハードウェア変数
+        && target->sym->location == LOC_REGISTER
+        // 書き込み先がSPの番地
+        && target->sym->address == SP_ADDRESS) {
         throw std::string("compiler error: 'SP' can be written only in a function without a stack frame at ")
               + loc_to_string(node->loc);
     }

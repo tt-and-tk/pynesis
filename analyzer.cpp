@@ -8,7 +8,7 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (公開するのは，OSがカーネルモードで使うCPU内部レジスタと，ボード上の周辺機器を操作するレジスタ)
+// ハードウェア変数の定義表 (公開するのは，カーネルモードで動くOSだけが使うレジスタで，CPU内部レジスタとボード上の周辺機器を操作するレジスタから成る)
 // 読み書き可否は，表の各レジスタをカーネルモードのCPUの命令で読み出せるか・書き込めるかに合わせる．
 // 型は番地や状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
@@ -1202,6 +1202,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
                                            : "' is not declared at ";   // エラーの理由
             throw std::string("compiler error: '") + expr->sval + reason + loc_to_string(expr->loc);
         }
+        // 実行ファイル用に解析する場合は，ハードウェア変数への書き込みをエラーにする
         this->check_register_access(sym, expr);
         expr->sym  = sym;
         expr->type = sym->type;
@@ -1218,10 +1219,9 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 }
 
 // 実行ファイル用に解析する場合に，ハードウェア変数の読み書きをエラーにする
-// (実行ファイルはユーザーモードで動かす前提で，SP以外のハードウェア変数のレジスタは読み書きすると例外になるため．
-//  SPはユーザーモードでも読み書きできるが，コンパイラがスタックフレームに使う値を実行ファイル自身が書き換えないよう禁止する．
-//  sizeofは型だけを使うため，この検査の対象外とする)
+// (実行ファイルはユーザーモードで動かす前提で，ハードウェア変数はカーネルモードで動くOSだけが使うレジスタのため)
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
+    // 実行ファイル用に解析していて，対象がハードウェア変数の場合
     if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
         throw std::string("compiler error: hardware variable '") + sym->name
               + "' cannot be used in an executable at " + loc_to_string(expr->loc);
@@ -1508,7 +1508,9 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: use of undeclared identifier '")
                       + expr->sval + "' at " + loc_to_string(expr->loc);
             }
+            // 実行ファイル用に解析する場合は，ハードウェア変数の読み込みをエラーにする
             this->check_register_access(sym, expr);
+            // 読み込みが禁止された変数の場合
             if (!sym->readable) {
                 throw std::string("compiler error: '") + expr->sval
                       + "' is not readable at " + loc_to_string(expr->loc);
@@ -1830,7 +1832,8 @@ void Analyzer::analyze_expr(node_t *expr) {
 
         // 組み込み関数sysret: ユーザーモードへ戻る．値を返さない(void)
         case ND_SYSRET:
-            // 実行ファイル用に解析する場合 (実行ファイルはユーザーモードで動かす前提で，ユーザーモードでsysret()を実行すると例外になるため)
+            // 実行ファイル用に解析する場合はエラーにする
+            // (実行ファイルはユーザーモードで動かす前提で，ユーザーモードへ戻る命令はユーザーモードで実行すると例外になるため)
             if (this->is_bin_mode_) {
                 throw std::string("compiler error: 'sysret' cannot be used in an executable at ")
                       + loc_to_string(expr->loc);
