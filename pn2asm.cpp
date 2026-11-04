@@ -47,12 +47,12 @@ int compile_pn_to_asm(int argc, char **argv) {
         std::string asm_text;                   // 生成したアセンブリ
         int global_size;                        // グローバル変数・文字列リテラルが占めるバイト数
 
-        // ROM用なら，グローバル変数を0番地から置いて生成する
-        // 実行ファイル用なら，グローバル変数を命令列の直後から置いて生成する
-        // (命令数はコード生成を終えるまで分からないため，いったん0番地から置いて命令数を数えてから生成し直す．
-        //  番地は常に32ビットの即値として埋め込むため，置き始める番地を変えても命令数は変わらない)
+        // グローバル変数を0番地から置いて生成し，命令数を数える(ROM用は，この生成結果をそのまま出力する)
         asm_text = compile_to_asm(args, 0, global_size);
         int instruction_count = count_instructions(asm_text);    // 生成した命令数
+        // 実行ファイル用なら，グローバル変数を命令列の直後から置いて生成し直す
+        // (命令数はコード生成を終えるまで分からないため，数えてから生成し直す．
+        //  番地は常に32ビットの即値として埋め込むため，置き始める番地を変えても命令数は変わらない)
         if (args.is_bin_mode) {
             asm_text = compile_to_asm(args, instruction_count * INSTRUCTION_BYTES, global_size);
             // 置き始める番地を変えて命令数が変わった場合は，番地が命令列と重なるため内部エラーにする

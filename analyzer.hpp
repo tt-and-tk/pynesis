@@ -11,9 +11,13 @@ const int RAM_SIZE = 65536;
 // メインメモリの前半の大きさ(バイト)
 // (ROM用ではグローバル変数とスタックが前半に収まる必要がある)
 const int RAM_HALF_SIZE = RAM_SIZE / 2;
-// Qosmosの取り決め: シェルが実行ファイルに割り振る領域のうち，命令列とグローバル変数を置ける大きさ(バイト)
-// (領域は32768バイトで，末尾の256バイトにはシェルがコマンド名と引数を置く．スタックもこの大きさの中で伸びる)
-const int EXEC_AREA_SIZE = 32768 - 256;
+// Qosmosの取り決め: シェルが実行ファイルに割り振る領域の大きさ(バイト)
+const int EXEC_REGION_SIZE = 32768;
+// Qosmosの取り決め: 領域の末尾のうち，シェルがコマンド名と引数を置くために取る大きさ(バイト)
+// (スタックはここに置いたコマンド名と引数の下から伸びる．スタックの深さは検査しない)
+const int EXEC_ARGS_AREA_SIZE = 256;
+// 領域のうち，命令列とグローバル変数を置ける範囲の大きさ(バイト)．以下，この範囲を実行ファイル用の範囲と呼ぶ
+const int EXEC_AREA_SIZE = EXEC_REGION_SIZE - EXEC_ARGS_AREA_SIZE;
 // Qosmosの取り決め: 実行ファイルの終了をシェルへ伝えるシステムコールの番号
 // (Qosmosの実行ファイル向けライブラリが定義する終了の機能の番号と揃える)
 const int SYSCALL_EXIT_NUMBER = 5;
