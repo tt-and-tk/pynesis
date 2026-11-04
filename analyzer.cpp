@@ -8,7 +8,7 @@ static const int g_global_base_addr = 0x0000000;
 // 実行ファイル用のグローバル変数の配置終了アドレス (実行ファイルが使えるメモリの後半の末尾の直後．ここから下へ順次割り当てる)
 static const int g_bin_global_end_addr = RAM_HALF_SIZE + BIN_AREA_SIZE;
 
-// ハードウェア変数の定義表 (公開するのは，カーネルモードで動くOSだけが使うレジスタで，CPU内部レジスタとボード上の周辺機器を操作するレジスタから成る)
+// ハードウェア変数の定義表 (公開するのは，CPU内部レジスタと，ボード上の周辺機器を操作するレジスタ．どちらもカーネルモードで動くOSだけが使う)
 // 読み書き可否は，表の各レジスタをカーネルモードのCPUの命令で読み出せるか・書き込めるかに合わせる．
 // 型は番地や状態を表すビット列として扱うため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
@@ -1222,11 +1222,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 // (実行ファイルはユーザーモードで動かす前提で，ハードウェア変数はカーネルモードで動くOSだけが使うレジスタのため)
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
     // 実行ファイル用に解析していて，対象がハードウェア変数の場合
-    if (
-        // 実行ファイル用に解析している
-        this->is_bin_mode_
-        // 対象がハードウェア変数
-        && sym->location == LOC_REGISTER) {
+    if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
         throw std::string("compiler error: hardware variable '") + sym->name
               + "' cannot be used in an executable at " + loc_to_string(expr->loc);
     }

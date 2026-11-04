@@ -231,20 +231,14 @@ int Generator::calc_spill_size(node_t *func) {
 void Generator::check_no_sp_write(const node_t *node) {
     if (node == nullptr) return;
 
-    // 書き込み先の式を求める
-    const node_t *target = nullptr;   // 書き込み先の式 (書き込みを伴わない式では空のまま)
-    // 代入・複合代入の場合は左辺
-    if (node->kind == ND_ASSIGN) {
-        target = node->children[0];
-    }
-    // ++/--の場合は対象
-    else if (
-        // 前置または後置の単項演算子
-        (node->kind == ND_UNOP || node->kind == ND_POST_UNOP)
-        // 演算子が++か--
-        && (node->sval == "++" || node->sval == "--")) {
-        target = node->children[0];
-    }
+    // 書き込みを伴う式かを判定する
+    const bool is_write =
+        // 代入・複合代入
+        node->kind == ND_ASSIGN
+        // 前置または後置の++/--
+        || ((node->kind == ND_UNOP || node->kind == ND_POST_UNOP) && (node->sval == "++" || node->sval == "--"));
+    // 書き込み先の式 (代入・複合代入の左辺も++/--の対象も先頭の子．書き込みを伴わない式では空)
+    const node_t *target = is_write ? node->children[0] : nullptr;
 
     // 書き込み先がSPの場合
     if (
@@ -252,10 +246,8 @@ void Generator::check_no_sp_write(const node_t *node) {
         target != nullptr
         // 書き込み先が名前解決済みの変数
         && target->sym != nullptr
-        // 書き込み先がハードウェア変数
-        && target->sym->location == LOC_REGISTER
-        // 書き込み先がSPの番地
-        && target->sym->address == SP_ADDRESS) {
+        // 書き込み先がSPのハードウェア変数
+        && target->sym->location == LOC_REGISTER && target->sym->address == SP_ADDRESS) {
         throw std::string("compiler error: 'SP' can be written only in a function without a stack frame at ")
               + loc_to_string(node->loc);
     }
