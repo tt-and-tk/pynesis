@@ -74,9 +74,10 @@ static std::string false_literal(const type_t &type) {
 // 以降のコードでrs1の位置に書く r0 は値を持たないダミーであり，r0の値は読まれも書かれもしない．
 // (例外: switchのディスパッチでは r0 に条件値を入れて実際に使う)
 
-// 式の中に関数呼び出しが含まれるかどうかを再帰的に調べる
+// 式の中に，レジスタの値を壊す呼び出し(関数呼び出しと，OSの処理を呼ぶ組み込み関数syscall)が含まれるかどうかを再帰的に調べる
+// (呼び出し先の関数もOSも，r0からレジスタを使い直すため)
 static bool contains_call(const node_t *expr) {
-    if (expr->kind == ND_CALL) return true;
+    if (expr->kind == ND_CALL || expr->kind == ND_SYSCALL) return true;
     for (const node_t *child : expr->children) {
         if (contains_call(child)) return true;
     }
@@ -267,19 +268,19 @@ void Generator::gen_func_body(node_t *func) {
         this->gen_global_inits();
     }
     this->gen_block(func->children.back());   // 本体ブロック(最後の子)の文を生成する
-    // return文を通らずに終端へ達した場合の復帰
-    // 実行ファイルのmainで本体の最後の文がreturn文なら，終端へは達しないため省く
-    // (終了のシステムコールの命令列は6命令あり，実行ファイルが使える範囲を到達しない命令で消費しないため)
     const std::vector<node_t *> &stmts = func->children.back()->children;    // 本体ブロックの文
-    // 終端へ達しない場合かを求める
-    const bool ends_with_return =
-        // 実行ファイル用である
-        this->analysis_.is_bin_mode
-        // かつ，mainである
-        && func->sval == "main"
-        // かつ，本体の最後の文がreturn文である
-        && !stmts.empty() && stmts.back()->kind == ND_RETURN;
-    if (!ends_with_return) {
+    // return文を通らずに本体の終端へ達した場合の復帰を生成する
+    // 実行ファイルのmainで本体の最後の文がreturn文なら，終端へは達しないため生成しない
+    // (実行ファイルのmainの復帰は終了のシステムコールを呼ぶ6命令になり，実行されない命令で実行ファイルの大きさを増やさないため)
+    if (
+        // ROM用である
+        !this->analysis_.is_bin_mode
+        // または，mainでない
+        || func->sval != "main"
+        // または，本体が空である
+        || stmts.empty()
+        // または，本体の最後の文がreturn文でない
+        || stmts.back()->kind != ND_RETURN) {
         this->gen_return();
     }
     // 実行ファイルのmainの末尾にretを置く
@@ -299,14 +300,56 @@ void Generator::gen_return() {
         return;
     }
     // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでシェルへ伝える
-    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない)
-    // SPを引数の並びのバイト数だけ下げてから，並びのうち番号の位置(SP+4)と最初の引数の位置(SP+8)へ書き込み，システムコールの命令を実行する
-    // (SPを先に下げるのは，シェルがSPより上に置いたコマンド名と引数の文字列を壊さないため)
-    (*this->out_) << "    mov fh r0 r0 " << SYSCALL_ARGS_BYTES << "\n";
-    (*this->out_) << "    sub " << SP_REGISTER << " r0 " << SP_REGISTER << "\n";
-    (*this->out_) << "    mov fh r0 r0 " << SYSCALL_EXIT_NUMBER << "\n";
-    (*this->out_) << "    wmr fh " << SP_REGISTER << " r0 4\n";
-    (*this->out_) << "    wmr fh " << SP_REGISTER << " " << RAX_REGISTER << " 8\n";
+    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない．OSは終了のシステムコールから実行ファイルへ戻らない)
+    // 番号をr1に載せ，番号と終了状態だけを並べてシステムコールを呼ぶ(r0・r1を使えるのは，フレームを解放した後で値を保持していないため)
+    (*this->out_) << "    mov fh r0 r1 " << SYSCALL_EXIT_NUMBER << "\n";
+    this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
+}
+
+// 組み込み関数syscallを生成する．OSが戻り値の置き場へ書き込んだ戻り値をr{reg}に残す
+// 番号と引数4つをr{reg}〜r{reg+4}に評価してから並べてシステムコールを呼び，戻り値を読んでSPを戻す
+// (評価を並べる前に済ませるのは，評価中の変数の読み書きが，フレームを確保した時点のSPを基準にするため)
+void Generator::gen_syscall(node_t *expr, int reg) {
+    const int value_count = static_cast<int>(expr->children.size());   // 並べる値(番号と引数)の個数
+    const int work_reg = reg + value_count;                            // SPを動かす量を載せるレジスタ
+
+    // 並べる値とSPを動かす量のレジスタが足りなければエラーにする
+    if (work_reg >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
+    }
+    // 番号と引数を順に評価する
+    std::vector<std::string> value_regs;   // 並べる値を評価したレジスタ
+    for (int i = 0; i < value_count; i++) {
+        // 値の中で関数やシステムコールを呼ぶ場合に壊されないよう，評価済みの値のレジスタを退避・復元する
+        std::vector<int> protect_regs;
+        for (int held = 0; held < i; held++) {
+            protect_regs.push_back(reg + held);
+        }
+        this->gen_expr_protecting(expr->children[i], reg + i, protect_regs);
+        value_regs.push_back("r" + std::to_string(reg + i));
+    }
+    // 並べてシステムコールを呼ぶ
+    this->gen_syscall_enter(value_regs, "r" + std::to_string(work_reg));
+    // 戻り値の置き場(SP+0)から戻り値を読む
+    (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << reg << " 0\n";
+    // 並べた値の分だけ下げたSPを戻す
+    (*this->out_) << "    mov fh r0 r" << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";
+    (*this->out_) << "    add " << SP_REGISTER << " r" << work_reg << " " << SP_REGISTER << "\n";
+}
+
+// SPを並べる値のバイト数だけ下げ，番号と引数を並べてシステムコールの命令を実行する命令を出力する
+// value_regs[0]が番号，value_regs[1]以降が引数を持つレジスタで，渡さない引数の位置には何も書き込まない．work_regはSPを動かす量を載せるのに使う
+// 並べる位置は，SPから順に戻り値の置き場・番号・引数4つ(4バイトずつ)
+// (SPを先に下げるのは，SPより上にあるフレームや，シェルが置いたコマンド名と引数を壊さないため)
+void Generator::gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg) {
+    // SPを並べる値のバイト数だけ下げる
+    (*this->out_) << "    mov fh r0 " << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";
+    (*this->out_) << "    sub " << SP_REGISTER << " " << work_reg << " " << SP_REGISTER << "\n";
+    // 番号をSP+4から，引数をそれに続けて4バイトずつ書き込む
+    for (size_t i = 0; i < value_regs.size(); i++) {
+        (*this->out_) << "    wmr fh " << SP_REGISTER << " " << value_regs[i] << " " << 4 + 4 * i << "\n";
+    }
     (*this->out_) << "    syscall\n";
 }
 
@@ -1278,10 +1321,9 @@ void Generator::gen_expr(node_t *expr, int reg) {
             this->gen_strcopy(expr->children[0]->sym, expr->children[1]->sym, reg);
             break;
 
-        // 組み込み関数syscall: カーネルモードへ入る命令1つを生成する
-        // (値を返さないため式の途中には現れず，命令の前後で保つべきレジスタの値はない)
+        // 組み込み関数syscall: システムコールを呼び，戻り値をr{reg}に残す
         case ND_SYSCALL:
-            (*this->out_) << "    syscall\n";
+            this->gen_syscall(expr, reg);
             break;
 
         // 組み込み関数sysret: ユーザーモードへ戻る命令1つを生成する
@@ -1713,7 +1755,7 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
 }
 
 // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
-// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
+// スタックは前半の末尾から番地の小さい方へ，グローバル変数は0番地から番地の大きい方へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 void Generator::check_memory_usage() {
     // 実行ファイル用の場合 (スタックの空きは，シェルが領域の末尾に置くコマンド名と引数の文字列の長さで決まり

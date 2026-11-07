@@ -1,6 +1,6 @@
 // OSがカーネルモードで使うハードウェア変数と，動作状態を切り替える組み込み関数
 // (SP・KENTRY〜ECAUSEの読み出し・書き込みが番地0x10〜0x16のレジスタとの転送になり，
-//  syscall()・sysret()がそれぞれsyscall・sysretの命令1つになる．フレームを持たない関数ではSPへ書き込める)
+//  sysret()がsysretの命令1つになる．フレームを持たない関数ではSPへ書き込める)
 unsigned int user_sp;
 unsigned int kernel_sp;
 
@@ -20,5 +20,5 @@ void main(void) {
     USIZE = 0x4000;                   // 番地0x14へ書き込む
     LED = ECAUSE;                     // 番地0x16から読み出す
     LED = UBASE + USIZE;              // 番地0x13・0x14から読み出す
-    syscall();
+    sysret();
 }

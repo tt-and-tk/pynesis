@@ -181,6 +181,7 @@ std::string Parser::token_kind_name(token_kind_t kind) {
         case TK_RPAREN:    return "')'";
         case TK_LBRACE:    return "'{'";
         case TK_RBRACE:    return "'}'";
+        case TK_COMMA:     return "','";
         case TK_VOID:      return "'void'";
         case TK_STAR:      return "'*'";
         case TK_IDENT:     return "identifier";
@@ -636,12 +637,21 @@ node_t *Parser::parse_strcopy() {
 }
 
 // 動作状態を切り替える組み込み関数を解析してND_SYSCALLまたはND_SYSRETを返す
-// 構文: syscall ( ) または sysret ( )  ※ 飛び先と戻り先はCPU内のレジスタが持つため引数を取らない
+// 構文: syscall ( 番号 , 引数 , 引数 , 引数 , 引数 ) または sysret ( )
+// syscallは番号と引数4つの式をchildrenに格納する．sysretは戻り先をCPU内のレジスタが持つため引数を取らない
 node_t *Parser::parse_mode_switch() {
     const bool is_syscall = this->token_kind_is(TK_SYSCALL);           // syscallか(falseならsysret)
     node_t *node = this->new_node(is_syscall ? ND_SYSCALL : ND_SYSRET);
     this->get_token(is_syscall ? TK_SYSCALL : TK_SYSRET);              // syscall または sysret
     this->get_token(TK_LPAREN);                                        // (
+    // syscallなら，番号と引数4つをカンマで区切って読む
+    if (is_syscall) {
+        node->children.push_back(this->parse_expr());                  // 番号
+        for (int i = 0; i < SYSCALL_ARG_COUNT; i++) {
+            this->get_token(TK_COMMA);                                 // ,
+            node->children.push_back(this->parse_expr());              // 引数
+        }
+    }
     this->get_token(TK_RPAREN);                                        // )
     return node;
 }

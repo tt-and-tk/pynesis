@@ -112,7 +112,7 @@ public:
 private:
     node_t *root_;                                       // AST
     const bool is_bin_mode_;                             // Qosmosの実行ファイル用に解析するか (falseならROM用)
-    const int global_base_;                              // グローバル変数・文字列リテラルを置き始める番地 (ここから上へ順に割り当てる)
+    const int global_base_;                              // グローバル変数・文字列リテラルを置き始める番地 (ここから番地の大きい方へ順に割り当てる)
 
     // 解析の成果物 (result()でコード生成へ渡す)
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
@@ -212,6 +212,6 @@ private:
     static void check_scalar_operand(const node_t *target, const std::string &operation);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
     // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
-    // (グローバルは0番地から上へ，ローカルは関数ごとにフレーム内のローカル変数領域の先頭から確保する)
+    // (グローバルは置き始める番地から番地の大きい方へ，ローカルは関数ごとにフレーム内のローカル変数領域の先頭から確保する)
     int alloc_var(int bytes, location_t location);
 };

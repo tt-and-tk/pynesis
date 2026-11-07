@@ -44,12 +44,12 @@ int compile_pn_to_asm(int argc, char **argv) {
     std::ofstream asm_file;                     // 出力アセンブリファイル
 
     try {
-        std::string asm_text;                   // 生成したアセンブリ
-        int global_size;                        // グローバル変数・文字列リテラルが占めるバイト数
+        std::string asm_text;  // 生成したアセンブリ
+        int global_size;       // グローバル変数・文字列リテラルが占めるバイト数
 
         // グローバル変数を0番地から置いて生成し，命令数を数える(ROM用は，この生成結果をそのまま出力する)
         asm_text = compile_to_asm(args, 0, global_size);
-        int instruction_count = count_instructions(asm_text);    // 生成した命令数
+        int instruction_count = count_instructions(asm_text);  // 生成した命令数
         // 実行ファイル用なら，グローバル変数を命令列の直後から置いて生成し直す
         // (命令数はコード生成を終えるまで分からないため，数えてから生成し直す．
         //  番地は常に32ビットの即値として埋め込むため，置き始める番地を変えても命令数は変わらない)
@@ -102,7 +102,7 @@ int compile_pn_to_asm(int argc, char **argv) {
 }
 
 // Pynesisソースをアセンブリに変換して返す
-// グローバル変数・文字列リテラルは2つ目の引数の番地から上へ置き，それらが占めるバイト数を3つ目の引数へ返す
+// グローバル変数・文字列リテラルは2つ目の引数の番地から番地の大きい方へ置き，それらが占めるバイト数を3つ目の引数へ返す
 std::string compile_to_asm(const args_t &args, int global_base, int &global_size) {
     std::vector<token_t> tokens;    // トークン列 (字句解析結果)
     std::ostringstream asm_out;     // 生成したアセンブリの出力先
@@ -127,17 +127,24 @@ std::string compile_to_asm(const args_t &args, int global_base, int &global_size
 }
 
 // アセンブリの命令数を数える
-// (命令行は先頭が半角スペース．ラベル行・.global行は先頭にスペースを付けない規約で判定する．
-//  ただしコメント行(先頭の空白を除いた最初の文字が';')は命令行に含めない)
+// (コード生成は，命令行を半角空白で字下げし，ラベル行・.global行を字下げせずに出力する．
+//  コメント行は命令行と同じく字下げするため，先頭の空白を除いた最初の文字が';'かどうかで見分ける)
 int count_instructions(const std::string &asm_text) {
-    std::istringstream lines(asm_text);    // 1行ずつ読み出す元
-    std::string line;                      // 読み出した1行
-    int instruction_count = 0;             // 数えた命令数
+    std::istringstream lines(asm_text);  // 1行ずつ読み出す元
+    std::string line;                    // 読み出した1行
+    int instruction_count = 0;           // 数えた命令数
 
     // 1行ずつ，命令行かを調べて数える
     while (std::getline(lines, line)) {
-        const size_t pos = line.find_first_not_of(' ');    // 先頭の空白を除いた最初の文字の位置
-        if (pos != std::string::npos && line[0] == ' ' && line[pos] != ';') {
+        const size_t pos = line.find_first_not_of(' ');  // 先頭の空白を除いた最初の文字の位置
+        // 命令行なら数える
+        if (
+            // 空白だけの行や空行でない
+            pos != std::string::npos
+            // かつ，字下げしている(ラベル行・.global行でない)
+            && line[0] == ' '
+            // かつ，コメント行でない
+            && line[pos] != ';') {
             instruction_count++;
         }
     }

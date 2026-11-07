@@ -1,5 +1,5 @@
-// expect: compiler error: expected ')' but got '1' at src_err/314.pn:4
-// 構文エラー: syscallは引数を取らない(飛び先はKENTRYが持つ) (異常系)
+// expect: compiler error: expected ',' but got ')' at src_err/314.pn:4
+// 構文エラー: syscallは番号と引数4つを取る (異常系)
 void main(void) {
     syscall(1);
 }

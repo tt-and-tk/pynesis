@@ -89,7 +89,7 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
     return is_signed_operation_by_signs(op, is_promoted_signed(lhs), is_promoted_signed(rhs));
 }
 
-// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかと，グローバル変数・文字列リテラルを置き始める番地を受け取る
+// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかどうかと，グローバル変数・文字列リテラルを置き始める番地を受け取る
 Analyzer::Analyzer(node_t *root, bool is_bin_mode, int global_base)
     : root_(root), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
 
@@ -174,7 +174,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 置き始める番地から上へ詰める
+        // 置き始める番地から番地の大きい方へ詰める
         return this->global_base_ + this->global_size_ - bytes;
     }
     // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
@@ -1824,9 +1824,16 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 組み込み関数syscall: カーネルモードへ入る．値を返さない(void)
+        // 組み込み関数syscall: システムコールを呼び，OSが返した戻り値(int)を返す
+        // 番号と引数は，intの引数と同じく整数を受け付ける(ポインタはintへキャストして渡す)
         case ND_SYSCALL:
-            expr->type = type_t{BASE_VOID, true};
+            for (size_t i = 0; i < expr->children.size(); i++) {
+                // 番号・引数を値として検査し，名前解決と型注釈を行う
+                this->analyze_value(expr->children[i]);
+                // intの格納先へ格納できるか検査する
+                Analyzer::check_assignable(type_t{BASE_INT, true}, expr->children[i], "syscall argument " + std::to_string(i + 1));
+            }
+            expr->type = type_t{BASE_INT, true};
             return;
 
         // 組み込み関数sysret: ユーザーモードへ戻る．値を返さない(void)

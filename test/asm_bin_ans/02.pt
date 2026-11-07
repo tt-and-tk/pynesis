@@ -66,10 +66,10 @@ main:
 .L4:
     mov fh r0 r0 8
     add r16 r0 r16
+    mov fh r0 r1 5
     mov fh r0 r0 24
     sub r16 r0 r16
-    mov fh r0 r0 5
-    wmr fh r16 r0 4
+    wmr fh r16 r1 4
     wmr fh r16 r30 8
     syscall
     ret

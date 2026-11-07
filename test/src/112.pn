@@ -1,6 +1,6 @@
 // フレームを持たない関数では，複合代入・前置/後置の++/--でもSPへ書き込め，if文の中にも書ける
 // フレームを持つ関数でもSPは読み出せる．KENTRY・EENTRYも読み出せる
-// syscall()はif文の中の文としても書ける
+// フレームを持たない関数のif文の中でも，syscallでシステムコールを呼べる
 unsigned int flag;
 
 void adjust_sp(void) {
@@ -8,7 +8,7 @@ void adjust_sp(void) {
         SP += 8;            // 複合代入
         SP--;               // 後置デクリメント
         ++SP;               // 前置インクリメント
-        syscall();
+        syscall(1, 2, 3, 4, 5);
     }
 }
 
