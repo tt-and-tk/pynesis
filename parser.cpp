@@ -638,7 +638,7 @@ node_t *Parser::parse_strcopy() {
 
 // 動作状態を切り替える組み込み関数を解析してND_SYSCALLまたはND_SYSRETを返す
 // 構文: syscall ( 番号 , 引数 , 引数 , 引数 , 引数 ) または sysret ( )
-// syscallは番号と引数4つの式をchildrenに格納する．sysretは戻り先をCPU内のレジスタが持つため引数を取らない
+// syscallは番号と引数4つの式を子に持つ．sysretは戻り先をCPU内のレジスタが持つため引数を取らない
 node_t *Parser::parse_mode_switch() {
     const bool is_syscall = this->token_kind_is(TK_SYSCALL);           // syscallか(falseならsysret)
     node_t *node = this->new_node(is_syscall ? ND_SYSCALL : ND_SYSRET);

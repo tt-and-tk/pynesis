@@ -174,7 +174,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     // 絶対番地に置く変数の場合
     if (location == LOC_GLOBAL) {
         this->global_size_ += bytes;
-        // 置き始める番地から番地の大きい方へ詰める
+        // 置き始める番地から上へ詰める
         return this->global_base_ + this->global_size_ - bytes;
     }
     // 領域を確保しない置き場所(レジスタ直結・コンパイル時定数等)を渡された場合
@@ -1830,8 +1830,9 @@ void Analyzer::analyze_expr(node_t *expr) {
             for (size_t i = 0; i < expr->children.size(); i++) {
                 // 番号・引数を値として検査し，名前解決と型注釈を行う
                 this->analyze_value(expr->children[i]);
-                // intの格納先へ格納できるか検査する
-                Analyzer::check_assignable(type_t{BASE_INT, true}, expr->children[i], "syscall argument " + std::to_string(i + 1));
+                // intの格納先へ格納できるか検査する(メッセージでは，番号と，それに続く引数を1から数えて呼び分ける)
+                Analyzer::check_assignable(type_t{BASE_INT, true}, expr->children[i],
+                                           i == 0 ? std::string("syscall number") : "syscall argument " + std::to_string(i));
             }
             expr->type = type_t{BASE_INT, true};
             return;

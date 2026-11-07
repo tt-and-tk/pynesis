@@ -1,0 +1,6 @@
+// expect: compiler error: cannot convert 'char *' to 'int' in syscall number at src_err/323.pn:5
+// 意味解析エラー: syscallの番号にポインタは渡せない(intへのキャストが必要) (異常系)
+void main(void) {
+    char *p;
+    syscall(p, 0, 0, 0, 0);
+}

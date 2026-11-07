@@ -60,7 +60,7 @@ private:
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
     void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成する (戻り値がある場合はr{reg}に残す)
     void gen_syscall(node_t *expr, int reg);  // 組み込み関数syscallを生成する (戻り値をr{reg}に残す)
-    // SPを下げて番号と引数を並べ，システムコールの命令を実行する (value_regs[0]が番号，以降が引数のレジスタ)
+    // SPを下げて番号と引数を並べ，システムコールの命令を実行する (番号・引数の順に値を持つレジスタと，SPを動かすのに使うレジスタを渡す)
     void gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg);
     // ポインタに整数を足し引きする演算・ポインタどうしの差の結果をr{reg}に求める
     // 呼び出す前に，左辺をr{reg}・右辺をr{reg+1}へ評価しておくこと

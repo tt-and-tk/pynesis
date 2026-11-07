@@ -102,7 +102,7 @@ int compile_pn_to_asm(int argc, char **argv) {
 }
 
 // Pynesisソースをアセンブリに変換して返す
-// グローバル変数・文字列リテラルは2つ目の引数の番地から番地の大きい方へ置き，それらが占めるバイト数を3つ目の引数へ返す
+// グローバル変数・文字列リテラルは2つ目の引数の番地から上へ置き，それらが占めるバイト数を3つ目の引数へ返す
 std::string compile_to_asm(const args_t &args, int global_base, int &global_size) {
     std::vector<token_t> tokens;    // トークン列 (字句解析結果)
     std::ostringstream asm_out;     // 生成したアセンブリの出力先

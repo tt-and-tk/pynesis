@@ -306,8 +306,8 @@ void Generator::gen_return() {
     this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
 }
 
-// 組み込み関数syscallを生成する．OSが戻り値の置き場へ書き込んだ戻り値をr{reg}に残す
-// 番号と引数4つをr{reg}〜r{reg+4}に評価してから並べてシステムコールを呼び，戻り値を読んでSPを戻す
+// 組み込み関数syscallを生成する．OSが戻り値の置き場へ書き込んだ戻り値を，指定したレジスタに残す
+// 番号と引数4つを指定したレジスタから順に評価してから並べてシステムコールを呼び，戻り値を読んでSPを戻す
 // (評価を並べる前に済ませるのは，評価中の変数の読み書きが，フレームを確保した時点のSPを基準にするため)
 void Generator::gen_syscall(node_t *expr, int reg) {
     const int value_count = static_cast<int>(expr->children.size());   // 並べる値(番号と引数)の個数
@@ -323,6 +323,7 @@ void Generator::gen_syscall(node_t *expr, int reg) {
     for (int i = 0; i < value_count; i++) {
         // 値の中で関数やシステムコールを呼ぶ場合に壊されないよう，評価済みの値のレジスタを退避・復元する
         std::vector<int> protect_regs;
+        // 評価済みの値のレジスタを，退避・復元するレジスタに加える
         for (int held = 0; held < i; held++) {
             protect_regs.push_back(reg + held);
         }
@@ -339,7 +340,8 @@ void Generator::gen_syscall(node_t *expr, int reg) {
 }
 
 // SPを並べる値のバイト数だけ下げ，番号と引数を並べてシステムコールの命令を実行する命令を出力する
-// value_regs[0]が番号，value_regs[1]以降が引数を持つレジスタで，渡さない引数の位置には何も書き込まない．work_regはSPを動かす量を載せるのに使う
+// 1つ目に渡すレジスタが番号を，2つ目以降が引数を持つ．渡さない引数の位置には何も書き込まない
+// SPを動かす量は，別に渡すもう1つのレジスタに載せる
 // 並べる位置は，SPから順に戻り値の置き場・番号・引数4つ(4バイトずつ)
 // (SPを先に下げるのは，SPより上にあるフレームや，シェルが置いたコマンド名と引数を壊さないため)
 void Generator::gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg) {
@@ -1148,9 +1150,9 @@ void Generator::gen_sign_extend(int reg, int bits, int work_reg, const loc_t &lo
     (*this->out_) << "    sra r" << reg << " r" << work_reg << " r" << reg << "\n";
 }
 
-// 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しを含む場合，
-// 呼び出し先はr0から使い直すため，別に指定したレジスタ(複数可)の値をフレーム上の退避領域へ
-// 退避してから評価し，評価後に復元する
+// 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しか組み込み関数syscallを含む場合，
+// 呼び出し先はr0から使い直し，OSはレジスタの値を保たないため，別に指定したレジスタ(複数可)の値を
+// フレーム上の退避領域へ退避してから評価し，評価後に復元する
 // 退避先は呼び出しごとのフレーム内にあるため，呼び出し先が同じレジスタを退避しても
 // 呼び出し元の退避値は壊れない
 void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs) {
@@ -1159,7 +1161,7 @@ void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int
     //   2. 式を評価する
     //   3. 退避した値をレジスタへ復元する
 
-    // 関数呼び出しを含まない式はreg以上のレジスタしか使わず保護対象を壊さないため，退避せずに評価する
+    // 関数呼び出しもsyscallも含まない式は，評価に指定したレジスタ以降しか使わず保護対象を壊さないため，退避せずに評価する
     if (!contains_call(expr)) {
         this->gen_expr(expr, reg);
         return;
@@ -1445,8 +1447,9 @@ void Generator::gen_call(node_t *expr, int reg) {
 
     // 2. 引数を書き込む位置は現在のSPより下にあり，そこは次に呼ぶ関数の戻り先とフレームが
     //    占める領域でもある．f(1, g(2))を例にすると，1を書き込んだ位置はgのフレームに重なり，
-    //    gが自分の引数の2やローカル変数を置いた時点で1が壊れる．このため，引数の中で
-    //    関数を呼ぶ場合は，その引数までの書き込みを後回しにし，値をレジスタに残したまま評価する
+    //    gが自分の引数の2やローカル変数を置いた時点で1が壊れる．引数の中でsyscallを呼ぶ場合も，
+    //    OSへ渡す値をSPより下へ並べるため同じく壊れる．このため，引数の中で関数かsyscallを
+    //    呼ぶ場合は，その引数までの書き込みを後回しにし，値をレジスタに残したまま評価する
     //    (f(1, g(2))なら，1とg(2)の戻り値をレジスタに持ったままgから戻り，そのあと両方を書き込む)
     int held_count = 0;   // 値をレジスタに残したままにする引数の個数
     for (int i = 0; i < arg_count; i++) {
@@ -1755,7 +1758,7 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
 }
 
 // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
-// スタックは前半の末尾から番地の小さい方へ，グローバル変数は0番地から番地の大きい方へ伸びるため，両者が重なると
+// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 void Generator::check_memory_usage() {
     // 実行ファイル用の場合 (スタックの空きは，シェルが領域の末尾に置くコマンド名と引数の文字列の長さで決まり
