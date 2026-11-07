@@ -1825,7 +1825,7 @@ void Analyzer::analyze_expr(node_t *expr) {
         }
 
         // 組み込み関数syscall: システムコールを呼び，OSが返した戻り値(int)を返す
-        // 番号と引数は，intの引数と同じく整数を受け付ける(ポインタはintへキャストして渡す)
+        // 番号と引数はintの引数である(ポインタはintへキャストして渡す)
         case ND_SYSCALL:
             for (size_t i = 0; i < expr->children.size(); i++) {
                 // 番号・引数を値として検査し，名前解決と型注釈を行う

@@ -74,10 +74,12 @@ static std::string false_literal(const type_t &type) {
 // 以降のコードでrs1の位置に書く r0 は値を持たないダミーであり，r0の値は読まれも書かれもしない．
 // (例外: switchのディスパッチでは r0 に条件値を入れて実際に使う)
 
-// 式の中に，レジスタの値を壊す呼び出し(関数呼び出しと，OSの処理を呼ぶ組み込み関数syscall)が含まれるかどうかを再帰的に調べる
-// (呼び出し先の関数もOSも，r0からレジスタを使い直すため)
+// 式の中に，レジスタの値を壊す呼び出しが含まれるかどうかを再帰的に調べる
 static bool contains_call(const node_t *expr) {
+    // 関数呼び出しと，OSの処理を呼ぶ組み込み関数syscallは，レジスタの値を壊す
+    // (呼び出し先の関数もOSも，r0からレジスタを使い直すため)
     if (expr->kind == ND_CALL || expr->kind == ND_SYSCALL) return true;
+    // 子の式のいずれかに含まれるかを調べる
     for (const node_t *child : expr->children) {
         if (contains_call(child)) return true;
     }
@@ -321,13 +323,14 @@ void Generator::gen_syscall(node_t *expr, int reg) {
     // 番号と引数を順に評価する
     std::vector<std::string> value_regs;   // 並べる値を評価したレジスタ
     for (int i = 0; i < value_count; i++) {
-        // 値の中で関数やシステムコールを呼ぶ場合に壊されないよう，評価済みの値のレジスタを退避・復元する
-        std::vector<int> protect_regs;
+        std::vector<int> protect_regs;   // 退避・復元するレジスタ(値の中で関数やシステムコールを呼んでも，評価済みの値が壊されないようにする)
         // 評価済みの値のレジスタを，退避・復元するレジスタに加える
         for (int held = 0; held < i; held++) {
             protect_regs.push_back(reg + held);
         }
+        // 退避・復元するレジスタの値を保ちながら，値を評価する
         this->gen_expr_protecting(expr->children[i], reg + i, protect_regs);
+        // 評価した値のレジスタを，並べる値のレジスタに加える
         value_regs.push_back("r" + std::to_string(reg + i));
     }
     // 並べてシステムコールを呼ぶ
