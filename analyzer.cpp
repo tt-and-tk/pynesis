@@ -1834,6 +1834,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 Analyzer::check_assignable(type_t{BASE_INT, true}, expr->children[i],
                                            i == 0 ? std::string("syscall number") : "syscall argument " + std::to_string(i));
             }
+            // OSが返す戻り値の型(int)を，式の型にする
             expr->type = type_t{BASE_INT, true};
             return;
 
