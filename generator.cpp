@@ -74,9 +74,12 @@ static std::string false_literal(const type_t &type) {
 // 以降のコードでrs1の位置に書く r0 は値を持たないダミーであり，r0の値は読まれも書かれもしない．
 // (例外: switchのディスパッチでは r0 に条件値を入れて実際に使う)
 
-// 式の中に関数呼び出しが含まれるかどうかを再帰的に調べる
+// 式の中に，レジスタの値を壊す呼び出しが含まれるかどうかを再帰的に調べる
 static bool contains_call(const node_t *expr) {
-    if (expr->kind == ND_CALL) return true;
+    // 関数呼び出しと，OSの処理を呼ぶ組み込み関数syscallは，レジスタの値を壊す
+    // (呼び出し先の関数もOSも，r0からレジスタを使い直すため)
+    if (expr->kind == ND_CALL || expr->kind == ND_SYSCALL) return true;
+    // 子の式のいずれかに含まれるかを調べる
     for (const node_t *child : expr->children) {
         if (contains_call(child)) return true;
     }
@@ -92,10 +95,10 @@ static bool has_runtime_addr(const node_t *target) {
 }
 
 // コンストラクタ: AST・意味解析の結果・出力先を受け取る
-Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file)
-    : root_(root), analysis_(analysis), asm_file_(asm_file), out_(&asm_file) {}
+Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ostream &asm_out)
+    : root_(root), analysis_(analysis), asm_out_(asm_out), out_(&asm_out) {}
 
-// コード生成を実行して .pt に書き出す
+// コード生成を実行してアセンブリを出力先へ書き出す
 void Generator::operator()() {
     this->gen_program();
     // 全関数のフレームの大きさが確定したので，グローバル変数と合わせてメモリの前半に収まるか検査する
@@ -172,6 +175,8 @@ void Generator::collect_string_literals(node_t *node, std::vector<node_t *> &out
 
 // 関数定義を生成する
 void Generator::gen_func(node_t *func) {
+    // 生成中の関数の名前を控える(復帰の命令を，実行ファイルのmainかどうかで変えるため)
+    this->func_name_ = func->sval;
     // この関数のフレームの各領域の大きさを求める
     this->local_size_ = this->analysis_.func_local_sizes.at(func->sval);
     this->param_size_ = static_cast<int>(this->analysis_.func_params.at(func->sval).size()) * 4;
@@ -221,7 +226,7 @@ int Generator::calc_spill_size(node_t *func) {
     const int spill_size = (this->max_spill_reg_ + 1) * 4;   // 退避したレジスタの本数から求めた大きさ
 
     // 出力先と，生成に伴って変わった状態を元へ戻す
-    this->out_ = &this->asm_file_;
+    this->out_ = &this->asm_out_;
     this->label_count_ = label_count_before;
     this->spill_size_ = spill_size_before;
     return spill_size;
@@ -265,9 +270,92 @@ void Generator::gen_func_body(node_t *func) {
         this->gen_global_inits();
     }
     this->gen_block(func->children.back());   // 本体ブロック(最後の子)の文を生成する
-    // 関数末尾のret (全関数にretが1つ以上必要)．return文を通らずに終端へ達した場合の復帰でもある
+    const std::vector<node_t *> &stmts = func->children.back()->children;    // 本体ブロックの文
+    // return文を通らずに本体の終端へ達した場合の復帰を生成する
+    // 実行ファイルのmainで本体の最後の文がreturn文なら，終端へは達しないため生成しない
+    // (実行ファイルのmainの復帰は終了のシステムコールを呼ぶ6命令になり，実行されない命令で実行ファイルの大きさを増やさないため)
+    if (
+        // ROM用である
+        !this->analysis_.is_bin_mode
+        // または，mainでない
+        || func->sval != "main"
+        // または，本体が空である
+        || stmts.empty()
+        // または，本体の最後の文がreturn文でない
+        || stmts.back()->kind != ND_RETURN) {
+        this->gen_return();
+    }
+    // 実行ファイルのmainの末尾にretを置く
+    // (復帰は終了のシステムコールで行いretには到達しないが，アセンブリでは全関数にretが1つ以上必要なため)
+    if (this->analysis_.is_bin_mode && func->sval == "main") {
+        (*this->out_) << "    ret\n";
+    }
+}
+
+// フレームを解放して，生成中の関数から復帰する命令を出力する
+void Generator::gen_return() {
     this->gen_frame_leave();
-    (*this->out_) << "    ret\n";
+    // 実行ファイルのmainでない場合は，retで呼び出し元へ戻る
+    // (ROMのmainのretは，アセンブラがプログラムの終了を表す命令に置き換える)
+    if (!this->analysis_.is_bin_mode || this->func_name_ != "main") {
+        (*this->out_) << "    ret\n";
+        return;
+    }
+    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでシェルへ伝える
+    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない．OSは終了のシステムコールから実行ファイルへ戻らない)
+    // 番号をr1に載せ，番号と終了状態だけを並べてシステムコールを呼ぶ(r0・r1を使えるのは，フレームを解放した後で値を保持していないため)
+    (*this->out_) << "    mov fh r0 r1 " << SYSCALL_EXIT_NUMBER << "\n";
+    this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
+}
+
+// 組み込み関数syscallを生成する．OSが戻り値の置き場へ書き込んだ戻り値を，指定したレジスタに残す
+// 番号と引数4つを指定したレジスタから順に評価してから並べてシステムコールを呼び，戻り値を読んでSPを戻す
+// (評価を並べる前に済ませるのは，評価中の変数の読み書きが，フレームを確保した時点のSPを基準にするため)
+void Generator::gen_syscall(node_t *expr, int reg) {
+    const int value_count = static_cast<int>(expr->children.size());   // 並べる値(番号と引数)の個数
+    const int work_reg = reg + value_count;                            // SPを動かす量を載せるレジスタ
+
+    // 並べる値とSPを動かす量のレジスタが足りなければエラーにする
+    if (work_reg >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers) at ")
+              + loc_to_string(expr->loc);
+    }
+    // 番号と引数を順に評価する
+    std::vector<std::string> value_regs;   // 並べる値を評価したレジスタ
+    for (int i = 0; i < value_count; i++) {
+        std::vector<int> protect_regs;   // 退避・復元するレジスタ(値の中で関数やシステムコールを呼んでも，評価済みの値が壊されないようにする)
+        // 評価済みの値のレジスタを，退避・復元するレジスタに加える
+        for (int held = 0; held < i; held++) {
+            protect_regs.push_back(reg + held);
+        }
+        // 退避・復元するレジスタの値を保ちながら，値を評価する
+        this->gen_expr_protecting(expr->children[i], reg + i, protect_regs);
+        // 評価した値のレジスタを，並べる値のレジスタに加える
+        value_regs.push_back("r" + std::to_string(reg + i));
+    }
+    // 並べてシステムコールを呼ぶ
+    this->gen_syscall_enter(value_regs, "r" + std::to_string(work_reg));
+    // 戻り値の置き場(SP+0)から戻り値を読む
+    (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << reg << " 0\n";
+    // 並べた値の分だけ下げたSPを戻す
+    (*this->out_) << "    mov fh r0 r" << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";
+    (*this->out_) << "    add " << SP_REGISTER << " r" << work_reg << " " << SP_REGISTER << "\n";
+}
+
+// SPを並べる値のバイト数だけ下げ，番号と引数を並べてシステムコールの命令を実行する命令を出力する
+// 1つ目に渡すレジスタが番号を，2つ目以降が引数を持つ．渡さない引数の位置には何も書き込まない
+// SPを動かす量は，別に渡すもう1つのレジスタに載せる
+// 並べる位置は，SPから順に戻り値の置き場・番号・引数4つ(4バイトずつ)
+// (SPを先に下げるのは，SPより上にあるフレームや，シェルが置いたコマンド名と引数を壊さないため)
+void Generator::gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg) {
+    // SPを並べる値のバイト数だけ下げる
+    (*this->out_) << "    mov fh r0 " << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";
+    (*this->out_) << "    sub " << SP_REGISTER << " " << work_reg << " " << SP_REGISTER << "\n";
+    // 番号をSP+4から，引数をそれに続けて4バイトずつ書き込む
+    for (size_t i = 0; i < value_regs.size(); i++) {
+        (*this->out_) << "    wmr fh " << SP_REGISTER << " " << value_regs[i] << " " << 4 + 4 * i << "\n";
+    }
+    (*this->out_) << "    syscall\n";
 }
 
 // フレームを確保する命令を出力する
@@ -347,8 +435,7 @@ void Generator::gen_stmt(node_t *stmt) {
                 this->gen_expr(stmt->children[0], 0);                  // 戻り値の式 → r0
                 (*this->out_) << "    mov fh r0 " << RAX_REGISTER << "\n";  // r0 → RAX
             }
-            this->gen_frame_leave();
-            (*this->out_) << "    ret\n";
+            this->gen_return();
             break;
         // 式文，およびfor文の更新部: 最上位の種類によらず，含まれる副作用(代入・関数呼び出し・増減等)のため評価する．求まった値(r0)は使わない
         default:
@@ -1066,9 +1153,9 @@ void Generator::gen_sign_extend(int reg, int bits, int work_reg, const loc_t &lo
     (*this->out_) << "    sra r" << reg << " r" << work_reg << " r" << reg << "\n";
 }
 
-// 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しを含む場合，
-// 呼び出し先はr0から使い直すため，別に指定したレジスタ(複数可)の値をフレーム上の退避領域へ
-// 退避してから評価し，評価後に復元する
+// 式を評価し結果を指定レジスタに残す．評価対象の式が関数呼び出しか組み込み関数syscallを含む場合，
+// 呼び出し先はr0から使い直し，OSはレジスタの値を保たないため，別に指定したレジスタ(複数可)の値を
+// フレーム上の退避領域へ退避してから評価し，評価後に復元する
 // 退避先は呼び出しごとのフレーム内にあるため，呼び出し先が同じレジスタを退避しても
 // 呼び出し元の退避値は壊れない
 void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int> &protect_regs) {
@@ -1077,7 +1164,7 @@ void Generator::gen_expr_protecting(node_t *expr, int reg, const std::vector<int
     //   2. 式を評価する
     //   3. 退避した値をレジスタへ復元する
 
-    // 関数呼び出しを含まない式はreg以上のレジスタしか使わず保護対象を壊さないため，退避せずに評価する
+    // 関数呼び出しもsyscallも含まない式は，評価に指定したレジスタ以降しか使わず保護対象を壊さないため，退避せずに評価する
     if (!contains_call(expr)) {
         this->gen_expr(expr, reg);
         return;
@@ -1239,10 +1326,9 @@ void Generator::gen_expr(node_t *expr, int reg) {
             this->gen_strcopy(expr->children[0]->sym, expr->children[1]->sym, reg);
             break;
 
-        // 組み込み関数syscall: カーネルモードへ入る命令1つを生成する
-        // (値を返さないため式の途中には現れず，命令の前後で保つべきレジスタの値はない)
+        // 組み込み関数syscall: システムコールを呼び，戻り値をr{reg}に残す
         case ND_SYSCALL:
-            (*this->out_) << "    syscall\n";
+            this->gen_syscall(expr, reg);
             break;
 
         // 組み込み関数sysret: ユーザーモードへ戻る命令1つを生成する
@@ -1364,8 +1450,9 @@ void Generator::gen_call(node_t *expr, int reg) {
 
     // 2. 引数を書き込む位置は現在のSPより下にあり，そこは次に呼ぶ関数の戻り先とフレームが
     //    占める領域でもある．f(1, g(2))を例にすると，1を書き込んだ位置はgのフレームに重なり，
-    //    gが自分の引数の2やローカル変数を置いた時点で1が壊れる．このため，引数の中で
-    //    関数を呼ぶ場合は，その引数までの書き込みを後回しにし，値をレジスタに残したまま評価する
+    //    gが自分の引数の2やローカル変数を置いた時点で1が壊れる．引数の中でsyscallを呼ぶ場合も，
+    //    OSへ渡す値をSPより下へ並べるため同じく壊れる．このため，引数の中で関数かsyscallを
+    //    呼ぶ場合は，その引数までの書き込みを後回しにし，値をレジスタに残したまま評価する
     //    (f(1, g(2))なら，1とg(2)の戻り値をレジスタに持ったままgから戻り，そのあと両方を書き込む)
     int held_count = 0;   // 値をレジスタに残したままにする引数の個数
     for (int i = 0; i < arg_count; i++) {
@@ -1677,8 +1764,8 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
 // スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 void Generator::check_memory_usage() {
-    // 実行ファイル用の場合 (グローバル変数はスタックと別のメモリの後半にあり，スタックの空きは
-    //  呼び出された時点のSPで決まりコンパイル時に分からないため，検査しない)
+    // 実行ファイル用の場合 (スタックの空きは，シェルが領域の末尾に置くコマンド名と引数の文字列の長さで決まり
+    //  コンパイル時に分からないため，検査しない)
     if (this->analysis_.is_bin_mode) return;
 
     std::set<std::string> path;                // 現在の探索経路(再帰の検出用)

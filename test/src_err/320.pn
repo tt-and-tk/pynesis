@@ -1,6 +1,6 @@
-// expect: compiler error: cannot use void value in expression at src_err/320.pn:4
-// 意味解析エラー: syscall()は値を返さない(void)ため，条件式に使えない (異常系)
+// expect: compiler error: cannot convert 'char *' to 'int' in syscall argument 1 at src_err/320.pn:5
+// 意味解析エラー: syscallの引数にポインタは渡せない(intへのキャストが必要)．番号の次の引数を1つ目と数える (異常系)
 void main(void) {
-    if (syscall()) {
-    }
+    char *p;
+    syscall(0, p, 0, 0, 0);
 }

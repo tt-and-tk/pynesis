@@ -1,5 +1,5 @@
-// 実行ファイル用: mainはシェルが渡したargc・argvを通常の関数と同じく引数領域から読み，return文の値をRAXに置いて戻る
-// (countは0xFFF8番地，firstは0xFFF4番地)
+// 実行ファイル用: mainはシェルが渡したargc・argvを通常の関数と同じく引数領域から読み，return文の値と終了のシステムコールの番号を
+// SPを下げた位置へ置いてから，システムコールの命令で終える(命令列は39命令，312バイト．countは312番地，firstは316番地)
 int count;
 char first;
 

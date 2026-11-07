@@ -1,5 +1,5 @@
 #pragma once
-#include <fstream>
+#include <ostream>
 #include <map>
 #include <set>
 #include <string>
@@ -20,14 +20,15 @@ const long long NULLPTR_VALUE = 0x80000000LL;
 // 注釈付きASTと意味解析の結果を受け取り，アセンブリコードを生成するジェネレータ
 class Generator {
 public:
-    Generator(node_t *root, const analysis_result_t &analysis, std::ofstream &asm_file);
-    void operator()();   // コード生成を実行して .pt に書き出す
+    Generator(node_t *root, const analysis_result_t &analysis, std::ostream &asm_out);
+    void operator()();   // コード生成を実行してアセンブリを出力先へ書き出す
 
 private:
     node_t *root_;                                            // 注釈付きAST
     const analysis_result_t analysis_;                        // 意味解析の結果
-    std::ofstream &asm_file_;                                 // 出力先アセンブリファイル
+    std::ostream &asm_out_;                                   // アセンブリの出力先
     std::ostream *out_;                                       // 現在の出力先 (数えるためだけの生成では捨てる先を指す)
+    std::string func_name_;    // 生成中の関数の名前
     int local_size_ = 0;       // 生成中の関数のローカル変数領域のバイト数
     int spill_size_ = 0;       // 生成中の関数のレジスタ退避領域のバイト数
     int param_size_ = 0;       // 生成中の関数の引数領域のバイト数
@@ -46,6 +47,7 @@ private:
     void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰
     void gen_frame_enter();          // フレームを確保する命令 (関数の先頭に置く)
     void gen_frame_leave();          // フレームを解放する命令 (復帰の直前に置く)
+    void gen_return();               // フレームを解放して関数から復帰する命令 (実行ファイルのmainでは終了のシステムコール)
     void gen_sp_shift(const std::string &mnemonic);  // フレームの大きさだけSPを動かす命令 (確保・解放で共用する)
     void gen_block(node_t *block);   // ブロック (中の文を順に生成)
     void gen_stmt(node_t *stmt);     // 文 (種別ごとに振り分け)
@@ -57,6 +59,9 @@ private:
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
     void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成する (戻り値がある場合はr{reg}に残す)
+    void gen_syscall(node_t *expr, int reg);  // 組み込み関数syscallを生成する (戻り値をr{reg}に残す)
+    // SPを下げて番号と引数を並べ，システムコールの命令を実行する (番号・引数の順に値を持つレジスタと，SPを動かすのに使うレジスタを渡す)
+    void gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg);
     // ポインタに整数を足し引きする演算・ポインタどうしの差の結果をr{reg}に求める
     // 呼び出す前に，左辺をr{reg}・右辺をr{reg+1}へ評価しておくこと
     void gen_pointer_arith(node_t *expr, int reg);

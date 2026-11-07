@@ -7,14 +7,23 @@
 #include "parser.hpp"
 
 // ハードウェア制約: メインメモリの容量(バイト)
-// (前半は変数とスタック，後半は実行ファイルの命令列とグローバル変数を置く領域として使う)
 const int RAM_SIZE = 65536;
-// メインメモリの前半・後半それぞれの大きさ(バイト)
-// (ROM用ではグローバル変数とスタックが前半に，実行ファイル用ではグローバル変数と命令列が後半に収まる必要がある)
+// メインメモリの前半の大きさ(バイト)
+// (ROM用ではグローバル変数とスタックが前半に収まる必要がある)
 const int RAM_HALF_SIZE = RAM_SIZE / 2;
-// Qosmosの取り決め: メインメモリの後半のうち，実行ファイルの命令列とグローバル変数を置ける大きさ(バイト)
-// (後半の末尾のワードは，シェルがシステムコールの入口の番地を書き込むため使えない)
-const int BIN_AREA_SIZE = RAM_HALF_SIZE - 4;
+// Qosmosの取り決め: シェルが実行ファイルに割り振る領域の大きさ(バイト)
+const int EXEC_REGION_SIZE = 32768;
+// Qosmosの取り決め: 領域の末尾のうち，シェルがコマンド名と引数を置くために取る大きさ(バイト)
+// (スタックはここに置いたコマンド名と引数の下から伸びる．スタックの深さは検査しない)
+const int EXEC_ARGS_AREA_SIZE = 256;
+// 領域のうち，命令列とグローバル変数を置ける範囲の大きさ(バイト)．以下，この範囲を実行ファイル用の範囲と呼ぶ
+const int EXEC_AREA_SIZE = EXEC_REGION_SIZE - EXEC_ARGS_AREA_SIZE;
+// Qosmosの取り決め: 実行ファイルの終了をシェルへ伝えるシステムコールの番号
+// (Qosmosの実行ファイル向けライブラリが定義する終了の機能の番号と揃える)
+const int SYSCALL_EXIT_NUMBER = 5;
+// Qosmosの取り決め: システムコールの命令を実行する時点で，SPから順に置く値の並びのバイト数
+// (戻り値の置き場・番号・引数を4バイトずつ置く)
+const int SYSCALL_ARGS_BYTES = (2 + SYSCALL_ARG_COUNT) * 4;
 // ハードウェア制約: ROM用のプログラムの最大命令数
 // (ROM自体に固定容量は無く，ROM_SIZEはコンパイル対象プログラムのサイズに応じてアセンブラが自動算出する．
 //  プログラムカウンタのビット幅(14ビット)がちょうど表現できる命令数であり，アセンブラの上限とも揃える．
@@ -96,13 +105,14 @@ struct analysis_result_t {
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
-    Analyzer(node_t *root, bool is_bin_mode);
+    Analyzer(node_t *root, bool is_bin_mode, int global_base);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
     analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST
     const bool is_bin_mode_;                             // Qosmosの実行ファイル用に解析するか (falseならROM用)
+    const int global_base_;                              // グローバル変数・文字列リテラルを置き始める番地 (ここから上へ順に割り当てる)
 
     // 解析の成果物 (result()でコード生成へ渡す)
     std::map<std::string, const symbol_t *> symbols_;    // シンボルテーブル (変数名→保存先番地等の対応表)
@@ -202,6 +212,6 @@ private:
     static void check_scalar_operand(const node_t *target, const std::string &operation);
     const symbol_t *lookup_symbol(const std::string &name) const;  // 名前からシンボルを探す (スコープ→グローバル)
     // 変数1つ分の領域を確保し，その先頭のオフセット(ローカル)または絶対番地(グローバル)を返す
-    // (グローバルは0番地から上へ，ローカルは関数ごとにフレーム内のローカル変数領域の先頭から確保する)
+    // (グローバルは置き始める番地から上へ，ローカルは関数ごとにフレーム内のローカル変数領域の先頭から確保する)
     int alloc_var(int bytes, location_t location);
 };
