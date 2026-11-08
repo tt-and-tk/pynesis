@@ -353,7 +353,7 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
     const int element_count = decl->type.is_array ? decl->type.array_size : 1;   // 配列の要素数 (配列でなければ1)
 
     // 構造体1個分のワード数×要素数ぶんの領域を確保し，メンバ構成込みの型情報を持つシンボルを生成する
-    // (メンバのメモリレイアウトは../specification/compiler.mdの「構造体」節を参照)
+    // (各メンバは配列を含めワード単位で確保し，char・shortのスカラーメンバも1ワードを占める)
     const int bytes = this->struct_defs_.at(decl->type.struct_name).total_words * 4 * element_count;   // 確保するバイト数
     symbol_t *sym = new symbol_t{decl->sval, decl->type, location, this->alloc_var(bytes, location), true, true};
     // 生成したシンボルは，呼び出し元がグローバル/ローカルいずれかのシンボル表へ格納する
@@ -514,7 +514,7 @@ void Analyzer::collect_globals() {
 }
 
 // コンパイル時に値が確定する定数式を計算して値を返す (定数畳み込み)
-// 呼び出し元は定数式が要求される文脈 (配列サイズ・初期化子・case値等．一覧は../specification/compiler.mdの「定数式」節を参照)
+// 呼び出し元は定数式が要求される文脈 (グローバル変数の初期化子・配列サイズ・caseの値・const変数の初期化子)
 // 実行時の演算と結果が一致するよう，整数昇格と符号の規則に従い，32ビットで折り返して計算する．
 // 通常の変数の参照や関数呼び出しなど，コンパイル時に値が確定しない式を含む場合はエラーにする．
 // const変数の参照は，その値として計算する．

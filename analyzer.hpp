@@ -27,7 +27,7 @@ const int SYSCALL_ARGS_BYTES = (2 + SYSCALL_ARG_COUNT) * 4;
 // ハードウェア制約: ROM用のプログラムの最大命令数
 // (ROM自体に固定容量は無く，ROM_SIZEはコンパイル対象プログラムのサイズに応じてアセンブラが自動算出する．
 //  プログラムカウンタのビット幅(14ビット)がちょうど表現できる命令数であり，アセンブラの上限とも揃える．
-//  pn2asm.cppで生成後に検査する．詳細は ../specification/limitations.md を参照)
+//  pn2asm.cppで生成後に検査する．上限を増やす場合は，ハードウェアのプログラムカウンタの幅とアセンブラの上限も合わせて変える)
 const int MAX_INSTRUCTION_COUNT = 16384;
 // ハードウェア制約: 1命令がメモリ上に占めるバイト数 (実行ファイル用の命令列の大きさを求めるのに使う)
 const int INSTRUCTION_BYTES = 8;
