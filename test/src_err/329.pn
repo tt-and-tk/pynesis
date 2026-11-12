@@ -1,0 +1,6 @@
+// expect: compiler error: array with omitted size must be initialized by a string literal at src_err/329.pn:5
+// 構文解析エラー: サイズを省略した配列の初期化子は文字列リテラルに限り，別のchar配列の名前を書けない (異常系)
+char src[] = "ab";
+void main(void) {
+    char dst[] = src;
+}
