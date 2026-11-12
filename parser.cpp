@@ -880,7 +880,7 @@ node_t *Parser::parse_var_decl() {
                 throw std::string("compiler error: array with omitted size must be initialized by a string literal at ")
                       + loc_to_string(this->peek_token().loc);
             }
-            // 初期化子として文字列リテラルを1つ読む (後ろに演算子などが続けば，文末のセミコロンを読む処理でエラーになる)
+            // 初期化子の文字列リテラルを読む
             node->children.push_back(this->parse_primary());
         } else {
             // サイズ明示: int table[10]; の形式
