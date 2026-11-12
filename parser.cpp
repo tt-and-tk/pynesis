@@ -875,12 +875,12 @@ node_t *Parser::parse_var_decl() {
             // サイズ省略: char msg[] = "hello"; の形式 (サイズは意味解析で文字列長から決定する)
             this->get_token(TK_RBRACKET);       // ]
             this->get_token(TK_ASSIGN);         // =
-            // 初期化子が文字列リテラルでない場合 (サイズを決める手がかりが文字列長しかないため)
+            // 初期化子が文字列リテラルでない場合 (配列のサイズを省略できるのは，文字列リテラルで初期化するときだけ)
             if (!this->token_kind_is(TK_STRING_LIT)) {
                 throw std::string("compiler error: array with omitted size must be initialized by a string literal at ")
                       + loc_to_string(this->peek_token().loc);
             }
-            // 文字列リテラルだけを読む (式として読むと，文字列リテラルを含む式まで受け付けてしまうため)
+            // 初期化子として文字列リテラルを1つ読む (後ろに演算子などが続けば，文末のセミコロンを読む処理でエラーになる)
             node->children.push_back(this->parse_primary());
         } else {
             // サイズ明示: int table[10]; の形式
