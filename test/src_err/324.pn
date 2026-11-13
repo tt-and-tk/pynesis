@@ -1,0 +1,5 @@
+// expect: compiler error: array with omitted size must be initialized by a string literal at src_err/324.pn:3
+// 構文解析エラー: サイズを省略した配列の初期化子は文字列リテラルに限り，整数を書けない (グローバル，異常系)
+int arr[] = 5;
+void main(void) {
+}

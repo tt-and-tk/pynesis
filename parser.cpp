@@ -875,7 +875,14 @@ node_t *Parser::parse_var_decl() {
             // サイズ省略: char msg[] = "hello"; の形式 (サイズは意味解析で文字列長から決定する)
             this->get_token(TK_RBRACKET);       // ]
             this->get_token(TK_ASSIGN);         // =
-            node->children.push_back(this->parse_expr());  // 文字列リテラル (ND_STRING_LIT)
+            // 初期化子が文字列リテラルでなければエラーにする
+            // サイズの省略は，初期化する文字列の長さからサイズを決められる場合にだけ認めるため
+            if (!this->token_kind_is(TK_STRING_LIT)) {
+                throw std::string("compiler error: array with omitted size must be initialized by a string literal at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
+            // 初期化子の文字列リテラルを読む
+            node->children.push_back(this->parse_primary());
         } else {
             // サイズ明示: int table[10]; の形式
             node->children.push_back(this->parse_expr());

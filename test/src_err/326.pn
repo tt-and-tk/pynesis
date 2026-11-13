@@ -1,0 +1,5 @@
+// expect: compiler error: expected ';' but got '+' at src_err/326.pn:4
+// 構文解析エラー: サイズを省略した配列の初期化子は文字列リテラルだけで，文字列リテラルを含む式は書けない (異常系)
+void main(void) {
+    char msg[] = "ab" + 1;
+}
