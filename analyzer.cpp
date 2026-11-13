@@ -1039,12 +1039,12 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         if (stmt->children.empty()) {
             // void関数はreturn文自体が任意なので，値なしのreturn;はvoid以外のときのみエラー
             if (this->current_return_type_.base != BASE_VOID) {
-                throw std::string("compiler error: non-void function '") + this->current_function_
+                throw std::string("compiler error: non-void function '") + source_name(this->current_function_)
                       + "' must return a value at " + loc_to_string(stmt->loc);
             }
         } else {
             if (this->current_return_type_.base == BASE_VOID) {
-                throw std::string("compiler error: void function '") + this->current_function_
+                throw std::string("compiler error: void function '") + source_name(this->current_function_)
                       + "' cannot return a value at " + loc_to_string(stmt->loc);
             }
             this->analyze_value(stmt->children[0]);

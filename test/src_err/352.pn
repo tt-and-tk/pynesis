@@ -1,0 +1,7 @@
+// expect: compiler error: void function 'reset' cannot return a value at src_err/352.pn:4
+// 意味解析エラー: staticを付けたvoid関数のreturn文の形の誤りは，ソースに書いた名前で報告する (異常系)
+static void reset(void) {
+    return 1;
+}
+void main(void) {
+}
