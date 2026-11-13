@@ -1,0 +1,6 @@
+// 115.pnから取り込まれる．取り込み元のstaticと同じ名前の公開した配列を宣言する
+int table[2];
+int lib_read(void) {
+    table[0] = 6;
+    return table[0];
+}

@@ -1,0 +1,20 @@
+// staticを付けた配列の要素・構造体型の変数のメンバを読み書きでき，同じ名前のメンバ・ローカル変数とは区別される
+// 取り込み元のstaticと同じ名前の公開した宣言を，取り込んだファイルは参照する
+#include "include/115_lib.pn"
+struct cell {
+    int value;                      // staticの構造体型の変数と同じ名前のメンバ
+    int table[2];                   // staticの配列と同じ名前のメンバ
+};
+static int table[2];
+static struct cell value;
+int g;
+void main(void) {
+    table[1] = 3;
+    value.table[1] = table[1];      // 3
+    value.value = 4;
+    {
+        int table = 5;              // staticの配列と同じ名前のローカル変数
+        g = table;                  // 5
+    }
+    g = lib_read();                 // 115_lib.pnの公開した配列の要素: 6
+}
