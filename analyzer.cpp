@@ -91,42 +91,56 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
 }
 
 // エラーメッセージに表示する，ソースに書かれた形の名前を返す
+// staticを付けた宣言の名前は，意味解析が「元の名前.ファイルの番号」の形(以下，番号付きの名前)へ置き換えている．
 // 名前を'.'で区切り，数字だけの区切り(ファイルの番号)を取り除いてつなぎ直す
-// (メンバを含む表示用の名前「変数名.メンバ名」の変数名も内部名でありうるため，末尾に限らず取り除く．
+// (メンバを含む表示用の名前「変数名.メンバ名」の変数名も番号付きの名前でありうるため，末尾に限らず取り除く．
 //  識別子は数字で始まらないため，数字だけの区切りはファイルの番号に限られる)
 std::string source_name(const std::string &name) {
     std::string result;     // 取り除いた後の名前
     std::size_t begin = 0;  // 現在の区切りの先頭位置
-    // '.'で区切った区切りごとに，数字だけでなければ残す
+    // '.'で区切った区切りごとに，数字だけの区切りを除いて残す
     while (true) {
-        const std::size_t dot = name.find('.', begin);  // 現在の区切りの後ろの'.'の位置 (なければnpos)
+        const std::size_t dot = name.find('.', begin);             // 現在の区切りの後ろの'.'の位置 (なければnpos)
         const std::string part = name.substr(begin, dot - begin);  // 現在の区切り
-        const bool is_number = !part.empty()
-                               && std::all_of(part.begin(), part.end(), [](char c) { return '0' <= c && c <= '9'; });  // 数字だけの区切りか
-        if (!is_number) result += (result.empty() ? "" : ".") + part;
+        // 数字だけの区切りでなければ，前の区切りとの間に'.'を補って残す
+        if (!std::all_of(part.begin(), part.end(), [](char c) { return '0' <= c && c <= '9'; })) {
+            // 残した区切りがあれば，'.'を補う
+            if (!result.empty()) result += ".";
+            result += part;
+        }
+        // 最後の区切りなら終える
         if (dot == std::string::npos) break;
         begin = dot + 1;
     }
     return result;
 }
 
-// 部分木の中で，置き換え表にある名前を持つノードの名前を内部名へ置き換える
-// 対象は，グローバル変数・関数と同じ名前空間の名前を持つノード(関数定義・変数宣言・変数参照・名前で添字を付ける配列要素)である．
-// 構造体名と構造体のメンバ名は別の名前空間のため置き換えない
-static void rename_identifiers(node_t *node, const std::map<std::string, std::string> &internal_names) {
-    // グローバル変数・関数と同じ名前空間の名前を持つノードの場合
-    if (node->kind == ND_FUNC_DEF || node->kind == ND_VAR_DECL || node->kind == ND_VAR || node->kind == ND_ARRAY_ACCESS) {
-        const auto found = internal_names.find(node->sval);  // 名前に対応する内部名
-        if (found != internal_names.end()) node->sval = found->second;
+// 部分木の中で，置き換え表にある名前を持つノードの名前を番号付きの名前へ置き換える
+// 構造体名と構造体のメンバ名は，グローバル変数・関数と別の名前空間のため置き換えない
+static void rename_identifiers(node_t *node, const std::map<std::string, std::string> &numbered_names) {
+    // グローバル変数・関数と同じ名前空間の名前を持つノードかどうか
+    const bool has_name =
+        // 関数定義
+        node->kind == ND_FUNC_DEF
+        // 変数宣言 (ローカル変数・引数を含む)
+        || node->kind == ND_VAR_DECL
+        // 変数参照
+        || node->kind == ND_VAR
+        // 名前で添字を付ける配列要素
+        || node->kind == ND_ARRAY_ACCESS;
+    // 置き換え表にある名前を持つノードなら，番号付きの名前へ置き換える
+    if (has_name) {
+        const auto found = numbered_names.find(node->sval);  // 名前に対応する番号付きの名前
+        if (found != numbered_names.end()) node->sval = found->second;
     }
     // 子を順に置き換える
     for (node_t *child : node->children) {
         // 構造体定義のメンバ宣言の場合 (メンバ名は置き換えず，配列の要素数の式だけを置き換える)
         if (node->kind == ND_STRUCT_DECL) {
-            for (node_t *size_expr : child->children) rename_identifiers(size_expr, internal_names);
+            for (node_t *size_expr : child->children) rename_identifiers(size_expr, numbered_names);
             continue;
         }
-        rename_identifiers(child, internal_names);
+        rename_identifiers(child, numbered_names);
     }
 }
 
@@ -225,19 +239,20 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
-// 1パス目: staticを付けた宣言の名前を，ファイルごとに一意な名前(以下，内部名)へ置き換える
-// 内部名は「元の名前.ファイルの番号」とする．識別子は'.'を含まないため，内部名はほかの宣言の名前と重ならない．
-// 宣言したファイルの中にある同じ名前の識別子も，ローカル変数・引数の宣言を含めてすべて内部名へ置き換える．
+// 1パス目: staticを付けた宣言の名前を，ファイルごとに一意な番号付きの名前「元の名前.ファイルの番号」へ置き換える
+// 識別子は'.'を含まないため，番号付きの名前はほかの宣言の名前と重ならない．
+// 宣言したファイルの中にある同じ名前の識別子も，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
 // これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない
 void Analyzer::localize_static_names() {
     std::map<std::string, int> file_numbers;  // staticを付けた宣言を含むファイル名→ファイルの番号 (出現順に0から振る)
-    std::map<std::string, std::map<std::string, std::string>> internal_names;  // ファイル名→(staticを付けた宣言の名前→内部名)
+    std::map<std::string, std::map<std::string, std::string>> numbered_names;  // ファイル名→(staticを付けた宣言の名前→番号付きの名前)
 
     // staticを付けた宣言の名前をファイルごとに集める
     // (同じファイルで後方に宣言したstaticを前方から参照できるよう，置き換えを始める前に全ファイル分を集めておく)
     for (const node_t *child : this->root_->children) {
         if (!child->is_static) continue;
-        // ハードウェア変数と同じ名前の場合 (内部名へ置き換えると名前が重ならず，2パス目の重複検査で見つけられないため，ここで検査する)
+        // ハードウェア変数と同じ名前の場合
+        // (名前の重複は置き換えた後の名前で検査するため，置き換える前のここで検査する)
         if (this->symbols_.count(child->sval)) {
             throw std::string("compiler error: redefinition of '") + child->sval
                   + "' at " + loc_to_string(child->loc);
@@ -248,14 +263,14 @@ void Analyzer::localize_static_names() {
             const int number = static_cast<int>(file_numbers.size());  // 振るファイルの番号
             file_numbers[file] = number;
         }
-        internal_names[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
+        numbered_names[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
     }
 
-    // プログラム直下の宣言ごとに，その宣言を書いたファイルのstaticの名前を内部名へ置き換える
+    // プログラム直下の宣言ごとに，その宣言を書いたファイルのstaticの名前を番号付きの名前へ置き換える
     // (取り込んだファイルは宣言と宣言の間で終わるため，1つの宣言はすべて同じファイルに書かれている)
     for (node_t *child : this->root_->children) {
-        const auto found = internal_names.find(child->loc.file);  // 宣言を書いたファイルの置き換え表
-        if (found == internal_names.end()) continue;
+        const auto found = numbered_names.find(child->loc.file);  // 宣言を書いたファイルの置き換え表
+        if (found == numbered_names.end()) continue;
         rename_identifiers(child, found->second);
     }
 }
@@ -348,7 +363,7 @@ void Analyzer::resolve_decl_type(node_t *decl) {
 // メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
 // 無名構造体に続けて即座に変数宣言されていた場合，その変数自体は別のND_VAR_DECLノードとして
 // root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
-// 変数宣言側は3パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
+// 変数宣言側はグローバル変数の登録が通常の構造体変数宣言と同じ経路で処理する
 void Analyzer::resolve_struct_def(const std::string &name) {
     // 構造体定義が登録済みの場合 (メンバ構成は確定済みで，同じ定義を計算し直す必要がないため，これ以上何もしない)
     if (this->struct_defs_.count(name)) return;
@@ -485,7 +500,7 @@ long long Analyzer::const_symbol_value(const symbol_t *sym) {
 // 3パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
 // 後方の宣言が先に参照された場合，その宣言はこの走査で到達するより前に参照した時点で解決済みになっている
-// (名前の重複は2パス目のindex_global_declsで検査済み)
+// (名前の重複はグローバル宣言の索引を作る際に検査済み)
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
         // 構造体定義: メンバ構成を確定させる
@@ -540,9 +555,9 @@ void Analyzer::collect_globals() {
             }
         }
         // 関数定義: 各引数の名前・型・フレーム上の位置(シンボル)と，関数の引数の型の並び・戻り値型(シグネチャ)を登録する
-        // (関数名・戻り値型は2パス目のindex_global_declsで登録済み)
-        // 4パス目で関数本体を検査する際，本体より後ろに定義された関数の呼び出しも引数を検査できるよう，
-        // 全関数のシグネチャをここ(3パス目)で揃えておく．4パス目(analyze_functions)は，ここで作った引数の
+        // (関数名・戻り値型はグローバル宣言の索引を作る際に登録済み)
+        // 各関数本体を検査する際，本体より後ろに定義された関数の呼び出しも引数を検査できるよう，
+        // 全関数のシグネチャをここで揃えておく．関数本体の検査は，ここで作った引数の
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
             // mainの場合 (出力先ごとに決まった形でだけ定義できる．ROMは値を受け渡す呼び出し元が存在しないため戻り値も引数も持たず，
@@ -984,7 +999,7 @@ void Analyzer::analyze_functions() {
         // 関数スコープを開く (引数と本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // 引数をスコープに登録する (シンボル自体は3パス目のcollect_globalsで作成済み)
+        // 引数をスコープに登録する (シンボル自体はグローバル変数の登録と同じパスで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
