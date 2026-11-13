@@ -875,7 +875,7 @@ node_t *Parser::parse_var_decl() {
             // サイズ省略: char msg[] = "hello"; の形式 (サイズは意味解析で文字列長から決定する)
             this->get_token(TK_RBRACKET);       // ]
             this->get_token(TK_ASSIGN);         // =
-            // 初期化子が文字列リテラルでない場合 (配列のサイズを省略できるのは，文字列リテラルで初期化するときだけ)
+            // 初期化子が文字列リテラルでなければエラーにする (配列のサイズを省略できるのは，文字列リテラルで初期化するときだけであるため)
             if (!this->token_kind_is(TK_STRING_LIT)) {
                 throw std::string("compiler error: array with omitted size must be initialized by a string literal at ")
                       + loc_to_string(this->peek_token().loc);
