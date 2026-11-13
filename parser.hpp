@@ -124,6 +124,7 @@ struct node_t {
     long long ival;
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
+    bool is_static = false;         // staticを付けた宣言か (グローバル変数宣言・関数定義でのみtrueになる)
     const symbol_t *sym = nullptr;  // 名前解決の結果 (ND_VAR等がどの宣言を指すか，意味解析後に確定)
     // 配列を値の位置(代入の右辺・引数等)に書いた式か (意味解析後に確定)
     // trueならtypeは先頭要素へのポインタであり，コード生成は先頭の番地を値として求める．falseなら式の値そのものを求める

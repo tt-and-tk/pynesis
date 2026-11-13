@@ -1,0 +1,8 @@
+// 113.pnから取り込まれる．113_first.pnのstaticと同じ名前のstaticの関数・変数を宣言する
+static int count = 3;
+static int next(void) {
+    return count;
+}
+int second_next(void) {
+    return next();
+}

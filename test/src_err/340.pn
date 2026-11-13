@@ -1,0 +1,7 @@
+// expect: compiler error: expected type at src_err/340.pn:4
+// 構文解析エラー: 構造体のメンバにはstaticを付けられない (異常系)
+struct pair {
+    static int a;
+};
+void main(void) {
+}

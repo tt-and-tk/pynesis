@@ -1,0 +1,7 @@
+// expect: compiler error: expected type at src_err/341.pn:3
+// 構文解析エラー: 関数の引数にはstaticを付けられない (異常系)
+int id(static int x) {
+    return x;
+}
+void main(void) {
+}

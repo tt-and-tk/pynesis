@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of 'value' at src_err/335.pn:4
+// 意味解析エラー: 同じファイルでは，staticを付けた宣言どうしに同じ名前を付けられない (異常系)
+static int value;
+static int value;
+void main(void) {
+}

@@ -1,0 +1,7 @@
+// expect: compiler error: use of undeclared identifier 'hidden' at src_err/331.pn:6
+// 意味解析エラー: 取り込んだファイルでstaticを付けた変数は，取り込み元から参照できない (異常系)
+#include "include/331_lib.pn"
+int g;
+void main(void) {
+    g = hidden;
+}

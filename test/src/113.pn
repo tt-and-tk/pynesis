@@ -1,0 +1,13 @@
+// staticを付けた変数・関数は宣言したファイルの中でだけ参照でき，ファイルが異なれば同じ名前を付けられる
+// staticと同じ名前の公開した変数・関数は，staticを宣言したファイル以外から参照できる
+#include "include/113_first.pn"
+#include "include/113_second.pn"
+#include "include/113_public.pn"
+int a;
+int b;
+int c;
+void main(void) {
+    a = first_next();           // 113_first.pnのstaticの関数・変数を通して2
+    b = second_next();          // 113_second.pnのstaticの関数・変数を通して3
+    c = next();                 // 113_public.pnの公開した関数・変数を通して1
+}

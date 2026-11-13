@@ -199,7 +199,7 @@ void Generator::gen_func(node_t *func) {
     // (式の形だけで退避するレジスタが決まる以上ここは通らないが，その前提が崩れた場合に
     //  フレーム上の他の値を壊した出力が黙って出ることを防ぐ)
     if ((this->max_spill_reg_ + 1) * 4 > this->spill_size_) {
-        throw std::string("compiler error: register spill area is too small in '") + func->sval + "'";
+        throw std::string("compiler error: register spill area is too small in '") + source_name(func->sval) + "'";
     }
 }
 
@@ -1044,7 +1044,7 @@ int Generator::calc_frame_offset(const symbol_t *sym) const {
         return sym->address;
     }
     // フレーム上に置かない変数(グローバル変数・レジスタ直結・コンパイル時定数)を渡された場合
-    throw std::string("compiler error: '") + sym->name + "' is not placed on the stack frame";
+    throw std::string("compiler error: '") + source_name(sym->name) + "' is not placed on the stack frame";
 }
 
 // r{reg}の退避枠の，フレームの基準(SP)から数えたオフセットを返す
@@ -1081,7 +1081,7 @@ void Generator::gen_load(int reg, const symbol_t *sym, const loc_t &loc) {
     }
     // メモリにもレジスタにも置かれていない場合 (値を読み出す手段がない)
     else {
-        throw std::string("compiler error: '") + sym->name
+        throw std::string("compiler error: '") + source_name(sym->name)
               + "' has no readable storage at " + loc_to_string(loc);
     }
     // 符号付きchar/shortの場合 (レジスタ上の値は常にintとして扱うため，上位を符号ビットで埋める．
@@ -1115,7 +1115,7 @@ void Generator::gen_store(int reg, const symbol_t *sym) {
     }
     // メモリにもレジスタにも置かれていない場合 (値を書き込む先がない)
     else {
-        throw std::string("compiler error: '") + sym->name + "' has no writable storage";
+        throw std::string("compiler error: '") + source_name(sym->name) + "' has no writable storage";
     }
 }
 
@@ -1664,7 +1664,7 @@ void Generator::gen_var_addr(int reg, const symbol_t *sym) {
         return;
     }
     // メモリ上に置かれていない場合 (レジスタ直結・コンパイル時定数は番地を持たない)
-    throw std::string("compiler error: '") + sym->name + "' has no memory address";
+    throw std::string("compiler error: '") + source_name(sym->name) + "' has no memory address";
 }
 
 // 構造体配列要素のメンバ(arr[i].member)の実アドレスをr{reg}に計算する
@@ -1686,7 +1686,7 @@ void Generator::gen_struct_array_member_addr(node_t *member_access, int reg, con
     const bool is_global = arr_sym->location == LOC_GLOBAL;              // 先頭が絶対番地で決まるか
     // 構造体の配列で，グローバル変数でもローカル変数でもない置き場所の場合 (構造体配列は他の置き場所を持たない)
     if (!is_pointer && !is_global && arr_sym->location != LOC_LOCAL) {
-        throw std::string("compiler error: '") + arr_sym->name
+        throw std::string("compiler error: '") + source_name(arr_sym->name)
               + "' is not placed in memory at " + loc_to_string(member_access->loc);
     }
 

@@ -1,0 +1,4 @@
+// 333.pnから取り込まれる．取り込み元でstaticを付けた変数へ書き込む
+void touch(void) {
+    shared = 1;
+}

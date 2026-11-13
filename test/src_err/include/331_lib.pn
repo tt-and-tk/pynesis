@@ -1,0 +1,2 @@
+// 331.pnから取り込まれる．staticを付けた変数を宣言する
+static int hidden = 1;

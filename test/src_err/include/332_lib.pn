@@ -1,0 +1,2 @@
+// 332.pnから取り込まれる．staticを付けたconst変数を宣言する
+static const int CAP = 4;

@@ -1,0 +1,4 @@
+// 330.pnから取り込まれる．staticを付けた関数を定義する
+static int helper(void) {
+    return 1;
+}

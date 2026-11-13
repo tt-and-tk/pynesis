@@ -1,0 +1,5 @@
+// expect: compiler error: redefinition of 'LED' at src_err/342.pn:3
+// 意味解析エラー: ハードウェア変数と同じ名前の変数には，staticを付けても宣言できない (異常系)
+static int LED;
+void main(void) {
+}

@@ -1,0 +1,6 @@
+// expect: compiler error: circular reference in declaration of 'A' at src_err/343.pn:3
+// 意味解析エラー: staticを付けたconst変数の循環した依存は，ソースに書いた名前で報告する (異常系)
+static const int A = B;
+static const int B = A;
+void main(void) {
+}

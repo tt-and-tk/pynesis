@@ -1,0 +1,22 @@
+// staticを付けたconst変数・構造体型の変数・関数ポインタ型の変数を宣言でき，staticを付けた関数の番地を取得できる
+// staticの名前はsizeofにも使え，同じ名前の構造体のメンバとは区別され，同じ名前の引数で覆い隠せる
+static const int SIZE = 2;
+struct pair {
+    int SIZE[SIZE];                 // staticのconst変数と同じ名前のメンバ(要素数はstaticのconst変数の2)
+};
+static struct pair p;
+static int (*op)(int) = twice;
+int g;
+
+static int twice(int x) {
+    return x * 2;
+}
+
+int shadow(int SIZE) {              // staticのconst変数と同じ名前の引数
+    return SIZE;
+}
+
+void main(void) {
+    g = op(sizeof(p));              // 8 * 2 = 16
+    g = shadow(SIZE);               // 2
+}

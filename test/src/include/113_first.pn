@@ -1,0 +1,8 @@
+// 113.pnから取り込まれる．後方で宣言したstaticの関数・変数を前方から参照する
+int first_next(void) {
+    return next();
+}
+static int next(void) {
+    return count;
+}
+static int count = 2;

@@ -45,6 +45,10 @@ bool is_pointer_like(const type_t &type);
 // (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
 bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
 
+// エラーメッセージに表示する，ソースに書かれた形の名前を返す
+// (staticを付けた宣言の名前は意味解析が「元の名前.ファイルの番号」へ置き換えるため，数字だけの区切りを取り除く)
+std::string source_name(const std::string &name);
+
 // 定数式の値
 struct const_value_t {
     long long value;    // 値 (符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に折り返し済み)
@@ -138,8 +142,9 @@ private:
     type_t current_return_type_;                         // 現在解析中の関数の戻り値型 (return文の整合性検査用)
 
     // 解析メソッド
-    void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査
-    void collect_globals();                                 // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
+    void localize_static_names();                           // 1パス目: staticを付けた宣言の名前をファイルごとに一意な名前へ置き換える
+    void index_global_decls();                              // 2パス目: グローバル宣言の索引作成と名前の重複検査
+    void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
@@ -180,7 +185,7 @@ private:
     static bool is_static_lvalue(const node_t *expr);
     // 値がコンパイル時に決まる整数の式かを返す (名前解決・定数の埋め込みを終えた式を対象にする)
     static bool is_integer_constant(const node_t *expr);
-    void analyze_functions();                               // 3パス目: 各関数本体を検査する
+    void analyze_functions();                               // 4パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する
