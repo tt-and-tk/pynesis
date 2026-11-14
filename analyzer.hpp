@@ -46,7 +46,7 @@ bool is_pointer_like(const type_t &type);
 bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
 
 // エラーメッセージに表示する，ソースに書かれた形の名前を返す
-// (staticを付けた宣言の名前は意味解析が「元の名前.ファイルの番号」へ置き換えるため，数字だけの区切りを取り除く)
+// (staticを付けた宣言の名前は意味解析が「元の名前.ファイルの番号」へ置き換えるため，数字だけの部分を取り除く)
 std::string source_name(const std::string &name);
 
 // 定数式の値

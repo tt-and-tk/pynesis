@@ -337,8 +337,8 @@ void Analyzer::index_global_decls() {
 
 // staticを付けていない宣言について，その宣言を書いたファイルを取り込んだファイルに，同じ名前のstaticの宣言があればエラーにする
 // staticの宣言は，それを書いたファイルの中で同じ名前のほかの宣言より優先して参照される．
-// このため取り込み元にstaticの宣言があると，取り込み元で取り込んだファイルの宣言を参照するつもりで書いた名前が，
-// 気付かれないままstaticの宣言を指してしまう．
+// 取り込み元にstaticの宣言があると，取り込んだ宣言を参照するつもりで書いた名前も，staticの宣言を指してしまう．
+// この誤りは気付かれにくいため，エラーにする．
 // 取り込まれたファイルのstaticの宣言は，取り込み元の同じ名前の宣言を参照する箇所に影響しないため許す
 void Analyzer::check_static_in_includer(const node_t *decl) const {
     const auto found = this->static_decls_.find(decl->sval);  // 同じ名前のstaticの宣言の並び
