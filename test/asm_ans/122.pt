@@ -1,0 +1,10 @@
+.global main
+
+main:
+    mov fh r0 r1 2
+    mov fh r0 r1 9
+    wm fh r0 r1 20
+    wm fh r0 r1 20
+    wm fh r0 r1 2
+    wm fh r0 r1 4
+    ret

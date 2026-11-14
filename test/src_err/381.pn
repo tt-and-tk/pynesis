@@ -1,0 +1,6 @@
+// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/381.pn:5
+// 意味解析エラー: asm文の入力"i"に，ローカルの配列の名前(先頭要素の番地)は書けない (異常系)
+void main(void) {
+    int la[2];
+    asm("wm fh r0 r1 %0" : : "i"(la));
+}

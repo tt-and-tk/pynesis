@@ -1,0 +1,5 @@
+// expect: compiler error: asm input '%12345678901234567890' is out of range at src_err/379.pn:4
+// コード生成エラー: asm文の雛形の%Nの番号が数値へ変換できないほど桁の多い場合も，入力の数以上の番号としてエラーになる (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %12345678901234567890" : : "i"(1));
+}

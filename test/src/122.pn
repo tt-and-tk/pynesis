@@ -1,0 +1,29 @@
+// asm文の入力"i"に書ける式のうち，118.pnで扱わない形
+// - ローカルのconst変数と，使う位置より後ろで宣言したグローバルのconst変数
+// - 構造体配列の要素の番地(&ps[1])と，構造体配列の名前に整数を足した番地(ps + 1．構造体1個分の12バイトずつ進む)
+// - shortの配列の名前に整数を足した番地(2バイトずつ進む)
+// - 足し引きを重ねた番地
+// (hsは0番地，psは8番地に置かれる．構造体ptは全体が12バイト)
+struct pt {
+    int x;
+    char name[6];
+};
+short hs[3];
+struct pt ps[2];
+void main(void) {
+    const int K = 2;
+    asm("mov fh r0 r1 %0\n"
+        "mov fh r0 r1 %1\n"
+        "wm fh r0 r1 %2\n"
+        "wm fh r0 r1 %3\n"
+        "wm fh r0 r1 %4\n"
+        "wm fh r0 r1 %5"
+        :
+        : "i"(K),                // 2
+          "i"(LATER),            // 9
+          "i"(&ps[1]),           // 8 + 12 = 20
+          "i"(ps + 1),           // 8 + 12 = 20
+          "i"(hs + 1),           // 0 + 2 = 2
+          "i"(&hs[1] + K - 1));  // 2 + 2 * 2 - 2 = 4
+}
+const int LATER = 9;

@@ -1,0 +1,7 @@
+// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/382.pn:6
+// 意味解析エラー: asm文の入力"i"に，グローバルのポインタ変数に整数を足した式は書けない(ポインタの値は実行時に決まるため) (異常系)
+int g;
+int *gp = &g;
+void main(void) {
+    asm("wm fh r0 r1 %0" : : "i"(gp + 1));
+}

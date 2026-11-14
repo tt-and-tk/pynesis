@@ -1,0 +1,36 @@
+.global main
+
+main:
+    mov fh r0 r0 3
+    wm fh r0 r0 0
+    nop ; 注: 説明
+    ; a: b
+    ; .L1 はコンパイラのラベル
+.Lmy0:
+    ne r0 r0 .Lmy0
+    rm fh r0 r0 0
+    mov fh r0 r1 3
+    ne r0 r1 .L1
+    nop
+.L1:
+.L2:
+    rm fh r0 r0 0
+    mov fh r0 r1 5
+    egt r0 r1 .L4
+    nop
+.L3:
+    rm fh r0 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r0
+    wm fh r0 r0 0
+    jmp .L2
+.L4:
+    rm fh r0 r0 0
+    mov fh r0 r1 5
+    eq r0 r1 .L5
+    jmp .L6
+.L5:
+    nop
+    jmp .L6
+.L6:
+    ret
