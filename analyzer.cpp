@@ -1224,7 +1224,7 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
                 // かつ，右辺が整数定数である
                 && Analyzer::is_integer_constant(rhs)) {
                 const long long bytes = type_size_bytes(pointee_type(lhs->type), this->struct_defs_);   // 指す先1個分のバイト数
-                const long long offset = this->eval_const_expr(rhs, true).value * bytes;                       // 足し引きするバイト数
+                const long long offset = this->eval_const_expr(rhs, true).value * bytes;                 // 足し引きするバイト数
                 return this->eval_global_address(lhs, loc) + (expr->sval == "+" ? offset : -offset);
             }
             break;
