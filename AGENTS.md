@@ -12,21 +12,21 @@ GitHubリポジトリ名: `tt-and-tk/pynesis`．
 
 | リポジトリ(GitHub) | ディレクトリ(`pc/`配下) | 役割 |
 |:-|:-|:-|
-| `specification` | `specification/` | Pynthesisの仕様と，各リポジトリのソースを変更する開発の手順のドキュメント(唯一の一次情報源) |
+| `specification` | `specification/` | Pynthesisの仕様書．各リポジトリのソースを変更するときの開発の手順も含む(唯一の一次情報源) |
 | `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)，または自作OS Qosmosの実行ファイルへのアセンブラ |
-| `pynesis`(本リポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルを取り込んで使用し，`.sv`または実行ファイルまで一貫変換も可能 |
+| `pynesis`(このリポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルを取り込んで使用し，`.sv`または実行ファイルまで一貫変換も可能 |
 | `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクトと，ROM上で動く自作OS Qosmos(シェルやファイルシステムなど．Pynesisで記述) |
-| `for-pynthesis-skills` | `for-pynthesis-skills/` | 上記各リポジトリで共有するissue起票・対応支援スキルとコーディング規約を提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先でもある |
+| `for-pynthesis-skills` | `for-pynthesis-skills/` | Pynthesisの各リポジトリで共有するissue起票・対応支援スキルとコーディング規約を提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先でもある |
 
 ```
-入力(.pn) → [pynesis(本リポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
+入力(.pn) → [pynesis(このリポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
 ```
 
 ## 作業する前に読む文書
 
 作業する前に，`specification`の次の文書を読む．
 
-| 文書 | 内容 |
+| 文書(`specification`の中のパス) | 内容 |
 |:-|:-|
 | `pynesis/develop/index.md` | コンパイラのソースの構成，ビルド，実装の決まり，テストの手順 |
 | `README.md` | 仕様書全体の構成 |
