@@ -18,11 +18,11 @@ typedef struct {
 // 1回のコンパイル全体で共有する字句解析の途中経過
 // 字句解析と指令の処理は取り込むファイルごとに再帰呼び出しし合うため，共有する値を1つの引数にまとめて受け渡す
 typedef struct {
-    std::set<std::string> lexed_paths;        // 字句解析を始めたファイルの正規化した絶対パス
-    std::set<std::string> in_progress_paths;  // 字句解析中のファイルの正規化した絶対パス
-    std::set<std::string> once_paths;         // #pragma onceが書かれたファイルの正規化した絶対パス
+    std::set<std::string> lexed_paths;               // 字句解析を始めたファイルの正規化した絶対パス
+    std::set<std::string> in_progress_paths;         // 字句解析中のファイルの正規化した絶対パス
+    std::set<std::string> once_paths;                // #pragma onceが書かれたファイルの正規化した絶対パス
     std::map<std::string, std::string> lexed_names;  // 字句解析を始めたファイルの正規化した絶対パス→トークンの位置に記録したファイル名
-    include_graph_t include_graph;            // ファイルごとの取り込み先
+    include_graph_t include_graph;                   // ファイルごとの取り込み先
 } lex_state_t;
 
 // 指令ごとの処理 (ソース中の読み取り位置は，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
