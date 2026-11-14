@@ -1,0 +1,5 @@
+// expect: compiler error: expected string literal but got '1' at src_err/376.pn:4
+// 構文解析エラー: asm文の雛形は文字列リテラルで書く (異常系)
+void main(void) {
+    asm(1);
+}

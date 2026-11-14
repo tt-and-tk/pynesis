@@ -1154,10 +1154,144 @@ void Analyzer::analyze_stmt(node_t *stmt) {
                   + loc_to_string(stmt->loc);
         }
     }
+    // asm文
+    else if (stmt->kind == ND_ASM) {
+        this->analyze_asm(stmt);
+    }
     // それ以外は式文として検査する (求まった値は使わない)
     else {
         this->analyze_discarded(stmt);
     }
+}
+
+// asm文の入力の値を求められない場合のエラーメッセージを返す
+static std::string asm_input_error(const loc_t &loc) {
+    return std::string("compiler error: asm input must be an integer constant expression or an address of a global variable at ")
+           + loc_to_string(loc);
+}
+
+// asm文を検査し，雛形へ埋め込む入力の値を各入力の式に書き込む
+// 番地を表す形の式はグローバル変数の番地として，それ以外は整数の定数式として値を求める
+// (形で振り分けるのは，定数式を名前解決の前に計算するため．名前解決はconst変数の参照を値のリテラルに置き換えるので，
+//  その後に計算するとconst unsigned intの符号なしの性質が失われる)
+void Analyzer::analyze_asm(node_t *stmt) {
+    for (node_t *input : stmt->children) {
+        // 整数の定数式の場合
+        if (!this->is_address_form(input)) {
+            input->ival = this->eval_const_expr(input).value;
+            continue;
+        }
+        // グローバル変数の番地の場合 (名前解決と型注釈をしてから番地を求める)
+        this->analyze_value(input);
+        input->ival = this->eval_global_address(input, input->loc);
+    }
+}
+
+// 番地を表す形の式かを，名前解決の前の形から判定する
+bool Analyzer::is_address_form(const node_t *expr) {
+    switch (expr->kind) {
+        // &・メンバの場合 (メンバの値はコンパイル時に決まらないため，番地として扱えるのはメンバ配列だけである)
+        case ND_ADDR_OF:
+        case ND_MEMBER_ACCESS:
+            return true;
+        // 名前の場合 (const変数は値を表し，それ以外は配列の名前として番地を表しうる)
+        case ND_VAR: {
+            const symbol_t *sym = this->lookup_symbol(expr->sval);   // 名前が指す宣言
+            // シンボル表にない場合 (未解決の後方のグローバルのconst変数でありうるため，宣言から解決を試みる)
+            if (sym == nullptr) {
+                sym = this->resolve_global_const(expr->sval);
+            }
+            return sym == nullptr || sym->location != LOC_CONST;
+        }
+        // 足し算・引き算の場合 (どちらかの辺が番地を表せば，番地に整数を足し引きした式である)
+        case ND_BINOP:
+            return (expr->sval == "+" || expr->sval == "-")
+                && (this->is_address_form(expr->children[0]) || this->is_address_form(expr->children[1]));
+        // それ以外の場合
+        default:
+            return false;
+    }
+}
+
+// グローバル変数の番地を表す式の番地を求める
+long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
+    switch (expr->kind) {
+        // 配列の先頭の番地として使われる変数・メンバ配列の場合
+        case ND_VAR:
+        case ND_MEMBER_ACCESS:
+            if (expr->is_decayed) return this->eval_global_lvalue_address(expr, loc);
+            break;
+        // &の場合
+        case ND_ADDR_OF:
+            return this->eval_global_lvalue_address(expr->children[0], loc);
+        // 番地に整数定数を足し引きした式の場合 (整数に，指す先1個分のバイト数を掛けて足し引きする)
+        case ND_BINOP: {
+            const node_t *lhs = expr->children[0];   // 左辺
+            const node_t *rhs = expr->children[1];   // 右辺
+            // 整数定数+番地の場合
+            if (expr->sval == "+" && Analyzer::is_integer_constant(lhs) && is_pointer_value(rhs->type)) {
+                const long long bytes = type_size_bytes(pointee_type(rhs->type), this->struct_defs_);   // 指す先1個分のバイト数
+                return this->eval_const_expr(lhs).value * bytes + this->eval_global_address(rhs, loc);
+            }
+            // 番地±整数定数の場合
+            if (is_pointer_value(lhs->type) && Analyzer::is_integer_constant(rhs)) {
+                const long long bytes = type_size_bytes(pointee_type(lhs->type), this->struct_defs_);   // 指す先1個分のバイト数
+                const long long offset = this->eval_const_expr(rhs).value * bytes;                       // 足し引きするバイト数
+                return this->eval_global_address(lhs, loc) + (expr->sval == "+" ? offset : -offset);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    throw asm_input_error(loc);
+}
+
+// グローバル変数と，その定数の添字の要素・メンバの番地を求める
+long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &loc) {
+    switch (expr->kind) {
+        // 変数の場合
+        case ND_VAR:
+            if (expr->sym->location == LOC_GLOBAL) return expr->sym->address;
+            break;
+        // 配列の要素の場合 (ポインタの指す先は実行時に決まるため，配列そのものの要素に限る)
+        case ND_ARRAY_ACCESS: {
+            const node_t *index = expr->children[0];   // 添字
+            if (!Analyzer::is_integer_constant(index)) break;
+            const long long offset = this->eval_const_expr(index).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
+            // 配列変数の要素の場合
+            if (expr->children.size() == 1) {
+                if (expr->sym->type.is_array && expr->sym->location == LOC_GLOBAL) return expr->sym->address + offset;
+                break;
+            }
+            // メンバ配列の要素の場合
+            const node_t *base = expr->children[1];   // 添字を付ける基底の式
+            if (base->kind == ND_MEMBER_ACCESS && base->type.is_array) return this->eval_global_lvalue_address(base, loc) + offset;
+            break;
+        }
+        // 構造体のメンバの場合
+        case ND_MEMBER_ACCESS: {
+            const node_t *base = expr->children[0];   // メンバが属する構造体の式
+            // 構造体変数のメンバの場合 (名前解決が，メンバの番地を持つシンボルを合成している)
+            if (base->kind == ND_VAR) {
+                if (expr->sym->location == LOC_GLOBAL) return expr->sym->address;
+                break;
+            }
+            // 構造体配列の要素のメンバの場合 (配列の番地 + 添字 × 構造体1個分のバイト数 + メンバの位置)
+            if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 1) {
+                const symbol_t *array = base->sym;   // 構造体配列のシンボル
+                const node_t *index = base->children[0];   // 添字
+                if (!array->type.is_array || array->location != LOC_GLOBAL || !Analyzer::is_integer_constant(index)) break;
+                const long long stride = this->struct_defs_.at(array->type.struct_name).total_words * 4;   // 構造体1個分のバイト数
+                const long long member_offset = this->find_member(array->type.struct_name, expr).offset_words * 4;   // メンバの位置
+                return array->address + this->eval_const_expr(index).value * stride + member_offset;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    throw asm_input_error(loc);
 }
 
 // switch文を検査する (children: 条件式, 本体の文とcase/defaultラベルが平坦に並ぶ)

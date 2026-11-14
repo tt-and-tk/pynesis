@@ -54,6 +54,7 @@ const std::map<std::string, token_kind_t> g_keywords = {
     {"switch",   TK_SWITCH},   {"case",     TK_CASE},      {"default",  TK_DEFAULT},
     {"break",    TK_BREAK},    {"continue", TK_CONTINUE},
     {"return",   TK_RETURN},   {"sizeof",   TK_SIZEOF},   {"nullptr",  TK_NULLPTR},
+    {"asm",      TK_ASM},
     {"streq",    TK_STREQ},    {"strcopy",  TK_STRCOPY},
     {"syscall",  TK_SYSCALL},  {"sysret",   TK_SYSRET},
 };

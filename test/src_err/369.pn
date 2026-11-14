@@ -1,0 +1,6 @@
+// expect: compiler error: label in asm template must start with '.' at src_err/369.pn:4
+// コード生成エラー: asm文の雛形に関数ラベル(名前が.で始まらないラベル)は書けない(asm文を書いた関数が2つに分かれるため) (異常系)
+void main(void) {
+    asm("foo:\n"
+        "nop");
+}

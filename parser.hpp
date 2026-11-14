@@ -81,6 +81,7 @@ typedef enum {
     ND_BREAK,       // break文
     ND_CONTINUE,    // continue文
     ND_RETURN,      // return文
+    ND_ASM,         // asm文 (svalに引用符なしの雛形，childrenに入力の式を格納)
     // 式
     ND_CALL,        // 関数呼び出し (children: [呼び出す関数(関数名または関数ポインタの値を持つ式), 引数...])
     ND_STREQ,       // 組み込み関数streq (char配列2つの内容比較)
@@ -120,7 +121,7 @@ struct node_t {
     std::vector<node_t *> children; // 子ノード
     std::string sval;               // 文字列値 (識別子名・演算子文字列)
     // コンパイル時に決まる整数値．整数・文字リテラルはその値，sizeof式は結果のバイト数(意味解析が確定させる)，
-    // case節はcaseの値(意味解析が畳み込む)．それ以外のノードでは使わない
+    // case節はcaseの値(意味解析が畳み込む)，asm文の入力の式は雛形へ埋め込む値(意味解析が求める)．それ以外のノードでは使わない
     long long ival;
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
@@ -194,6 +195,7 @@ private:
     node_t *parse_strcopy();    // 組み込み関数strcopy(char配列, char配列)
     node_t *parse_mode_switch();  // 動作状態を切り替える組み込み関数syscall(番号, 引数4つ) または sysret()
     node_t *parse_sizeof();     // sizeof(型名 または 変数名)
+    node_t *parse_asm();        // asm文 (asm(雛形 : : "i"(式), ...);)
     node_t *parse_expr_stmt();  // 式文 (式 ;)
     // 式解析メソッド群
     // 優先順位の低い演算子ほど浅い関数が担当し，下記の順に呼び出しが連鎖する．

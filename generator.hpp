@@ -34,7 +34,7 @@ private:
     int param_size_ = 0;       // 生成中の関数の引数領域のバイト数
     int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号
     std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数
-    int label_count_ = 0;                                     // 局所ラベルの連番カウンタ (.L0, .L1, ...)
+    int label_count_ = 0;                                     // 局所ラベル(.L0, .L1, ...)とasm文の%=の番号に使う連番カウンタ
     // break/continueの飛び先ラベルのスタック (最内が末尾)
     // continueはループのみ，breakはループとswitchの両方が積む
     std::vector<std::string> break_labels_;
@@ -57,6 +57,10 @@ private:
     void gen_for(node_t *stmt);      // for文 (ループ)
     void gen_do_while(node_t *stmt); // do-while文 (末尾判定ループ)
     void gen_switch(node_t *stmt);   // switch文 (多分岐)
+    void gen_asm(const node_t *stmt);  // asm文 (雛形の%N・%=を置き換えて，行ごとに出力する)
+    // asm文の雛形の1行の%N・%=を置き換えて返す
+    // %=はunique_numberに置き換える (空なら局所ラベルの連番から1つ取ってunique_numberに入れる)
+    std::string substitute_asm_line(const std::string &line, const node_t *stmt, std::string &unique_number);
     void gen_expr(node_t *expr, int reg);  // 式を評価し結果をr{reg}に残す (レジスタスタック方式)
     void gen_call(node_t *expr, int reg);  // 関数呼び出しを生成する (戻り値がある場合はr{reg}に残す)
     void gen_syscall(node_t *expr, int reg);  // 組み込み関数syscallを生成する (戻り値をr{reg}に残す)

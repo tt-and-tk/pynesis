@@ -1,0 +1,17 @@
+// asm文の命令は，書いた位置に出力する
+// - フレームを持たない関数の先頭に書いたasm文は関数ラベルの直後に出力され，コンパイラの命令より先に実行される
+//   (割り込まれた時点のレジスタの値を，そのままグローバル変数へ保存できる)
+// - フレームを持つ関数では，フレームを確保する命令の後に出力される
+int saved;
+void entry(void) {
+    asm("wm fh r0 r5 %0" : : "i"(&saved));
+    saved = 0;
+}
+int framed(int x) {
+    asm("nop");
+    return x;
+}
+void main(void) {
+    entry();
+    saved = framed(1);
+}

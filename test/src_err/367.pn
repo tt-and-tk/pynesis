@@ -1,0 +1,5 @@
+// expect: compiler error: '%' in asm template must be followed by a number or '=' at src_err/367.pn:4
+// コード生成エラー: asm文の雛形の%の後には，数字か=だけを書ける (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %x");
+}

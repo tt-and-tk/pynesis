@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <iomanip>
 #include <sstream>
 
@@ -420,6 +421,10 @@ void Generator::gen_stmt(node_t *stmt) {
         // switch文
         case ND_SWITCH:
             this->gen_switch(stmt);
+            break;
+        // asm文
+        case ND_ASM:
+            this->gen_asm(stmt);
             break;
         // break文: 最内のループ/switchの脱出先へ飛ぶ (アナライザが内側であることを保証済み)
         case ND_BREAK:
@@ -997,6 +1002,98 @@ void Generator::gen_switch(node_t *stmt) {
     (*this->out_) << end << ":\n";
 
     this->break_labels_.pop_back();
+}
+
+// 文字列の前後の半角空白を除いて返す
+static std::string trim_spaces(const std::string &text) {
+    const size_t begin = text.find_first_not_of(' ');   // 最初の空白でない文字の位置
+    if (begin == std::string::npos) return "";
+    return text.substr(begin, text.find_last_not_of(' ') - begin + 1);
+}
+
+// asm文の雛形の行が，コンパイラの局所ラベルの名前の形(.Lの直後に数字か，置き換えると数字になる%が続く形)を含むかを返す
+static bool has_compiler_label_name(const std::string &code) {
+    for (size_t pos = code.find(".L"); pos != std::string::npos; pos = code.find(".L", pos + 1)) {
+        // .Lに続く文字 (行末なら空文字)
+        const char next = (pos + 2 < code.size()) ? code[pos + 2] : '\0';
+        if (std::isdigit(static_cast<unsigned char>(next)) || next == '%') return true;
+    }
+    return false;
+}
+
+// asm文を生成する
+// 雛形を1行ずつ書き方を確かめながら置き換え，命令の行は字下げし，局所ラベルの行は行頭に置いて出力する
+// (行の種類は，アセンブラと同じくコメントより前に:を含むかで見分ける)
+void Generator::gen_asm(const node_t *stmt) {
+    const std::string at = " at " + loc_to_string(stmt->loc);   // エラーメッセージの末尾
+    std::string unique_number;                                  // %=を置き換える番号 (最初の%=で決まる)
+    std::istringstream lines(stmt->sval);                       // 雛形を行に分けて読む
+    std::string raw;                                            // 置き換える前の行
+    while (std::getline(lines, raw)) {
+        // コンパイラの局所ラベルの名前の形を書いた場合 (コンパイラが生成するラベルと重なりうるため)
+        // (%N・%=が数字になるため，置き換える前の行で調べる)
+        if (has_compiler_label_name(raw.substr(0, raw.find(';')))) {
+            throw std::string("compiler error: names of the form '.L<number>' are reserved for the compiler") + at;
+        }
+        const std::string line = trim_spaces(this->substitute_asm_line(raw, stmt, unique_number));   // 置き換えた行
+        // 空行は捨てる
+        if (line.empty()) continue;
+        const std::string code = line.substr(0, line.find(';'));   // コメントより前の部分
+        // ラベルの行の場合
+        if (code.find(':') != std::string::npos) {
+            // 関数ラベルの場合 (asm文を書いた関数が，その位置で2つの関数に分かれてしまうため)
+            if (code[0] != '.') {
+                throw std::string("compiler error: label in asm template must start with '.'") + at;
+            }
+            (*this->out_) << line << "\n";
+            continue;
+        }
+        // .global宣言の場合 (プログラムの先頭にだけ書けるため)
+        if (code.compare(0, 7, ".global") == 0) {
+            throw std::string("compiler error: '.global' cannot be written in asm template") + at;
+        }
+        (*this->out_) << "    " << line << "\n";
+    }
+}
+
+// asm文の雛形の1行の%N・%=を置き換えて返す
+std::string Generator::substitute_asm_line(const std::string &line, const node_t *stmt, std::string &unique_number) {
+    const std::string at = " at " + loc_to_string(stmt->loc);   // エラーメッセージの末尾
+    std::string result;                                         // 置き換えた行
+    for (size_t i = 0; i < line.size(); i++) {
+        const char c = line[i];   // 置き換えを調べる文字
+        // 制御文字の場合 (アセンブラはタブに対応せず，ほかの制御文字も行の中に置けないため)
+        if (static_cast<unsigned char>(c) < 0x20) {
+            throw std::string("compiler error: asm template cannot contain control characters other than newline") + at;
+        }
+        // %以外の文字はそのまま写す
+        if (c != '%') {
+            result += c;
+            continue;
+        }
+        // %=の場合 (同じasm文の中では同じ番号にする)
+        if (i + 1 < line.size() && line[i + 1] == '=') {
+            if (unique_number.empty()) unique_number = std::to_string(this->label_count_++);
+            result += unique_number;
+            i++;
+            continue;
+        }
+        // %の後ろに続く数字を，入力の番号(0始まり)として読む
+        size_t end = i + 1;   // 番号の数字の終わりの位置
+        while (end < line.size() && std::isdigit(static_cast<unsigned char>(line[end]))) end++;
+        // 数字も=も続かない場合
+        if (end == i + 1) {
+            throw std::string("compiler error: '%' in asm template must be followed by a number or '='") + at;
+        }
+        const std::string number = line.substr(i + 1, end - i - 1);   // 入力の番号の数字
+        // 入力の数以上の番号の場合 (桁数で先に判定し，変換できないほど大きい数字を数値にしない)
+        if (number.size() > 9 || std::stoul(number) >= stmt->children.size()) {
+            throw std::string("compiler error: asm input '%") + number + "' is out of range" + at;
+        }
+        result += imm_literal(stmt->children[std::stoul(number)]->ival);
+        i = end - 1;
+    }
+    return result;
 }
 
 // r{dst} = r{lhs} op r{rhs} となる演算命令を出力する (is_signedは符号付きで演算するか)

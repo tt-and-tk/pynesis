@@ -193,6 +193,14 @@ private:
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する
+    void analyze_asm(node_t *stmt);                         // asm文を検査し，入力の値を求める
+    // 番地を表す形の式(&・配列名・メンバ配列名と，それらに整数を足し引きした式)かを，名前解決の前の形から判定する
+    bool is_address_form(const node_t *expr);
+    // グローバル変数の番地を表す式(配列名・メンバ配列名・&左辺値と，それらに整数定数を足し引きした式)の番地を求める
+    // (名前解決を終えた式を対象にし，求められない式はlocの位置でエラーにする)
+    long long eval_global_address(const node_t *expr, const loc_t &loc);
+    // グローバル変数と，その定数の添字の要素・メンバの番地を求める (求められない左辺値はlocの位置でエラーにする)
+    long long eval_global_lvalue_address(const node_t *expr, const loc_t &loc);
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
     // 評価した結果の値(整数・ポインタ)を使う式(代入の右辺・引数・戻り値・演算のオペランド等)を検査する

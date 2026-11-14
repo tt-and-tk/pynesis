@@ -1,0 +1,9 @@
+// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/362.pn:8
+// 意味解析エラー: asm文の入力"i"に，ローカルの構造体変数のメンバの番地は書けない (異常系)
+struct pt {
+    int x;
+};
+void main(void) {
+    struct pt lp;
+    asm("wm fh r0 r1 %0" : : "i"(&lp.x));
+}

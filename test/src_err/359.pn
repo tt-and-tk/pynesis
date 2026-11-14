@@ -1,0 +1,5 @@
+// expect: compiler error: asm clobbers are not supported at src_err/359.pn:4
+// 構文解析エラー: asm文に破壊するものの欄(3つ目のコロンの後)は書けない (異常系)
+void main(void) {
+    asm("nop" : : "i"(1) : "r1");
+}

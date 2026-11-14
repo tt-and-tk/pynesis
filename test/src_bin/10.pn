@@ -1,0 +1,8 @@
+// 実行ファイル用: asm文を書ける．入力"i"に書いたグローバル変数の番地は，命令列(11命令，88バイト)の直後から置いた番地になる
+// (savedは88番地に置かれる)
+int saved[2];
+int main(void) {
+    asm("wm fh r0 r1 %0\n"
+        "wm fh r0 r2 %1" : : "i"(saved), "i"(&saved[1]));
+    return 0;
+}

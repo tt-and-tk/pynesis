@@ -1,0 +1,5 @@
+// expect: compiler error: '%' in asm template must be followed by a number or '=' at src_err/368.pn:4
+// コード生成エラー: asm文の雛形の末尾に%だけを書けない (異常系)
+void main(void) {
+    asm("nop %");
+}
