@@ -93,17 +93,18 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
 // エラーメッセージに表示する，ソースに書かれた形の名前を返す
 // staticを付けた宣言の名前は，意味解析が「元の名前.ファイルの番号」の形(以下，番号付きの名前)へ置き換えている．
 // 名前を'.'で部分に分け，数字だけの部分(ファイルの番号)を除いてつなぎ直す
-// メンバを含む表示用の名前「変数名.メンバ名」は，変数名が番号付きの名前なら「元の名前.ファイルの番号.メンバ名」となり，
-// 数字だけの部分が末尾以外にも現れるため，すべての部分を調べる
 // (識別子は数字で始まらないため，数字だけの部分はファイルの番号に限られる)
 std::string source_name(const std::string &name) {
     std::string result;     // 取り除いた後の名前
     std::size_t begin = 0;  // 現在の部分の先頭位置
 
     // '.'で分けた部分ごとに，数字だけの部分を除いて残す
+    // (メンバを含む表示用の名前「変数名.メンバ名」では，ファイルの番号が末尾以外の「変数名」の直後にも入ってしまうため，
+    //  末尾に限らずすべての部分を調べる)
     while (true) {
         const std::size_t dot = name.find('.', begin);             // 現在の部分の後ろの'.'の位置 (なければnpos)
         const std::string part = name.substr(begin, dot - begin);  // 現在の部分
+
         // 数字だけの部分でなければ，前に残した部分との間に'.'を補って残す
         if (!std::all_of(part.begin(), part.end(), [](char c) { return '0' <= c && c <= '9'; })) {
             // 前に残した部分があれば，'.'を補う
@@ -336,16 +337,15 @@ void Analyzer::index_global_decls() {
 }
 
 // staticを付けていない宣言について，その宣言を書いたファイルを取り込んだファイルに，同じ名前のstaticの宣言があればエラーにする
-// staticの宣言は，それを書いたファイルの中で同じ名前のほかの宣言より優先して参照される．
-// 取り込み元にstaticの宣言があると，取り込んだ宣言を参照するつもりで書いた名前も，staticの宣言を指してしまう．
-// この誤りは気付かれにくいため，エラーにする．
-// 取り込まれたファイルのstaticの宣言は，取り込み元の同じ名前の宣言を参照する箇所に影響しないため許す
 void Analyzer::check_static_in_includer(const node_t *decl) const {
+    // 同じ名前のstaticの宣言がなければ，検査を終える
     const auto found = this->static_decls_.find(decl->sval);  // 同じ名前のstaticの宣言の並び
     if (found == this->static_decls_.end()) return;
-    // 同じ名前のstaticの宣言ごとに，staticの宣言を書いたファイルが，検査する宣言を書いたファイルを取り込んでいるかを調べる
-    // (同じファイルに書いた宣言どうしは，名前の重複として検査する)
+
+    // 同じ名前のstaticの宣言は別々のファイルに1つずつありうるため，すべて調べる
     for (const node_t *static_decl : found->second) {
+        // staticの宣言を書いたファイルが，検査する宣言を書いたファイルを取り込んでいる場合
+        // (同じファイルに書いた宣言どうしは，名前の重複として検査する)
         if (static_decl->loc.file != decl->loc.file
             && includes_file(this->include_graph_, static_decl->loc.file, decl->loc.file)) {
             throw std::string("compiler error: static '") + decl->sval
