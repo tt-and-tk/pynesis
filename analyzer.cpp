@@ -1201,12 +1201,23 @@ bool Analyzer::is_address_form(const node_t *expr) {
             if (sym == nullptr) {
                 sym = this->resolve_global_const(expr->sval);
             }
-            return sym == nullptr || sym->location != LOC_CONST;
+            // 番地を表しうる名前か
+            return
+                // 宣言が見つからない名前 (名前解決が未宣言のエラーにする)
+                sym == nullptr
+                // または，const変数でない名前
+                || sym->location != LOC_CONST;
         }
         // 足し算・引き算の場合 (どちらかの辺が番地を表せば，番地に整数を足し引きした式である)
-        case ND_BINOP:
-            return (expr->sval == "+" || expr->sval == "-")
+        case ND_BINOP: {
+            const bool is_add_or_sub = expr->sval == "+" || expr->sval == "-";   // 足し算か引き算か
+            // 番地に整数を足し引きした形か
+            return
+                // 足し算か引き算である
+                is_add_or_sub
+                // かつ，どちらかの辺が番地を表す形である
                 && (this->is_address_form(expr->children[0]) || this->is_address_form(expr->children[1]));
+        }
         // それ以外の場合
         default:
             return false;
@@ -1229,12 +1240,22 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
             const node_t *lhs = expr->children[0];   // 左辺
             const node_t *rhs = expr->children[1];   // 右辺
             // 整数定数+番地の場合
-            if (expr->sval == "+" && Analyzer::is_integer_constant(lhs) && is_pointer_value(rhs->type)) {
+            if (
+                // 足し算である
+                expr->sval == "+"
+                // かつ，左辺が整数定数である
+                && Analyzer::is_integer_constant(lhs)
+                // かつ，右辺が番地である
+                && is_pointer_value(rhs->type)) {
                 const long long bytes = type_size_bytes(pointee_type(rhs->type), this->struct_defs_);   // 指す先1個分のバイト数
                 return this->eval_const_expr(lhs).value * bytes + this->eval_global_address(rhs, loc);
             }
-            // 番地±整数定数の場合
-            if (is_pointer_value(lhs->type) && Analyzer::is_integer_constant(rhs)) {
+            // 番地±整数定数の場合 (ポインタどうしの差は，右辺が整数定数でないため当たらない)
+            if (
+                // 左辺が番地である
+                is_pointer_value(lhs->type)
+                // かつ，右辺が整数定数である
+                && Analyzer::is_integer_constant(rhs)) {
                 const long long bytes = type_size_bytes(pointee_type(lhs->type), this->struct_defs_);   // 指す先1個分のバイト数
                 const long long offset = this->eval_const_expr(rhs).value * bytes;                       // 足し引きするバイト数
                 return this->eval_global_address(lhs, loc) + (expr->sval == "+" ? offset : -offset);
@@ -1261,12 +1282,25 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
             const long long offset = this->eval_const_expr(index).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
             // 配列変数の要素の場合
             if (expr->children.size() == 1) {
-                if (expr->sym->type.is_array && expr->sym->location == LOC_GLOBAL) return expr->sym->address + offset;
+                // グローバルの配列の要素の場合
+                if (
+                    // 配列である (ポインタでない)
+                    expr->sym->type.is_array
+                    // かつ，グローバル変数である
+                    && expr->sym->location == LOC_GLOBAL) {
+                    return expr->sym->address + offset;
+                }
                 break;
             }
-            // メンバ配列の要素の場合
             const node_t *base = expr->children[1];   // 添字を付ける基底の式
-            if (base->kind == ND_MEMBER_ACCESS && base->type.is_array) return this->eval_global_lvalue_address(base, loc) + offset;
+            // メンバ配列の要素の場合
+            if (
+                // 基底がメンバである
+                base->kind == ND_MEMBER_ACCESS
+                // かつ，そのメンバが配列である (ポインタでない)
+                && base->type.is_array) {
+                return this->eval_global_lvalue_address(base, loc) + offset;
+            }
             break;
         }
         // 構造体のメンバの場合
@@ -1279,10 +1313,19 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
             }
             // 構造体配列の要素のメンバの場合 (配列の番地 + 添字 × 構造体1個分のバイト数 + メンバの位置)
             if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 1) {
-                const symbol_t *array = base->sym;   // 構造体配列のシンボル
-                const node_t *index = base->children[0];   // 添字
-                if (!array->type.is_array || array->location != LOC_GLOBAL || !Analyzer::is_integer_constant(index)) break;
-                const long long stride = this->struct_defs_.at(array->type.struct_name).total_words * 4;   // 構造体1個分のバイト数
+                const symbol_t *array = base->sym;          // 構造体配列のシンボル
+                const node_t *index = base->children[0];    // 添字
+                // 番地をコンパイル時に求められない場合
+                if (
+                    // 構造体へのポインタである
+                    !array->type.is_array
+                    // または，ローカル変数である
+                    || array->location != LOC_GLOBAL
+                    // または，添字が整数定数でない
+                    || !Analyzer::is_integer_constant(index)) {
+                    break;
+                }
+                const long long stride = this->struct_defs_.at(array->type.struct_name).total_words * 4;              // 構造体1個分のバイト数
                 const long long member_offset = this->find_member(array->type.struct_name, expr).offset_words * 4;   // メンバの位置
                 return array->address + this->eval_const_expr(index).value * stride + member_offset;
             }

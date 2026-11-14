@@ -1016,7 +1016,14 @@ static bool has_compiler_label_name(const std::string &code) {
     for (size_t pos = code.find(".L"); pos != std::string::npos; pos = code.find(".L", pos + 1)) {
         // .Lに続く文字 (行末なら空文字)
         const char next = (pos + 2 < code.size()) ? code[pos + 2] : '\0';
-        if (std::isdigit(static_cast<unsigned char>(next)) || next == '%') return true;
+        // コンパイラの局所ラベルの名前の形の場合
+        if (
+            // .Lに数字が続く
+            std::isdigit(static_cast<unsigned char>(next))
+            // または，.Lに%が続く
+            || next == '%') {
+            return true;
+        }
     }
     return false;
 }
@@ -1086,8 +1093,12 @@ std::string Generator::substitute_asm_line(const std::string &line, const node_t
             throw std::string("compiler error: '%' in asm template must be followed by a number or '='") + at;
         }
         const std::string number = line.substr(i + 1, end - i - 1);   // 入力の番号の数字
-        // 入力の数以上の番号の場合 (桁数で先に判定し，変換できないほど大きい数字を数値にしない)
-        if (number.size() > 9 || std::stoul(number) >= stmt->children.size()) {
+        // 入力の数以上の番号の場合
+        if (
+            // 数値へ変換できないほど桁が多い (入力の数を必ず超えるため，変換せずに判定する)
+            number.size() > 9
+            // または，入力の数以上である
+            || std::stoul(number) >= stmt->children.size()) {
             throw std::string("compiler error: asm input '%") + number + "' is out of range" + at;
         }
         result += imm_literal(stmt->children[std::stoul(number)]->ival);
