@@ -1,0 +1,5 @@
+// expect: compiler error: label line in asm template must contain only a label name and ':' at src_err/386.pn:4
+// コード生成エラー: asm文の雛形の局所ラベルの行には，:の後ろに命令を続けて書けない(アセンブラが:より後ろを捨て，命令が消えるため) (異常系)
+void main(void) {
+    asm(".a%=: nop");
+}

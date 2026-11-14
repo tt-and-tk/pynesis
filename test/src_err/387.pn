@@ -1,0 +1,5 @@
+// expect: compiler error: label line in asm template must contain only a label name and ':' at src_err/387.pn:4
+// コード生成エラー: asm文の雛形の局所ラベルの名前と:の間に空白を書けない(アセンブラが空白を含めて名前として読むため) (異常系)
+void main(void) {
+    asm(".a%= :");
+}

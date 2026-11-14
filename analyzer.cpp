@@ -664,10 +664,13 @@ void Analyzer::collect_globals() {
 // また sizeof(変数名) も例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
 // (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
-const_value_t Analyzer::eval_const_expr(const node_t *expr) {
+// 型注釈を終えた式では，整数リテラルの符号を注釈した型から決める
+// (名前解決はconst変数の参照を値のリテラルに置き換え，宣言した型をリテラルの型に残すため．
+//  値から決めると，const unsigned intの小さい値が符号付きになる)
+const_value_t Analyzer::eval_const_expr(const node_t *expr, bool is_annotated) {
     // 整数リテラル
     if (expr->kind == ND_INT_LIT) {
-        return {expr->ival, is_signed_literal(expr->ival)};
+        return {expr->ival, is_annotated ? is_promoted_signed(expr->type) : is_signed_literal(expr->ival)};
     }
     // 文字リテラルはintへ昇格した値
     if (expr->kind == ND_CHAR_LIT) {
@@ -724,7 +727,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
 
     // 前置単項演算
     if (expr->kind == ND_UNOP) {
-        const const_value_t v = this->eval_const_expr(expr->children[0]);
+        const const_value_t v = this->eval_const_expr(expr->children[0], is_annotated);
         // -・+・~ の結果はオペランドの昇格後の型，! の結果はint
         if      (expr->sval == "-") return {wrap32(-v.value, v.is_signed), v.is_signed};
         else if (expr->sval == "+") return v;
@@ -736,7 +739,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
     // 整数へのキャスト (ポインタへのキャストは値が番地になるため下のエラーに落ち，
     // ポインタから整数へのキャストは変換する式の計算がエラーになる)
     if (expr->kind == ND_CAST && !is_pointer_value(expr->type)) {
-        const const_value_t v = this->eval_const_expr(expr->children[0]);
+        const const_value_t v = this->eval_const_expr(expr->children[0], is_annotated);
         // 定数式の値は整数昇格後のint/unsigned intとして持つため，結果の符号はキャストした型を整数昇格した型に従う
         // ((unsigned char)-1は，値255のintになる)
         return {convert_integer(v.value, expr->type), is_promoted_signed(expr->type)};
@@ -744,16 +747,16 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
 
     // 二項演算
     if (expr->kind == ND_BINOP) {
-        const const_value_t l = this->eval_const_expr(expr->children[0]);
-        const const_value_t r = this->eval_const_expr(expr->children[1]);
+        const const_value_t l = this->eval_const_expr(expr->children[0], is_annotated);
+        const const_value_t r = this->eval_const_expr(expr->children[1], is_annotated);
         return Analyzer::eval_const_binop(expr, l, r);
     }
 
     // 三項演算: 結果の型は両分岐の値の型から決まるため，選ばれない分岐も計算する
     if (expr->kind == ND_TERNARY) {
-        const const_value_t cond = this->eval_const_expr(expr->children[0]);
-        const const_value_t then_value = this->eval_const_expr(expr->children[1]);
-        const const_value_t else_value = this->eval_const_expr(expr->children[2]);
+        const const_value_t cond = this->eval_const_expr(expr->children[0], is_annotated);
+        const const_value_t then_value = this->eval_const_expr(expr->children[1], is_annotated);
+        const const_value_t else_value = this->eval_const_expr(expr->children[2], is_annotated);
         const bool is_signed = then_value.is_signed && else_value.is_signed;                // 結果が符号付きか
         const long long chosen = (cond.value != 0) ? then_value.value : else_value.value;   // 選ばれた分岐の値
         return {wrap32(chosen, is_signed), is_signed};
@@ -1171,56 +1174,20 @@ static std::string asm_input_error(const loc_t &loc) {
 }
 
 // asm文を検査し，雛形へ埋め込む入力の値を各入力の式に書き込む
-// 番地を表す形の式はグローバル変数の番地として，それ以外は整数の定数式として値を求める
-// (形で振り分けるのは，定数式を名前解決の前に計算するため．名前解決はconst変数の参照を値のリテラルに置き換えるので，
-//  その後に計算するとconst unsigned intの符号なしの性質が失われる)
+// 入力の式を名前解決・型注釈してから，ポインタの値の式はグローバル変数の番地として，整数の式は定数式として値を求める
 void Analyzer::analyze_asm(node_t *stmt) {
     for (node_t *input : stmt->children) {
-        // 整数の定数式の場合
-        if (!this->is_address_form(input)) {
-            input->ival = this->eval_const_expr(input).value;
+        this->analyze_value(input);
+        // ポインタの値の式の場合
+        if (is_pointer_value(input->type)) {
+            input->ival = this->eval_global_address(input, input->loc);
             continue;
         }
-        // グローバル変数の番地の場合 (名前解決と型注釈をしてから番地を求める)
-        this->analyze_value(input);
-        input->ival = this->eval_global_address(input, input->loc);
-    }
-}
-
-// 番地を表す形の式かを，名前解決の前の形から判定する
-bool Analyzer::is_address_form(const node_t *expr) {
-    switch (expr->kind) {
-        // &・メンバの場合 (メンバの値はコンパイル時に決まらないため，番地として扱えるのはメンバ配列だけである)
-        case ND_ADDR_OF:
-        case ND_MEMBER_ACCESS:
-            return true;
-        // 名前の場合 (const変数は値を表し，それ以外は配列の名前として番地を表しうる)
-        case ND_VAR: {
-            const symbol_t *sym = this->lookup_symbol(expr->sval);   // 名前が指す宣言
-            // シンボル表にない場合 (未解決の後方のグローバルのconst変数でありうるため，宣言から解決を試みる)
-            if (sym == nullptr) {
-                sym = this->resolve_global_const(expr->sval);
-            }
-            // 番地を表しうる名前か
-            return
-                // 宣言が見つからない名前 (名前解決が未宣言のエラーにする)
-                sym == nullptr
-                // または，const変数でない名前
-                || sym->location != LOC_CONST;
+        // 整数の定数式でない場合 (変数の値など，実行時に値が決まる)
+        if (!Analyzer::is_integer_constant(input)) {
+            throw asm_input_error(input->loc);
         }
-        // 足し算・引き算の場合 (どちらかの辺が番地を表せば，番地に整数を足し引きした式である)
-        case ND_BINOP: {
-            const bool is_add_or_sub = expr->sval == "+" || expr->sval == "-";   // 足し算か引き算か
-            // 番地に整数を足し引きした形か
-            return
-                // 足し算か引き算である
-                is_add_or_sub
-                // かつ，どちらかの辺が番地を表す形である
-                && (this->is_address_form(expr->children[0]) || this->is_address_form(expr->children[1]));
-        }
-        // それ以外の場合
-        default:
-            return false;
+        input->ival = this->eval_const_expr(input, true).value;
     }
 }
 
@@ -1248,7 +1215,7 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
                 // かつ，右辺が番地である
                 && is_pointer_value(rhs->type)) {
                 const long long bytes = type_size_bytes(pointee_type(rhs->type), this->struct_defs_);   // 指す先1個分のバイト数
-                return this->eval_const_expr(lhs).value * bytes + this->eval_global_address(rhs, loc);
+                return this->eval_const_expr(lhs, true).value * bytes + this->eval_global_address(rhs, loc);
             }
             // 番地±整数定数の場合 (ポインタどうしの差は，右辺が整数定数でないため当たらない)
             if (
@@ -1257,7 +1224,7 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
                 // かつ，右辺が整数定数である
                 && Analyzer::is_integer_constant(rhs)) {
                 const long long bytes = type_size_bytes(pointee_type(lhs->type), this->struct_defs_);   // 指す先1個分のバイト数
-                const long long offset = this->eval_const_expr(rhs).value * bytes;                       // 足し引きするバイト数
+                const long long offset = this->eval_const_expr(rhs, true).value * bytes;                       // 足し引きするバイト数
                 return this->eval_global_address(lhs, loc) + (expr->sval == "+" ? offset : -offset);
             }
             break;
@@ -1279,7 +1246,7 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
         case ND_ARRAY_ACCESS: {
             const node_t *index = expr->children[0];   // 添字
             if (!Analyzer::is_integer_constant(index)) break;
-            const long long offset = this->eval_const_expr(index).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
+            const long long offset = this->eval_const_expr(index, true).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
             // 配列変数の要素の場合
             if (expr->children.size() == 1) {
                 // グローバルの配列の要素の場合
@@ -1327,7 +1294,7 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
                 }
                 const long long stride = this->struct_defs_.at(array->type.struct_name).total_words * 4;              // 構造体1個分のバイト数
                 const long long member_offset = this->find_member(array->type.struct_name, expr).offset_words * 4;   // メンバの位置
-                return array->address + this->eval_const_expr(index).value * stride + member_offset;
+                return array->address + this->eval_const_expr(index, true).value * stride + member_offset;
             }
             break;
         }

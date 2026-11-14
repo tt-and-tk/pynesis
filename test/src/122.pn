@@ -1,5 +1,6 @@
-// asm文の入力"i"に書ける式のうち，118.pnで扱わない形
+// asm文の入力"i"に書ける，const変数を含む式と，構造体・short・charの配列を使った番地の式
 // - ローカルのconst変数と，使う位置より後ろで宣言したグローバルのconst変数
+// - 番地の式の添字に書いたconst unsigned intの定数も符号なしとして計算する(ONE - 2 < 0は0で，&hs[0]になる)
 // - 構造体配列の要素の番地(&ps[1])と，構造体配列の名前に整数を足した番地(ps + 1．構造体1個分の12バイトずつ進む)
 // - shortの配列の名前に整数を足した番地(2バイトずつ進む)
 // - 足し引きを重ねた番地
@@ -8,6 +9,7 @@ struct pt {
     int x;
     char name[6];
 };
+const unsigned int ONE = 1;
 short hs[3];
 struct pt ps[2];
 void main(void) {
@@ -17,13 +19,15 @@ void main(void) {
         "wm fh r0 r1 %2\n"
         "wm fh r0 r1 %3\n"
         "wm fh r0 r1 %4\n"
-        "wm fh r0 r1 %5"
+        "wm fh r0 r1 %5\n"
+        "wm fh r0 r1 %6"
         :
-        : "i"(K),                // 2
-          "i"(LATER),            // 9
-          "i"(&ps[1]),           // 8 + 12 = 20
-          "i"(ps + 1),           // 8 + 12 = 20
-          "i"(hs + 1),           // 0 + 2 = 2
-          "i"(&hs[1] + K - 1));  // 2 + 2 * 2 - 2 = 4
+        : "i"(K),                   // 2
+          "i"(LATER),               // 9
+          "i"(&hs[ONE - 2 < 0]),    // 0
+          "i"(&ps[1]),              // 8 + 12 = 20
+          "i"(ps + 1),              // 8 + 12 = 20
+          "i"(hs + 1),              // 0 + 2 = 2
+          "i"(&hs[1] + K - 1));     // 2 + 2 * 2 - 2 = 4
 }
 const int LATER = 9;

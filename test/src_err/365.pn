@@ -1,5 +1,5 @@
-// expect: compiler error: expression must be a constant expression at src_err/365.pn:4
-// 意味解析エラー: asm文の入力"i"に，文字列リテラルは書けない(番地を表す形ではないため整数の定数式として扱い，定数式でないためエラーになる) (異常系)
+// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/365.pn:4
+// 意味解析エラー: asm文の入力"i"に，文字列リテラルは書けない(グローバル変数の番地ではないため) (異常系)
 void main(void) {
     asm("mov fh r0 r1 %0" : : "i"("ab"));
 }

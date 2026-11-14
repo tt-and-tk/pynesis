@@ -1052,6 +1052,16 @@ void Generator::gen_asm(const node_t *stmt) {
             if (code[0] != '.') {
                 throw std::string("compiler error: label in asm template must start with '.'") + at;
             }
+            const std::string label = trim_spaces(code);   // コメントを除いたラベルの行
+            // ラベルの名前と:のほかに文字を書いた場合
+            // (アセンブラは:より前をラベルの名前として読み，:より後ろを捨てるため，命令を続けて書くと黙って消える)
+            if (
+                // 名前の途中か:の前後に空白がある
+                label.find(' ') != std::string::npos
+                // または，最初の:が行の末尾にない
+                || label.find(':') != label.size() - 1) {
+                throw std::string("compiler error: label line in asm template must contain only a label name and ':'") + at;
+            }
             (*this->out_) << line << "\n";
             continue;
         }
