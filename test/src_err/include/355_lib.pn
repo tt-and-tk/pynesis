@@ -1,0 +1,3 @@
+// 355.pnから取り込まれる．355.pnが取り込み済みのファイルを取り込み，そのファイルで公開した変数と同じ名前の変数にstaticを付ける
+#include "355_common.pn"
+static int count = 1;

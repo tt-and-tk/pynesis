@@ -1,0 +1,33 @@
+.global next.0, lib_next, next, main
+
+main:
+    mov fh r0 r0 7
+    wm fh r0 r0 0
+    mov fh r0 r0 5
+    wm fh r0 r0 4
+    call lib_next
+    mov fh r30 r0
+    wm fh r0 r0 8
+    call next
+    mov fh r30 r0
+    wm fh r0 r0 12
+    ret
+
+next.0:
+    rm fh r0 r0 0
+    mov fh r0 r30
+    ret
+    ret
+
+lib_next:
+    call next.0
+    mov fh r30 r0
+    mov fh r0 r30
+    ret
+    ret
+
+next:
+    rm fh r0 r0 4
+    mov fh r0 r30
+    ret
+    ret

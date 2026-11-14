@@ -109,12 +109,13 @@ struct analysis_result_t {
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
-    Analyzer(node_t *root, bool is_bin_mode, int global_base);
+    Analyzer(node_t *root, const include_graph_t &include_graph, bool is_bin_mode, int global_base);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
     analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST
+    const include_graph_t include_graph_;                // ファイルごとの取り込み先
     const bool is_bin_mode_;                             // Qosmosの実行ファイル用に解析するか (falseならROM用)
     const int global_base_;                              // グローバル変数・文字列リテラルを置き始める番地 (ここから上へ順に割り当てる)
 

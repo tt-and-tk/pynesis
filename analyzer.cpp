@@ -144,9 +144,31 @@ static void rename_identifiers(node_t *node, const std::map<std::string, std::st
     }
 }
 
-// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかどうかと，グローバル変数・文字列リテラルを置き始める番地を受け取る
-Analyzer::Analyzer(node_t *root, bool is_bin_mode, int global_base)
-    : root_(root), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
+// 1つ目のファイルが，2つ目のファイルを直接または別のファイルを経由して取り込んでいるかを返す
+static bool includes_file(const include_graph_t &include_graph, const std::string &from, const std::string &to) {
+    std::set<std::string> visited;          // 取り込み先をたどったファイル
+    std::vector<std::string> pending{from}; // 取り込み先をたどる予定のファイル
+
+    // 1つ目のファイルから取り込み先を順にたどる
+    while (!pending.empty()) {
+        const std::string file = pending.back();  // 取り込み先をたどるファイル
+        pending.pop_back();
+        // 取り込み先をたどったファイルなら飛ばす (取り込みは#pragma onceを書いたファイルを通して循環しうるため)
+        if (!visited.insert(file).second) continue;
+        const auto found = include_graph.find(file);  // そのファイルの取り込み先
+        // 何も取り込まないファイルなら飛ばす
+        if (found == include_graph.end()) continue;
+        // 2つ目のファイルを取り込んでいれば終える
+        if (found->second.count(to)) return true;
+        pending.insert(pending.end(), found->second.begin(), found->second.end());
+    }
+    return false;
+}
+
+// コンストラクタ: ASTと，ファイルごとの取り込み先と，Qosmosの実行ファイル用に解析するかどうかと，
+// グローバル変数・文字列リテラルを置き始める番地を受け取る
+Analyzer::Analyzer(node_t *root, const include_graph_t &include_graph, bool is_bin_mode, int global_base)
+    : root_(root), include_graph_(include_graph), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
 
 // 意味解析を実行してシンボルテーブルを返す
 std::map<std::string, const symbol_t *> Analyzer::operator()() {
@@ -246,6 +268,7 @@ int Analyzer::alloc_var(int bytes, location_t location) {
 void Analyzer::localize_static_names() {
     std::map<std::string, int> file_numbers;  // staticを付けた宣言を含むファイル名→ファイルの番号 (出現順に0から振る)
     std::map<std::string, std::map<std::string, std::string>> numbered_names;  // ファイル名→(staticを付けた宣言の名前→番号付きの名前)
+    std::map<std::string, std::vector<const node_t *>> static_decls;           // staticを付けた宣言の名前→その名前の宣言 (ファイルごとに1つ)
 
     // staticを付けた宣言の名前をファイルごとに集める
     // (同じファイルで後方に宣言したstaticを前方から参照できるよう，置き換えを始める前に全ファイル分を集めておく)
@@ -264,6 +287,27 @@ void Analyzer::localize_static_names() {
             file_numbers[file] = number;
         }
         numbered_names[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
+        static_decls[child->sval].push_back(child);
+    }
+
+    // staticを付けた宣言が，そのファイルが取り込んだファイルのstaticでない宣言と同じ名前でないか検査する
+    // (取り込んだファイルの宣言は取り込み元から参照するためのものであり，同じ名前のstaticで隠すと誤りに気付けないため．
+    //  取り込まれたファイルのstaticは取り込み元の宣言と同じ名前にできるため，向きを区別して検査する)
+    for (const node_t *child : this->root_->children) {
+        // staticでない変数・関数の宣言だけを調べる (構造体名はstaticと別の名前空間にある)
+        if (child->is_static || child->kind == ND_STRUCT_DECL) continue;
+        const auto found = static_decls.find(child->sval);  // 同じ名前のstaticの宣言
+        if (found == static_decls.end()) continue;
+        // 同じ名前のstaticの宣言ごとに，そのファイルがこの宣言のファイルを取り込んでいるかを調べる
+        // (同じファイルの宣言どうしは，名前の重複として検査する)
+        for (const node_t *static_decl : found->second) {
+            if (static_decl->loc.file != child->loc.file
+                && includes_file(this->include_graph_, static_decl->loc.file, child->loc.file)) {
+                throw std::string("compiler error: static '") + static_decl->sval
+                      + "' conflicts with declaration in included file '" + child->loc.file
+                      + "' at " + loc_to_string(static_decl->loc);
+            }
+        }
     }
 
     // プログラム直下の宣言ごとに，その宣言を書いたファイルのstaticの名前を番号付きの名前へ置き換える

@@ -1,5 +1,5 @@
-// 115.pnから取り込まれる．115.pnでstaticを付けた配列と同じ名前の配列を公開して宣言し，その要素を読み書きする
-int table[2];
+// 115.pnから取り込まれる．115.pnでstaticを付けた配列と同じ名前の配列にstaticを付けて宣言し，その要素を読み書きする
+static int table[2];
 int lib_read(void) {
     table[0] = 6;
     return table[0];

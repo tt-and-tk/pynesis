@@ -105,17 +105,18 @@ int compile_pn_to_asm(int argc, char **argv) {
 // グローバル変数・文字列リテラルは2つ目の引数の番地から上へ置き，それらが占めるバイト数を3つ目の引数へ返す
 std::string compile_to_asm(const args_t &args, int global_base, int &global_size) {
     std::vector<token_t> tokens;    // トークン列 (字句解析結果)
+    include_graph_t include_graph;  // ファイルごとの取り込み先 (字句解析結果)
     std::ostringstream asm_out;     // 生成したアセンブリの出力先
 
-    // Pynesisソースファイル(取り込むファイルを含む)を読み込んで字句解析を行い，トークン列を生成する (Lexer)
-    lex(args.pn_file_name, tokens);
+    // Pynesisソースファイル(取り込むファイルを含む)を読み込んで字句解析を行い，トークン列とファイルごとの取り込み先を生成する (Lexer)
+    lex(args.pn_file_name, tokens, include_graph);
 
     // 構文解析を行い，ASTを生成する (Parser)
     Parser parser(tokens);
     node_t *ast = parser();    // AST (構文解析結果)
 
     // 意味解析を行い，シンボルテーブルを構築する (Semantic Analyzer)
-    Analyzer analyzer(ast, args.is_bin_mode, global_base);
+    Analyzer analyzer(ast, include_graph, args.is_bin_mode, global_base);
     analyzer();
 
     // アセンブリコードを生成する (Code Generator)
