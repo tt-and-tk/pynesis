@@ -28,5 +28,5 @@ GitHubリポジトリ名: `tt-and-tk/pynesis`．
 
 | 文書(`specification`の中のパス) | 内容 |
 |:-|:-|
-| `pynesis/develop/index.md` | コンパイラのソースの構成，ビルド，実装の決まり，テストの手順 |
+| `pynesis/develop/index.md` | コンパイラの開発の文書の一覧．ソースの構成・ビルド・実装の決まり・テストの手順の各文書を挙げる |
 | `README.md` | 仕様書全体の構成 |
