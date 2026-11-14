@@ -99,10 +99,10 @@ std::string source_name(const std::string &name) {
     std::size_t begin = 0;  // 現在の部分の先頭位置
 
     // '.'で分けた部分ごとに，数字だけの部分を除いて残す
-    // (メンバを含む表示用の名前「変数名.メンバ名」では，ファイルの番号が末尾以外の「変数名」の直後にも入ってしまうため，
-    //  末尾に限らずすべての部分を調べる)
+    // (メンバを含む表示用の名前「変数名.メンバ名」では，ファイルの番号が名前の末尾ではなく変数名の直後に入ってしまうため，
+    //  すべての部分を調べる)
     while (true) {
-        const std::size_t dot = name.find('.', begin);             // 現在の部分の後ろの'.'の位置 (なければnpos)
+        const std::size_t dot = name.find('.', begin);             // 現在の部分の後ろの'.'の位置 (見つからなければ文字列の終わりを表す値)
         const std::string part = name.substr(begin, dot - begin);  // 現在の部分
 
         // 数字だけの部分でなければ，前に残した部分との間に'.'を補って残す
@@ -345,8 +345,9 @@ void Analyzer::check_static_in_includer(const node_t *decl) const {
     // 同じ名前のstaticの宣言は別々のファイルに1つずつありうるため，すべて調べる
     for (const node_t *static_decl : found->second) {
         // staticの宣言を書いたファイルが，検査する宣言を書いたファイルを取り込んでいる場合
-        // (同じファイルに書いた宣言どうしは，名前の重複として検査する)
-        if (static_decl->loc.file != decl->loc.file
+        if (// 別のファイルに書いた宣言である (同じファイルに書いた宣言どうしは，名前の重複として検査する)
+            static_decl->loc.file != decl->loc.file
+            // staticの宣言を書いたファイルが，検査する宣言を書いたファイルを直接または間接に取り込んでいる
             && includes_file(this->include_graph_, static_decl->loc.file, decl->loc.file)) {
             throw std::string("compiler error: static '") + decl->sval
                   + "' conflicts with declaration in included file '" + decl->loc.file
