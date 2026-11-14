@@ -1,0 +1,7 @@
+// expect: compiler error: 'shared' is not declared at src_err/include/333_lib.pn:3
+// 意味解析エラー: 取り込み元でstaticを付けた変数は，取り込んだファイルから参照できない (異常系)
+#include "include/333_lib.pn"
+static int shared;
+void main(void) {
+    touch();
+}

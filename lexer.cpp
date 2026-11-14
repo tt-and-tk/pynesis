@@ -18,9 +18,11 @@ typedef struct {
 // 1回のコンパイル全体で共有する字句解析の途中経過
 // 字句解析と指令の処理は取り込むファイルごとに再帰呼び出しし合うため，共有する値を1つの引数にまとめて受け渡す
 typedef struct {
-    std::set<std::string> lexed_paths;        // 字句解析を始めたファイルの正規化した絶対パス
-    std::set<std::string> in_progress_paths;  // 字句解析中のファイルの正規化した絶対パス
-    std::set<std::string> once_paths;         // #pragma onceが書かれたファイルの正規化した絶対パス
+    std::set<std::string> lexed_paths;               // 字句解析を始めたファイルの正規化した絶対パス
+    std::set<std::string> in_progress_paths;         // 字句解析中のファイルの正規化した絶対パス
+    std::set<std::string> once_paths;                // #pragma onceが書かれたファイルの正規化した絶対パス
+    std::map<std::string, std::string> lexed_names;  // 字句解析を始めたファイルの正規化した絶対パス→トークンの位置に記録したファイル名
+    include_graph_t include_graph;                   // ファイルごとの取り込み先
 } lex_state_t;
 
 // 指令ごとの処理 (ソース中の読み取り位置は，指令名の後ろの空白を読み飛ばした位置で受け取り，指令の直後まで読み進める)
@@ -46,7 +48,7 @@ static token_kind_t get_keyword_kind(const std::string &word);  // 識別子が�
 const std::map<std::string, token_kind_t> g_keywords = {
     {"int",      TK_INT},      {"char",     TK_CHAR},      {"short",    TK_SHORT},
     {"void",     TK_VOID},     {"signed",   TK_SIGNED},    {"unsigned", TK_UNSIGNED},
-    {"struct",   TK_STRUCT},   {"const",    TK_CONST},
+    {"struct",   TK_STRUCT},   {"const",    TK_CONST},     {"static",   TK_STATIC},
     {"if",       TK_IF},       {"else",     TK_ELSE},      {"for",      TK_FOR},
     {"while",    TK_WHILE},    {"do",       TK_DO},
     {"switch",   TK_SWITCH},   {"case",     TK_CASE},      {"default",  TK_DEFAULT},
@@ -85,8 +87,8 @@ std::string loc_to_string(const loc_t &loc) {
     return loc.file + ":" + std::to_string(loc.line);
 }
 
-// ファイルを読み込んで字句解析し，トークン列を生成する
-void lex(const std::string &file_name, std::vector<token_t> &tokens) {
+// ファイルを読み込んで字句解析し，トークン列とファイルごとの取り込み先を生成する
+void lex(const std::string &file_name, std::vector<token_t> &tokens, include_graph_t &include_graph) {
     lex_state_t state;  // 1回のコンパイル全体で共有する字句解析の途中経過
 
     // 指定されたファイルを読み込む
@@ -97,6 +99,9 @@ void lex(const std::string &file_name, std::vector<token_t> &tokens) {
     // ファイル末尾トークンを，指定されたファイルの最終行の位置で追加する
     const int last_line = static_cast<int>(std::count(source.text.begin(), source.text.end(), '\n')) + 1;  // 最終行の行番号
     tokens.push_back({TK_EOF, "", {source.name, last_line}});
+
+    // 記録したファイルごとの取り込み先を返す
+    include_graph = state.include_graph;
 }
 
 // ファイルを読み込み，表示用のファイル名・正規化した絶対パス・ソース全体を返す
@@ -138,6 +143,9 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
     // 取り込みの重複・循環を検出できるよう，字句解析を始めたことを記録する
     state.lexed_paths.insert(source.canonical_path);
     state.in_progress_paths.insert(source.canonical_path);
+
+    // 別の書き方のパスで取り込んだ場合も同じファイル名で取り込み先を記録できるよう，トークンの位置に記録するファイル名を控える
+    state.lexed_names[source.canonical_path] = source.name;
 
     while (pos < src_size) {
         const char c = src[pos];  // 現在の文字
@@ -356,7 +364,9 @@ static void lex_include(const source_t &source, int &pos, const loc_t &loc, lex_
         read_source((std::filesystem::path(source.name).parent_path() / written).string(), &loc);
 
     // #pragma onceが書かれたファイルなら，2回目以降の取り込みは無視する
+    // (無視しても宣言は参照できるため，取り込み先には記録する)
     if (state.once_paths.count(included.canonical_path)) {
+        state.include_graph[source.name].insert(state.lexed_names.at(included.canonical_path));
         return;
     }
     // 字句解析中のファイルを取り込む場合 (#pragma onceより前の取り込み指令から循環した場合を含む)
@@ -368,7 +378,8 @@ static void lex_include(const source_t &source, int &pos, const loc_t &loc, lex_
         throw std::string("compiler error: '") + included.name
               + "' is included more than once (add '#pragma once' to it) at " + loc_to_string(loc);
     }
-    // 取り込むファイルを字句解析する
+    // 取り込むファイルを記録し，字句解析する
+    state.include_graph[source.name].insert(included.name);
     lex_file(included, state, tokens);
 }
 

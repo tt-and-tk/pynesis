@@ -1,0 +1,5 @@
+// expect: compiler error: expected identifier after type at src_err/339.pn:3
+// 構文解析エラー: staticはconstより前に書く (異常系)
+const static int A = 1;
+void main(void) {
+}

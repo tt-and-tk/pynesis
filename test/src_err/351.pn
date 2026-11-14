@@ -1,0 +1,7 @@
+// expect: compiler error: non-void function 'twice' must return a value at src_err/351.pn:4
+// 意味解析エラー: staticを付けた関数のreturn文の形の誤りは，ソースに書いた名前で報告する (異常系)
+static int twice(int x) {
+    return;
+}
+void main(void) {
+}

@@ -1,0 +1,3 @@
+// 355.pn・355_lib.pnから取り込まれる．staticを付けずに変数を宣言する
+#pragma once
+int count = 0;

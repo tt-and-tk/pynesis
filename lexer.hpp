@@ -1,4 +1,6 @@
 #pragma once
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -9,6 +11,8 @@ typedef enum {
     TK_STRUCT,
     // 型修飾子キーワード
     TK_CONST,
+    // 宣言を参照できる範囲を宣言したファイルの中に限るキーワード
+    TK_STATIC,
     // 制御構文キーワード
     TK_IF, TK_ELSE, TK_FOR, TK_WHILE, TK_DO,
     TK_SWITCH, TK_CASE, TK_DEFAULT,
@@ -95,8 +99,11 @@ typedef struct {
     loc_t loc;          // 位置
 } token_t;
 
+// ファイルごとの取り込み先 (ファイル名→そのファイルが#includeで直接取り込むファイル名の集合．ファイル名はトークンの位置と同じ形で表す)
+using include_graph_t = std::map<std::string, std::set<std::string>>;
+
 // 位置をエラーメッセージ用の「ファイル名:行番号」形式に変換する
 std::string loc_to_string(const loc_t &loc);
 
-// ファイルを読み込んで字句解析し，トークン列を生成する (#includeで指定されたファイルもその位置に展開する)
-void lex(const std::string &file_name, std::vector<token_t> &tokens);
+// ファイルを読み込んで字句解析し，トークン列とファイルごとの取り込み先を生成する (#includeで指定されたファイルもその位置に展開する)
+void lex(const std::string &file_name, std::vector<token_t> &tokens, include_graph_t &include_graph);

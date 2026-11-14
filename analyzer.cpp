@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <set>
 #include <vector>
 
@@ -89,9 +90,86 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
     return is_signed_operation_by_signs(op, is_promoted_signed(lhs), is_promoted_signed(rhs));
 }
 
-// コンストラクタ: ASTと，Qosmosの実行ファイル用に解析するかどうかと，グローバル変数・文字列リテラルを置き始める番地を受け取る
-Analyzer::Analyzer(node_t *root, bool is_bin_mode, int global_base)
-    : root_(root), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
+// エラーメッセージに表示する，ソースに書かれた形の名前を返す
+// staticを付けた宣言の名前は，意味解析が「元の名前.ファイルの番号」の形(以下，番号付きの名前)へ置き換えている．
+// 名前を'.'で部分に分け，数字だけの部分(ファイルの番号)を除いてつなぎ直す
+// (識別子は数字で始まらないため，数字だけの部分はファイルの番号に限られる)
+std::string source_name(const std::string &name) {
+    std::string result;     // 取り除いた後の名前
+    std::size_t begin = 0;  // 現在の部分の先頭位置
+
+    // '.'で分けた部分ごとに，数字だけの部分を除いて残す
+    // (メンバを含む表示用の名前「変数名.メンバ名」では，ファイルの番号が名前の末尾ではなく変数名の直後に入ってしまうため，
+    //  すべての部分を調べる)
+    while (true) {
+        const std::size_t dot = name.find('.', begin);             // 現在の部分の後ろの'.'の位置 (なければnpos)
+        const std::string part = name.substr(begin, dot - begin);  // 現在の部分
+
+        // 数字だけの部分でなければ，前に残した部分との間に'.'を補って残す
+        if (!std::all_of(part.begin(), part.end(), [](char c) { return '0' <= c && c <= '9'; })) {
+            // 前に残した部分があれば，'.'を補う
+            if (!result.empty()) result += ".";
+            result += part;
+        }
+        // 最後の部分なら終える
+        if (dot == std::string::npos) break;
+        begin = dot + 1;
+    }
+    return result;
+}
+
+// 部分木の中で，置き換え表にある名前を持つノードの名前を番号付きの名前へ置き換える
+// 構造体名と構造体のメンバ名は，グローバル変数・関数と別の名前空間のため置き換えない
+static void rename_identifiers(node_t *node, const std::map<std::string, std::string> &numbered_names) {
+    // グローバル変数・関数と同じ名前空間の名前を持つノードなら，置き換え表にある名前を番号付きの名前へ置き換える
+    if (// 関数定義
+        node->kind == ND_FUNC_DEF
+        // 変数宣言 (ローカル変数・引数を含む)
+        || node->kind == ND_VAR_DECL
+        // 変数参照
+        || node->kind == ND_VAR
+        // 名前で添字を付ける配列要素
+        || node->kind == ND_ARRAY_ACCESS) {
+        const auto found = numbered_names.find(node->sval);  // 名前に対応する番号付きの名前
+        if (found != numbered_names.end()) node->sval = found->second;
+    }
+    // 子を順に置き換える
+    for (node_t *child : node->children) {
+        // 構造体定義のメンバ宣言の場合 (メンバ名は置き換えず，配列の要素数の式だけを置き換える)
+        if (node->kind == ND_STRUCT_DECL) {
+            for (node_t *size_expr : child->children) rename_identifiers(size_expr, numbered_names);
+            continue;
+        }
+        // それ以外の子は，部分木全体を置き換える
+        rename_identifiers(child, numbered_names);
+    }
+}
+
+// 1つ目のファイルが，2つ目のファイルを直接または別のファイルを経由して取り込んでいるかを返す
+static bool includes_file(const include_graph_t &include_graph, const std::string &from, const std::string &to) {
+    std::set<std::string> visited;          // 取り込み先をたどったファイル
+    std::vector<std::string> pending{from}; // 取り込み先をたどる予定のファイル
+
+    // 1つ目のファイルから取り込み先を順にたどる
+    while (!pending.empty()) {
+        const std::string file = pending.back();  // 取り込み先をたどるファイル
+        pending.pop_back();
+        // 取り込み先をたどったファイルなら飛ばす (取り込みは#pragma onceを書いたファイルを通して循環しうるため)
+        if (!visited.insert(file).second) continue;
+        const auto found = include_graph.find(file);  // そのファイルの取り込み先
+        // 何も取り込まないファイルなら飛ばす
+        if (found == include_graph.end()) continue;
+        // 2つ目のファイルを取り込んでいれば終える
+        if (found->second.count(to)) return true;
+        pending.insert(pending.end(), found->second.begin(), found->second.end());
+    }
+    return false;
+}
+
+// コンストラクタ: ASTと，ファイルごとの取り込み先と，Qosmosの実行ファイル用に解析するかどうかと，
+// グローバル変数・文字列リテラルを置き始める番地を受け取る
+Analyzer::Analyzer(node_t *root, const include_graph_t &include_graph, bool is_bin_mode, int global_base)
+    : root_(root), include_graph_(include_graph), is_bin_mode_(is_bin_mode), global_base_(global_base), global_size_(0), local_size_(0) {}
 
 // 意味解析を実行してシンボルテーブルを返す
 std::map<std::string, const symbol_t *> Analyzer::operator()() {
@@ -100,10 +178,13 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
-    // 1パス目: グローバル宣言の索引を作り，名前の重複を検査する
+    // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
+    this->collect_static_names();
+
+    // 2パス目: staticの名前を一意な名前へ置き換えながら，グローバル宣言の索引を作り，名前の重複を検査する
     this->index_global_decls();
 
-    // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+    // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
     // ポインタ型のグローバル変数の初期化子を検査する (後方で宣言された変数・関数の番地も使えるよう，全グローバル変数の登録後に行う)
     this->check_global_pointer_inits();
@@ -113,7 +194,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 3パス目: 各関数本体を検査する
+    // 4パス目: 各関数本体を検査する
     // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
@@ -181,11 +262,53 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
-// 1パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する
+// 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な番号付きの名前「元の名前.ファイルの番号」を決める
+// 識別子は'.'を含まないため，番号付きの名前はほかの宣言の名前と重ならない．
+// 同じファイルで後方に宣言したstaticを前方から参照できるよう，置き換えを始める前に全ファイル分を集めておく
+void Analyzer::collect_static_names() {
+    std::map<std::string, int> file_numbers;  // staticを付けた宣言を含むファイル名→ファイルの番号 (出現順に0から振る)
+
+    // staticを付けた宣言ごとに，番号付きの名前を決める
+    for (const node_t *child : this->root_->children) {
+        if (!child->is_static) continue;
+        // ハードウェア変数と同じ名前の場合
+        // (名前の重複は置き換えた後の名前で検査するため，置き換える前のここで検査する)
+        if (this->symbols_.count(child->sval)) {
+            throw std::string("compiler error: redefinition of '") + child->sval
+                  + "' at " + loc_to_string(child->loc);
+        }
+        const std::string &file = child->loc.file;  // 宣言を書いたファイル
+        // そのファイルで最初に出会ったstaticの宣言なら，ファイルの番号を振る
+        if (!file_numbers.count(file)) {
+            const int number = static_cast<int>(file_numbers.size());  // 振るファイルの番号
+            file_numbers[file] = number;
+        }
+        // 宣言を書いたファイルの置き換え表に，番号付きの名前を登録する
+        this->numbered_names_[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
+        // 取り込み元のstaticとの衝突を検査できるよう，名前ごとにstaticの宣言を控える
+        this->static_decls_[child->sval].push_back(child);
+    }
+}
+
+// 2パス目: プログラム直下の宣言ごとに，staticの名前を番号付きの名前へ置き換え，宣言の索引を作り，名前の重複を検査する
+// 宣言を書いたファイルの中にある同じ名前の識別子は，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
+// これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
 // 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
+        // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
+        // (構造体名はstaticの名前と別の名前空間にある)
+        if (!child->is_static && child->kind != ND_STRUCT_DECL) {
+            this->check_static_in_includer(child);
+        }
+        // 宣言を書いたファイルにstaticの宣言があれば，その名前を番号付きの名前へ置き換える
+        // (取り込んだファイルは宣言と宣言の間で終わるため，1つの宣言はすべて同じファイルに書かれている)
+        const auto found = this->numbered_names_.find(child->loc.file);  // 宣言を書いたファイルの置き換え表
+        if (found != this->numbered_names_.end()) {
+            rename_identifiers(child, found->second);
+        }
+
         // 構造体定義の場合 (構造体名は変数・関数とは別の名前空間のため，構造体名どうしでのみ重複を検査する)
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
@@ -200,7 +323,7 @@ void Analyzer::index_global_decls() {
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
         if (this->symbols_.count(child->sval) || this->global_var_decls_.count(child->sval)
             || this->func_names_.count(child->sval)) {
-            throw std::string("compiler error: redefinition of '") + child->sval
+            throw std::string("compiler error: redefinition of '") + source_name(child->sval)
                   + "' at " + loc_to_string(child->loc);
         }
         // 変数宣言(const変数を含む)の場合
@@ -209,6 +332,26 @@ void Analyzer::index_global_decls() {
         } else {
             // 関数定義: 関数名と戻り値型を登録する
             this->func_names_[child->sval] = child->type;
+        }
+    }
+}
+
+// staticを付けていない宣言について，その宣言を書いたファイルを取り込んだファイルに，同じ名前のstaticの宣言があればエラーにする
+void Analyzer::check_static_in_includer(const node_t *decl) const {
+    // staticを付けていない宣言と同じ名前のstaticの宣言がなければ，検査を終える
+    const auto found = this->static_decls_.find(decl->sval);  // 同じ名前のstaticの宣言の並び
+    if (found == this->static_decls_.end()) return;
+
+    // staticを付けていない宣言と同じ名前のstaticの宣言ごとに調べる (staticの宣言は，別々のファイルに1つずつありうる)
+    for (const node_t *static_decl : found->second) {
+        // staticの宣言を書いたファイルが，staticを付けていない宣言を書いたファイルを取り込んでいる場合
+        if (// 2つの宣言を別のファイルに書いている (同じファイルに書いた宣言どうしは，名前の重複として検査する)
+            static_decl->loc.file != decl->loc.file
+            // staticの宣言を書いたファイルが，staticを付けていない宣言を書いたファイルを直接または間接に取り込んでいる
+            && includes_file(this->include_graph_, static_decl->loc.file, decl->loc.file)) {
+            throw std::string("compiler error: static '") + decl->sval
+                  + "' conflicts with declaration in included file '" + decl->loc.file
+                  + "' at " + loc_to_string(static_decl->loc);
         }
     }
 }
@@ -269,7 +412,7 @@ void Analyzer::resolve_decl_type(node_t *decl) {
 // メンバのオフセット(構造体先頭からのワード数)と構造体全体のワード数をここで確定させる
 // 無名構造体に続けて即座に変数宣言されていた場合，その変数自体は別のND_VAR_DECLノードとして
 // root_の子に並んでいる(パーサが生成)ため，ここでは構造体定義(ND_STRUCT_DECL)だけを扱えばよく，
-// 変数宣言側は2パス目のcollect_globalsが通常の構造体変数宣言と同じ経路で処理する
+// 変数宣言側はグローバル変数の登録が通常の構造体変数宣言と同じ経路で処理する
 void Analyzer::resolve_struct_def(const std::string &name) {
     // 構造体定義が登録済みの場合 (メンバ構成は確定済みで，同じ定義を計算し直す必要がないため，これ以上何もしない)
     if (this->struct_defs_.count(name)) return;
@@ -332,7 +475,7 @@ void Analyzer::begin_resolving(const node_t *decl) {
     if (this->resolving_decls_.count(decl)) {
         // 無名構造体の名前はパーサが割り当てた内部名でソースに現れないため，無名であることを示す
         const std::string name = (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$')
-                                     ? "anonymous struct" : "'" + decl->sval + "'";   // エラーメッセージに表示する宣言名
+                                     ? "anonymous struct" : "'" + source_name(decl->sval) + "'";   // エラーメッセージに表示する宣言名
         throw std::string("compiler error: circular reference in declaration of ") + name
               + " at " + loc_to_string(decl->loc);
     }
@@ -384,7 +527,7 @@ symbol_t *Analyzer::register_const_var(const node_t *decl) {
     }
     // 値が型の範囲外の場合
     if (value < min_value || value > max_value) {
-        throw std::string("compiler error: value of const variable '") + decl->sval
+        throw std::string("compiler error: value of const variable '") + source_name(decl->sval)
               + "' is out of range for its type at " + loc_to_string(init->loc);
     }
 
@@ -403,10 +546,10 @@ long long Analyzer::const_symbol_value(const symbol_t *sym) {
     return sym->address;
 }
 
-// 2パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+// 3パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
 // 後方の宣言が先に参照された場合，その宣言はこの走査で到達するより前に参照した時点で解決済みになっている
-// (名前の重複は1パス目のindex_global_declsで検査済み)
+// (名前の重複はグローバル宣言の索引を作る際に検査済み)
 void Analyzer::collect_globals() {
     for (node_t *child : this->root_->children) {
         // 構造体定義: メンバ構成を確定させる
@@ -461,9 +604,9 @@ void Analyzer::collect_globals() {
             }
         }
         // 関数定義: 各引数の名前・型・フレーム上の位置(シンボル)と，関数の引数の型の並び・戻り値型(シグネチャ)を登録する
-        // (関数名・戻り値型は1パス目のindex_global_declsで登録済み)
-        // 3パス目で関数本体を検査する際，本体より後ろに定義された関数の呼び出しも引数を検査できるよう，
-        // 全関数のシグネチャをここ(2パス目)で揃えておく．3パス目(analyze_functions)は，ここで作った引数の
+        // (関数名・戻り値型はグローバル宣言の索引を作る際に登録済み)
+        // 各関数本体を検査する際，本体より後ろに定義された関数の呼び出しも引数を検査できるよう，
+        // 全関数のシグネチャをここで揃えておく．関数本体の検査は，ここで作った引数の
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
             // mainの場合 (出力先ごとに決まった形でだけ定義できる．ROMは値を受け渡す呼び出し元が存在しないため戻り値も引数も持たず，
@@ -484,19 +627,19 @@ void Analyzer::collect_globals() {
                 // 同一関数内での引数名重複はエラー
                 for (const symbol_t *p : params) {
                     if (p->name == param->sval) {
-                        throw std::string("compiler error: duplicate parameter name '") + param->sval
+                        throw std::string("compiler error: duplicate parameter name '") + source_name(param->sval)
                               + "' at " + loc_to_string(param->loc);
                     }
                 }
                 // 関数と同名の引数は禁止する (呼び出しの名前f(...)が関数と変数のどちらを指すかを一意にするため)
                 if (this->func_names_.count(param->sval)) {
-                    throw std::string("compiler error: '") + param->sval + "' is already declared as a function at "
+                    throw std::string("compiler error: '") + source_name(param->sval) + "' is already declared as a function at "
                           + loc_to_string(param->loc);
                 }
                 // ハードウェア変数と同名の引数は禁止する (ハードウェア変数のレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
-                    throw std::string("compiler error: cannot shadow hardware register '") + param->sval
+                    throw std::string("compiler error: cannot shadow hardware register '") + source_name(param->sval)
                           + "' at " + loc_to_string(param->loc);
                 }
 
@@ -540,7 +683,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         }
         // シンボル表にも宣言にもない名前の場合 (未宣言なのでエラーにする)
         if (sym == nullptr && !this->global_var_decls_.count(expr->sval)) {
-            throw std::string("compiler error: use of undeclared identifier '") + expr->sval
+            throw std::string("compiler error: use of undeclared identifier '") + source_name(expr->sval)
                   + "' at " + loc_to_string(expr->loc);
         }
         // const変数の場合
@@ -572,7 +715,7 @@ const_value_t Analyzer::eval_const_expr(const node_t *expr) {
         const auto it = this->global_var_decls_.find(inner->sval);
         // グローバルの宣言もない場合
         if (it == this->global_var_decls_.end()) {
-            throw std::string("compiler error: use of undeclared identifier '") + inner->sval
+            throw std::string("compiler error: use of undeclared identifier '") + source_name(inner->sval)
                   + "' at " + loc_to_string(inner->loc);
         }
         this->resolve_decl_type(it->second);
@@ -780,7 +923,7 @@ void Analyzer::check_global_pointer_inits() {
         Analyzer::check_assignable(decl->type, init, "initialization");
         // コンパイル時に番地が決まらない式の場合 (変数の値の参照・関数呼び出し・間接参照等)
         if (!Analyzer::is_address_constant(init)) {
-            throw std::string("compiler error: initializer of global pointer '") + decl->sval
+            throw std::string("compiler error: initializer of global pointer '") + source_name(decl->sval)
                   + "' must be nullptr, an address of a global variable or function, "
                     "or an integer constant cast to a pointer at "
                   + loc_to_string(init->loc);
@@ -889,7 +1032,7 @@ bool Analyzer::is_integer_constant(const node_t *expr) {
     }
 }
 
-// 3パス目: 各関数本体を検査する
+// 4パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (引数がなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
@@ -905,7 +1048,7 @@ void Analyzer::analyze_functions() {
         // 関数スコープを開く (引数と本体のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
-        // 引数をスコープに登録する (シンボル自体は2パス目のcollect_globalsで作成済み)
+        // 引数をスコープに登録する (シンボル自体はグローバル変数の登録と同じパスで作成済み)
         for (const symbol_t *sym : this->func_params_[child->sval]) {
             this->scopes_.back()[sym->name] = sym;
         }
@@ -945,12 +1088,12 @@ void Analyzer::analyze_stmt(node_t *stmt) {
         if (stmt->children.empty()) {
             // void関数はreturn文自体が任意なので，値なしのreturn;はvoid以外のときのみエラー
             if (this->current_return_type_.base != BASE_VOID) {
-                throw std::string("compiler error: non-void function '") + this->current_function_
+                throw std::string("compiler error: non-void function '") + source_name(this->current_function_)
                       + "' must return a value at " + loc_to_string(stmt->loc);
             }
         } else {
             if (this->current_return_type_.base == BASE_VOID) {
-                throw std::string("compiler error: void function '") + this->current_function_
+                throw std::string("compiler error: void function '") + source_name(this->current_function_)
                       + "' cannot return a value at " + loc_to_string(stmt->loc);
             }
             this->analyze_value(stmt->children[0]);
@@ -1069,19 +1212,19 @@ void Analyzer::analyze_switch(node_t *stmt) {
 void Analyzer::analyze_local_decl(node_t *decl) {
     // 同一スコープ内での二重宣言はエラー (外側スコープの同名はシャドーイングとして許容)
     if (this->scopes_.back().count(decl->sval)) {
-        throw std::string("compiler error: redefinition of '") + decl->sval
+        throw std::string("compiler error: redefinition of '") + source_name(decl->sval)
               + "' at " + loc_to_string(decl->loc);
     }
 
     // 関数と同名のローカル変数は宣言できない (呼び出しの名前f(...)が関数と変数のどちらを指すかを一意にするため)
     if (this->func_names_.count(decl->sval)) {
-        throw std::string("compiler error: '") + decl->sval + "' is already declared as a function at "
+        throw std::string("compiler error: '") + source_name(decl->sval) + "' is already declared as a function at "
               + loc_to_string(decl->loc);
     }
     // ハードウェア変数と同名のローカル変数は宣言できない (ハードウェア変数のレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
-        throw std::string("compiler error: cannot redeclare hardware register '") + decl->sval
+        throw std::string("compiler error: cannot redeclare hardware register '") + source_name(decl->sval)
               + "' at " + loc_to_string(decl->loc);
     }
 
@@ -1199,7 +1342,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
             const std::string reason = this->func_names_.count(expr->sval)
                                            ? "' is a function and cannot be modified at "
                                            : "' is not declared at ";   // エラーの理由
-            throw std::string("compiler error: '") + expr->sval + reason + loc_to_string(expr->loc);
+            throw std::string("compiler error: '") + source_name(expr->sval) + reason + loc_to_string(expr->loc);
         }
         // 実行ファイル用に解析する場合は，ハードウェア変数への書き込みをエラーにする
         this->check_register_access(sym, expr);
@@ -1222,7 +1365,7 @@ void Analyzer::analyze_lvalue(node_t *expr) {
 void Analyzer::check_register_access(const symbol_t *sym, const node_t *expr) const {
     // 実行ファイル用に解析していて，対象がハードウェア変数の場合
     if (this->is_bin_mode_ && sym->location == LOC_REGISTER) {
-        throw std::string("compiler error: hardware variable '") + sym->name
+        throw std::string("compiler error: hardware variable '") + source_name(sym->name)
               + "' cannot be used in an executable at " + loc_to_string(expr->loc);
     }
 }
@@ -1236,7 +1379,7 @@ void Analyzer::analyze_call(node_t *expr) {
     // 変数でも関数でもない名前の場合
     if (callee->kind == ND_VAR && !is_direct && this->lookup_symbol(callee->sval) == nullptr) {
         throw std::string("compiler error: call to undefined function '")
-              + callee->sval + "' at " + loc_to_string(expr->loc);
+              + source_name(callee->sval) + "' at " + loc_to_string(expr->loc);
     }
     // 直接呼び出しの場合 (関数と同名の変数は宣言できないため，関数名は常に関数を指す)
     if (is_direct) {
@@ -1268,7 +1411,7 @@ void Analyzer::analyze_call(node_t *expr) {
     const func_sig_t &sig = *callee->type.func_sig;       // 呼び出す関数のシグネチャ
     const size_t arg_count = expr->children.size() - 1;   // 引数の個数
     if (arg_count != sig.param_types.size()) {
-        const std::string callee_name = is_direct ? "function '" + expr->sval + "'" : "function pointer";   // エラーメッセージに書く呼び出す関数
+        const std::string callee_name = is_direct ? "function '" + source_name(expr->sval) + "'" : "function pointer";   // エラーメッセージに書く呼び出す関数
         throw std::string("compiler error: ") + callee_name + " expects "
               + std::to_string(sig.param_types.size()) + " argument(s) but got "
               + std::to_string(arg_count) + " at " + loc_to_string(expr->loc);
@@ -1476,7 +1619,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 const symbol_t *sym = this->lookup_symbol(inner->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + inner->sval + "' at " + loc_to_string(inner->loc);
+                          + source_name(inner->sval) + "' at " + loc_to_string(inner->loc);
                 }
                 inner->sym  = sym;
                 inner->type = sym->type;
@@ -1505,13 +1648,13 @@ void Analyzer::analyze_expr(node_t *expr) {
                     return;
                 }
                 throw std::string("compiler error: use of undeclared identifier '")
-                      + expr->sval + "' at " + loc_to_string(expr->loc);
+                      + source_name(expr->sval) + "' at " + loc_to_string(expr->loc);
             }
             // 実行ファイル用に解析する場合は，ハードウェア変数の読み込みをエラーにする
             this->check_register_access(sym, expr);
             // 読み込みが禁止された変数の場合
             if (!sym->readable) {
-                throw std::string("compiler error: '") + expr->sval
+                throw std::string("compiler error: '") + source_name(expr->sval)
                       + "' is not readable at " + loc_to_string(expr->loc);
             }
             // const変数はメモリを持たないため，参照そのものを値の整数リテラルに置き換える
@@ -1533,14 +1676,14 @@ void Analyzer::analyze_expr(node_t *expr) {
             node_t *operand = expr->children[0];   // 番地を取る式
             // 関数名の場合 (関数の番地は&を付けずに関数名だけで書く．同じ値の書き方を1つにするため&は受け付けない)
             if (operand->kind == ND_VAR && this->func_names_.count(operand->sval)) {
-                throw std::string("compiler error: cannot apply '&' to function '") + operand->sval
+                throw std::string("compiler error: cannot apply '&' to function '") + source_name(operand->sval)
                       + "'; write the function name alone to get its address at " + loc_to_string(expr->loc);
             }
             this->analyze_lvalue(operand);
             // ハードウェア変数・const変数の場合 (メモリ上の番地を持たないため)
             if (operand->kind == ND_VAR && operand->sym->location != LOC_GLOBAL
                 && operand->sym->location != LOC_LOCAL && operand->sym->location != LOC_PARAM) {
-                throw std::string("compiler error: cannot take the address of '") + operand->sval
+                throw std::string("compiler error: cannot take the address of '") + source_name(operand->sval)
                       + "' (it has no memory address) at " + loc_to_string(expr->loc);
             }
             // 配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
@@ -1651,7 +1794,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 base_sym = this->lookup_symbol(base->sval);   // 配列全体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + base->sval + "' at " + loc_to_string(base->loc);
+                          + source_name(base->sval) + "' at " + loc_to_string(base->loc);
                 }
                 // 構造体の配列でも構造体へのポインタでもない変数へのarr[i].member形式のアクセスは禁止する
                 const bool is_struct_array = base_sym->type.is_array && base_sym->type.base == BASE_STRUCT
@@ -1659,7 +1802,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 const bool is_struct_pointer = is_pointer_value(base_sym->type) && base_sym->type.base == BASE_STRUCT
                                             && base_sym->type.pointer_depth == 1;   // 構造体へのポインタか
                 if (!is_struct_array && !is_struct_pointer) {
-                    throw std::string("compiler error: '") + base->sval
+                    throw std::string("compiler error: '") + source_name(base->sval)
                           + "' is not an array of struct at " + loc_to_string(base->loc);
                 }
                 base->sym  = base_sym;         // 配列全体のシンボルを結びつける
@@ -1676,16 +1819,16 @@ void Analyzer::analyze_expr(node_t *expr) {
                 base_sym = this->lookup_symbol(base->sval);   // 構造体変数自体を名前解決する
                 if (base_sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + base->sval + "' at " + loc_to_string(base->loc);
+                          + source_name(base->sval) + "' at " + loc_to_string(base->loc);
                 }
                 // 構造体へのポインタの場合 (指す先のメンバは->で参照する)
                 if (base_sym->type.base == BASE_STRUCT && is_pointer_value(base_sym->type)) {
-                    throw std::string("compiler error: '") + base->sval
+                    throw std::string("compiler error: '") + source_name(base->sval)
                           + "' is a pointer to struct; use '->' to access its member at " + loc_to_string(base->loc);
                 }
                 // 構造体型でない変数へのメンバアクセス(例: intの変数にx.yと書く)は禁止する
                 if (base_sym->type.base != BASE_STRUCT || base_sym->type.pointer_depth != 0) {
-                    throw std::string("compiler error: '") + base->sval
+                    throw std::string("compiler error: '") + source_name(base->sval)
                           + "' is not a struct at " + loc_to_string(base->loc);
                 }
                 base->sym  = base_sym;         // 名前解決の結果を結びつける
@@ -1703,7 +1846,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 // (1) 構造体変数の番地にメンバのオフセットを加えた番地を持つシンボルを合成する
                 // (置き場所(location)・読み書き可否は構造体変数自身のものをそのまま引き継ぐ)
                 symbol_t *sym = new symbol_t{
-                    base_sym->name + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
+                    source_name(base_sym->name) + "." + expr->sval,             // エラーメッセージ表示用の名前(例: "p.x")
                     member.type,                                   // メンバの型 (スカラー・ポインタまたは固定長配列)
                     base_sym->location,
                     base_sym->address + member.offset_words * 4,   // 番地 = 構造体変数の番地 + メンバのオフセット
@@ -1728,12 +1871,12 @@ void Analyzer::analyze_expr(node_t *expr) {
             Analyzer::check_scalar_operand(lhs, "assignment");
             // 書き込みできない左辺には代入できない (シンボルを持たないポインタの指す先は，常に書き込める)
             if (lhs->sym != nullptr && !lhs->sym->writable) {
-                throw std::string("compiler error: '") + lhs->sym->name
+                throw std::string("compiler error: '") + source_name(lhs->sym->name)
                       + "' is not writable at " + loc_to_string(lhs->loc);
             }
             // 複合代入(+=等)は左辺を読みもするので，読み取り可能でもなければならない
             if (expr->sval != "=" && lhs->sym != nullptr && !lhs->sym->readable) {
-                throw std::string("compiler error: '") + lhs->sym->name
+                throw std::string("compiler error: '") + source_name(lhs->sym->name)
                       + "' is not readable at " + loc_to_string(lhs->loc);
             }
             node_t *rhs = expr->children[1];  // 右辺
@@ -1776,7 +1919,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 }
                 // 読み書きできない対象の場合 (シンボルを持たないポインタの指す先は，常に読み書きできる)
                 if (operand->sym != nullptr && (!operand->sym->readable || !operand->sym->writable)) {
-                    throw std::string("compiler error: '") + operand->sym->name
+                    throw std::string("compiler error: '") + source_name(operand->sym->name)
                           + "' is not readable and writable at " + loc_to_string(expr->loc);
                 }
                 expr->type = operand->type;
@@ -1816,7 +1959,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             this->check_char_array_operand(dst, "strcopy");
             this->check_char_array_operand(src, "strcopy");
             if (!dst->sym->writable) {
-                throw std::string("compiler error: '") + dst->sym->name
+                throw std::string("compiler error: '") + source_name(dst->sym->name)
                       + "' is not writable at " + loc_to_string(dst->loc);
             }
             // strcopyは値を返さない(void)．戻り値を式として使うコードを既存のvoidチェック経路で検出させる
@@ -1868,7 +2011,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 const symbol_t *sym = this->lookup_symbol(expr->sval);
                 if (sym == nullptr) {
                     throw std::string("compiler error: use of undeclared identifier '")
-                          + expr->sval + "' at " + loc_to_string(expr->loc);
+                          + source_name(expr->sval) + "' at " + loc_to_string(expr->loc);
                 }
                 expr->sym = sym;
                 base_type = sym->type;
@@ -1886,7 +2029,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             } else if (is_pointer_value(base_type)) {
                 expr->type = pointee_type(base_type);
             } else {
-                const std::string name = expr->sval.empty() ? "expression" : "'" + expr->sval + "'";   // エラーメッセージに書く対象
+                const std::string name = expr->sval.empty() ? "expression" : "'" + source_name(expr->sval) + "'";   // エラーメッセージに書く対象
                 throw std::string("compiler error: ") + name
                       + " is not an array or pointer at " + loc_to_string(expr->loc);
             }

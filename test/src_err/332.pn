@@ -1,0 +1,6 @@
+// expect: compiler error: use of undeclared identifier 'CAP' at src_err/332.pn:4
+// 意味解析エラー: 取り込んだファイルでstaticを付けたconst変数は，取り込み元の配列の要素数に使えない (異常系)
+#include "include/332_lib.pn"
+int table[CAP];
+void main(void) {
+}

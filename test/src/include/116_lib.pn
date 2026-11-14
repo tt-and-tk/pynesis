@@ -1,0 +1,8 @@
+// 116.pnから取り込まれる．116.pnで公開した関数・変数と同じ名前の関数・変数にstaticを付けて宣言する
+static int count = 7;
+static int next(void) {
+    return count;
+}
+int lib_next(void) {
+    return next();
+}

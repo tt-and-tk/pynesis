@@ -1,0 +1,7 @@
+// expect: compiler error: redefinition of 'x' at src_err/349.pn:6
+// 意味解析エラー: staticを付けた変数と同じ名前のローカル変数を同じスコープで2回宣言した場合は，ソースに書いた名前で報告する (異常系)
+static int x;
+void main(void) {
+    int x = 0;
+    int x = 1;
+}

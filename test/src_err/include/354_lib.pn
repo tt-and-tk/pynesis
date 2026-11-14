@@ -1,0 +1,4 @@
+// 354_middle.pnから取り込まれる．staticを付けずに関数を定義する
+int helper(void) {
+    return 0;
+}

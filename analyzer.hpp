@@ -45,6 +45,10 @@ bool is_pointer_like(const type_t &type);
 // (シフトは左オペランドの型だけで決まり，それ以外は両方のオペランドが昇格後intなら符号付き)
 bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t &rhs);
 
+// エラーメッセージに表示する，ソースに書かれた形の名前を返す
+// (staticを付けた宣言の名前は意味解析が「元の名前.ファイルの番号」へ置き換えるため，数字だけの部分を取り除く)
+std::string source_name(const std::string &name);
+
 // 定数式の値
 struct const_value_t {
     long long value;    // 値 (符号付きなら-2147483648〜2147483647，符号なしなら0〜4294967295の範囲に折り返し済み)
@@ -105,12 +109,13 @@ struct analysis_result_t {
 // ASTを受け取り，意味検査とシンボルテーブル構築を行うアナライザ
 class Analyzer {
 public:
-    Analyzer(node_t *root, bool is_bin_mode, int global_base);
+    Analyzer(node_t *root, const include_graph_t &include_graph, bool is_bin_mode, int global_base);
     std::map<std::string, const symbol_t *> operator()();   // 意味解析を実行してシンボルテーブルを返す
     analysis_result_t result() const;   // コード生成が参照する解析結果を返す
 
 private:
     node_t *root_;                                       // AST
+    const include_graph_t include_graph_;                // ファイルごとの取り込み先
     const bool is_bin_mode_;                             // Qosmosの実行ファイル用に解析するか (falseならROM用)
     const int global_base_;                              // グローバル変数・文字列リテラルを置き始める番地 (ここから上へ順に割り当てる)
 
@@ -123,6 +128,8 @@ private:
     int global_size_;                                    // 割り当て済みのグローバル変数・文字列リテラルのバイト数
 
     // 解析の途中で使う情報
+    std::map<std::string, std::map<std::string, std::string>> numbered_names_;  // ファイル名→(そのファイルのstaticの宣言の名前→番号付きの名前)
+    std::map<std::string, std::vector<const node_t *>> static_decls_;           // staticの宣言の名前→その名前のstaticの宣言 (ファイルごとに1つ)
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, std::shared_ptr<func_sig_t>> func_sigs_;  // 関数名→シグネチャ (関数の番地の型と呼び出しの引数検査に使う)
     std::set<std::string> addr_taken_funcs_;             // 番地を取得された関数名 (関数ポインタを通して呼ばれうる関数)
@@ -138,8 +145,10 @@ private:
     type_t current_return_type_;                         // 現在解析中の関数の戻り値型 (return文の整合性検査用)
 
     // 解析メソッド
-    void index_global_decls();                              // 1パス目: グローバル宣言の索引作成と名前の重複検査
-    void collect_globals();                                 // 2パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
+    void collect_static_names();                            // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
+    void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
+    void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
+    void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
@@ -180,7 +189,7 @@ private:
     static bool is_static_lvalue(const node_t *expr);
     // 値がコンパイル時に決まる整数の式かを返す (名前解決・定数の埋め込みを終えた式を対象にする)
     static bool is_integer_constant(const node_t *expr);
-    void analyze_functions();                               // 3パス目: 各関数本体を検査する
+    void analyze_functions();                               // 4パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する

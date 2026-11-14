@@ -1,0 +1,7 @@
+// expect: compiler error: static cannot be applied to struct definition at src_err/338.pn:3
+// 構文解析エラー: 構造体定義にはstaticを付けられない (異常系)
+static struct pair {
+    int a;
+} p;
+void main(void) {
+}

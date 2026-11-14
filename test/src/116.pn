@@ -1,0 +1,13 @@
+// 取り込んだファイルでstaticを付けた変数・関数と同じ名前の変数・関数を，取り込み元で公開して宣言できる
+// 取り込み元の名前は公開した変数・関数を，取り込んだファイルの名前はそのファイルのstaticを指す
+#include "include/116_lib.pn"
+int count = 5;
+int next(void) {
+    return count;
+}
+int a;
+int b;
+void main(void) {
+    a = lib_next();             // 116_lib.pnのstaticの関数・変数を通して7
+    b = next();                 // このファイルの公開した関数・変数を通して5
+}

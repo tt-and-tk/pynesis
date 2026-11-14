@@ -1,0 +1,7 @@
+// expect: compiler error: static 'count' conflicts with declaration in included file 'src_err/include/353_lib.pn' at src_err/353.pn:4
+// 意味解析エラー: 取り込んだファイルで公開した変数と同じ名前の変数に，取り込み元でstaticを付けられない (異常系)
+#include "include/353_lib.pn"
+static int count = 1;
+void main(void) {
+    count = 2;
+}

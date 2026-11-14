@@ -1,0 +1,5 @@
+// expect: compiler error: static local variables are not supported at src_err/337.pn:4
+// 構文解析エラー: ローカル変数にはstaticを付けられない (異常系)
+void main(void) {
+    static int count = 0;
+}

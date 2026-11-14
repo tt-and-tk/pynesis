@@ -1,0 +1,51 @@
+.global first_next, next.0, next.1, second_next, next, main
+
+main:
+    mov fh r0 r0 2
+    wm fh r0 r0 0
+    mov fh r0 r0 3
+    wm fh r0 r0 4
+    mov fh r0 r0 1
+    wm fh r0 r0 8
+    call first_next
+    mov fh r30 r0
+    wm fh r0 r0 12
+    call second_next
+    mov fh r30 r0
+    wm fh r0 r0 16
+    call next
+    mov fh r30 r0
+    wm fh r0 r0 20
+    ret
+
+first_next:
+    call next.0
+    mov fh r30 r0
+    mov fh r0 r30
+    ret
+    ret
+
+next.0:
+    rm fh r0 r0 0
+    mov fh r0 r30
+    ret
+    ret
+
+next.1:
+    rm fh r0 r0 4
+    mov fh r0 r30
+    ret
+    ret
+
+second_next:
+    call next.1
+    mov fh r30 r0
+    mov fh r0 r30
+    ret
+    ret
+
+next:
+    rm fh r0 r0 8
+    mov fh r0 r30
+    ret
+    ret

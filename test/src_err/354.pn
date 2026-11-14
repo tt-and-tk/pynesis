@@ -1,0 +1,9 @@
+// expect: compiler error: static 'helper' conflicts with declaration in included file 'src_err/include/354_lib.pn' at src_err/354.pn:4
+// 意味解析エラー: 別のファイルを経由して取り込んだファイルで公開した関数と同じ名前の関数に，取り込み元でstaticを付けられない (異常系)
+#include "include/354_middle.pn"
+static int helper(void) {
+    return 1;
+}
+void main(void) {
+    helper();
+}

@@ -1,0 +1,9 @@
+// expect: compiler error: function 'twice' expects 1 argument(s) but got 2 at src_err/345.pn:8
+// 意味解析エラー: staticを付けた関数の引数の数の誤りは，ソースに書いた名前で報告する (異常系)
+static int twice(int x) {
+    return x * 2;
+}
+int g;
+void main(void) {
+    g = twice(1, 2);
+}

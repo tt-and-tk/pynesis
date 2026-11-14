@@ -1,0 +1,5 @@
+// 113.pnから取り込まれる．113_first.pn・113_second.pnのstaticと同じ名前の公開した関数・変数を宣言する
+int count = 1;
+int next(void) {
+    return count;
+}

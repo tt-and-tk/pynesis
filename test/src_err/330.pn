@@ -1,0 +1,7 @@
+// expect: compiler error: call to undefined function 'helper' at src_err/330.pn:6
+// 意味解析エラー: 取り込んだファイルでstaticを付けた関数は，取り込み元から呼び出せない (異常系)
+#include "include/330_lib.pn"
+int g;
+void main(void) {
+    g = helper();
+}

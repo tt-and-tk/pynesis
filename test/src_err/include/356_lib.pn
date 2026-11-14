@@ -1,0 +1,4 @@
+// 356.pn・356_back.pnから取り込まれる．356_back.pnを取り込み，staticを付けずに変数を宣言する
+#pragma once
+#include "356_back.pn"
+int count = 0;

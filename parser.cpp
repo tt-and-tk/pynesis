@@ -277,10 +277,19 @@ node_t *Parser::parse_program() {
 
     // ファイル終端まで繰り返す
     while (!this->token_kind_is(TK_EOF)) {
+        // 宣言の先頭のstaticを読む (付いていれば，続く宣言を参照できる範囲を宣言したファイルの中に限る)
+        const bool is_static = this->token_kind_is(TK_STATIC);  // staticが付いているか
+        if (is_static) this->get_token();
         const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;   // struct の直後に構造体名があるか
         // 構造体定義の場合 (構造体名の直後，無名構造体ならstructキーワードの直後が'{')
         // 名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言のいずれも，parse_struct_declが一括して構文解析する
         if (this->token_kind_is(TK_STRUCT) && this->peek_kind_ahead(has_tag ? 2 : 1) == TK_LBRACE) {
+            // staticを付けた場合 (構造体名には付けられず，定義と同時に宣言する変数だけに付くのか紛らわしいため，
+            //  変数にstaticを付けるには定義と変数の宣言を分けて書かせる)
+            if (is_static) {
+                throw std::string("compiler error: static cannot be applied to struct definition at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
             // 構造体定義と，それと同時に宣言した変数の宣言を，順にプログラムの要素へ加える
             for (node_t *decl : this->parse_struct_decl()) {
                 node->children.push_back(decl);
@@ -295,11 +304,20 @@ node_t *Parser::parse_program() {
                       + loc_to_string(this->peek_token().loc);
             }
             // 型 識別子 '(' なら関数定義，それ以外(関数ポインタの宣言子を含む)は変数宣言
+            node_t *decl;   // 読んだ宣言
             if (this->peek_kind_ahead(offset) == TK_IDENT && this->peek_kind_ahead(offset + 1) == TK_LPAREN) {
-                node->children.push_back(this->parse_func_def());
+                decl = this->parse_func_def();
             } else {
-                node->children.push_back(this->parse_var_decl());
+                decl = this->parse_var_decl();
             }
+            // mainにstaticを付けた場合はエラー
+            // (mainはプログラムの開始点として，どのファイルに書いても見つけられる必要があるため，staticを付けられない)
+            if (is_static && decl->kind == ND_FUNC_DEF && decl->sval == "main") {
+                throw std::string("compiler error: 'main' cannot be static at ") + loc_to_string(decl->loc);
+            }
+            // staticを付けた宣言かを記録し，プログラム直下の宣言として加える
+            decl->is_static = is_static;
+            node->children.push_back(decl);
         }
         // それ以外がファイル直下にあるならエラー
         else {
@@ -375,6 +393,11 @@ node_t *Parser::parse_block() {
 
 // 文を解析してASTノードを返す
 node_t *Parser::parse_stmt() {
+    // staticで始まる場合 (staticはグローバル変数・関数の宣言にだけ付けられる)
+    if (this->token_kind_is(TK_STATIC)) {
+        throw std::string("compiler error: static local variables are not supported at ")
+              + loc_to_string(this->peek_token().loc);
+    }
     // 型キーワードで始まれば変数宣言
     if (Parser::is_type_start(this->peek_token().kind)) {
         // structの場合のみ，先に構造体定義の禁止チェックを行う
