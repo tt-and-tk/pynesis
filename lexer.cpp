@@ -99,6 +99,7 @@ void lex(const std::string &file_name, std::vector<token_t> &tokens, include_gra
     // ファイル末尾トークンを，指定されたファイルの最終行の位置で追加する
     const int last_line = static_cast<int>(std::count(source.text.begin(), source.text.end(), '\n')) + 1;  // 最終行の行番号
     tokens.push_back({TK_EOF, "", {source.name, last_line}});
+
     // 記録したファイルごとの取り込み先を返す
     include_graph = state.include_graph;
 }
@@ -142,6 +143,7 @@ static void lex_file(const source_t &source, lex_state_t &state, std::vector<tok
     // 取り込みの重複・循環を検出できるよう，字句解析を始めたことを記録する
     state.lexed_paths.insert(source.canonical_path);
     state.in_progress_paths.insert(source.canonical_path);
+
     // 別の書き方のパスで取り込んだ場合も同じファイル名で取り込み先を記録できるよう，トークンの位置に記録するファイル名を控える
     state.lexed_names[source.canonical_path] = source.name;
 

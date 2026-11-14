@@ -310,10 +310,12 @@ node_t *Parser::parse_program() {
             } else {
                 decl = this->parse_var_decl();
             }
-            // mainにstaticを付けた場合 (mainはプログラムの開始点であり，どのファイルに書いても見つけられる必要がある)
+            // mainにstaticを付けた場合はエラー
+            // (mainはプログラムの開始点として，どのファイルに書いても見つけられる必要があるため，staticを付けられない)
             if (is_static && decl->kind == ND_FUNC_DEF && decl->sval == "main") {
                 throw std::string("compiler error: 'main' cannot be static at ") + loc_to_string(decl->loc);
             }
+            // staticを付けた宣言かを記録し，プログラム直下の宣言として加える
             decl->is_static = is_static;
             node->children.push_back(decl);
         }

@@ -92,23 +92,25 @@ bool is_signed_operation(const std::string &op, const type_t &lhs, const type_t 
 
 // エラーメッセージに表示する，ソースに書かれた形の名前を返す
 // staticを付けた宣言の名前は，意味解析が「元の名前.ファイルの番号」の形(以下，番号付きの名前)へ置き換えている．
-// 名前を'.'で区切り，数字だけの区切り(ファイルの番号)を取り除いてつなぎ直す
-// (メンバを含む表示用の名前「変数名.メンバ名」の変数名も番号付きの名前でありうるため，末尾に限らず取り除く．
-//  識別子は数字で始まらないため，数字だけの区切りはファイルの番号に限られる)
+// 名前を'.'で部分に分け，数字だけの部分(ファイルの番号)を除いてつなぎ直す
+// メンバを含む表示用の名前「変数名.メンバ名」は，変数名が番号付きの名前なら「元の名前.ファイルの番号.メンバ名」となり，
+// 数字だけの部分が末尾以外にも現れるため，すべての部分を調べる
+// (識別子は数字で始まらないため，数字だけの部分はファイルの番号に限られる)
 std::string source_name(const std::string &name) {
     std::string result;     // 取り除いた後の名前
-    std::size_t begin = 0;  // 現在の区切りの先頭位置
-    // '.'で区切った区切りごとに，数字だけの区切りを除いて残す
+    std::size_t begin = 0;  // 現在の部分の先頭位置
+
+    // '.'で分けた部分ごとに，数字だけの部分を除いて残す
     while (true) {
-        const std::size_t dot = name.find('.', begin);             // 現在の区切りの後ろの'.'の位置 (なければnpos)
-        const std::string part = name.substr(begin, dot - begin);  // 現在の区切り
-        // 数字だけの区切りでなければ，前の区切りとの間に'.'を補って残す
+        const std::size_t dot = name.find('.', begin);             // 現在の部分の後ろの'.'の位置 (なければnpos)
+        const std::string part = name.substr(begin, dot - begin);  // 現在の部分
+        // 数字だけの部分でなければ，前に残した部分との間に'.'を補って残す
         if (!std::all_of(part.begin(), part.end(), [](char c) { return '0' <= c && c <= '9'; })) {
-            // 残した区切りがあれば，'.'を補う
+            // 前に残した部分があれば，'.'を補う
             if (!result.empty()) result += ".";
             result += part;
         }
-        // 最後の区切りなら終える
+        // 最後の部分なら終える
         if (dot == std::string::npos) break;
         begin = dot + 1;
     }
@@ -118,18 +120,15 @@ std::string source_name(const std::string &name) {
 // 部分木の中で，置き換え表にある名前を持つノードの名前を番号付きの名前へ置き換える
 // 構造体名と構造体のメンバ名は，グローバル変数・関数と別の名前空間のため置き換えない
 static void rename_identifiers(node_t *node, const std::map<std::string, std::string> &numbered_names) {
-    // グローバル変数・関数と同じ名前空間の名前を持つノードかどうか
-    const bool has_name =
-        // 関数定義
+    // グローバル変数・関数と同じ名前空間の名前を持つノードなら，置き換え表にある名前を番号付きの名前へ置き換える
+    if (// 関数定義
         node->kind == ND_FUNC_DEF
         // 変数宣言 (ローカル変数・引数を含む)
         || node->kind == ND_VAR_DECL
         // 変数参照
         || node->kind == ND_VAR
         // 名前で添字を付ける配列要素
-        || node->kind == ND_ARRAY_ACCESS;
-    // 置き換え表にある名前を持つノードなら，番号付きの名前へ置き換える
-    if (has_name) {
+        || node->kind == ND_ARRAY_ACCESS) {
         const auto found = numbered_names.find(node->sval);  // 名前に対応する番号付きの名前
         if (found != numbered_names.end()) node->sval = found->second;
     }
@@ -140,6 +139,7 @@ static void rename_identifiers(node_t *node, const std::map<std::string, std::st
             for (node_t *size_expr : child->children) rename_identifiers(size_expr, numbered_names);
             continue;
         }
+        // それ以外の子は，部分木全体を置き換える
         rename_identifiers(child, numbered_names);
     }
 }
@@ -177,10 +177,10 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         this->symbols_[hw.name] = &hw;
     }
 
-    // 1パス目: staticを付けた宣言の名前を，ファイルごとに一意な名前へ置き換える
-    this->localize_static_names();
+    // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
+    this->collect_static_names();
 
-    // 2パス目: グローバル宣言の索引を作り，名前の重複を検査する
+    // 2パス目: staticの名前を一意な名前へ置き換えながら，グローバル宣言の索引を作り，名前の重複を検査する
     this->index_global_decls();
 
     // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
@@ -261,17 +261,13 @@ int Analyzer::alloc_var(int bytes, location_t location) {
     throw std::string("compiler error: cannot allocate memory for this kind of variable");
 }
 
-// 1パス目: staticを付けた宣言の名前を，ファイルごとに一意な番号付きの名前「元の名前.ファイルの番号」へ置き換える
+// 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な番号付きの名前「元の名前.ファイルの番号」を決める
 // 識別子は'.'を含まないため，番号付きの名前はほかの宣言の名前と重ならない．
-// 宣言したファイルの中にある同じ名前の識別子も，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
-// これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない
-void Analyzer::localize_static_names() {
+// 同じファイルで後方に宣言したstaticを前方から参照できるよう，置き換えを始める前に全ファイル分を集めておく
+void Analyzer::collect_static_names() {
     std::map<std::string, int> file_numbers;  // staticを付けた宣言を含むファイル名→ファイルの番号 (出現順に0から振る)
-    std::map<std::string, std::map<std::string, std::string>> numbered_names;  // ファイル名→(staticを付けた宣言の名前→番号付きの名前)
-    std::map<std::string, std::vector<const node_t *>> static_decls;           // staticを付けた宣言の名前→その名前の宣言 (ファイルごとに1つ)
 
-    // staticを付けた宣言の名前をファイルごとに集める
-    // (同じファイルで後方に宣言したstaticを前方から参照できるよう，置き換えを始める前に全ファイル分を集めておく)
+    // staticを付けた宣言ごとに，番号付きの名前を決める
     for (const node_t *child : this->root_->children) {
         if (!child->is_static) continue;
         // ハードウェア変数と同じ名前の場合
@@ -286,44 +282,32 @@ void Analyzer::localize_static_names() {
             const int number = static_cast<int>(file_numbers.size());  // 振るファイルの番号
             file_numbers[file] = number;
         }
-        numbered_names[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
-        static_decls[child->sval].push_back(child);
-    }
-
-    // staticを付けた宣言が，そのファイルが取り込んだファイルのstaticでない宣言と同じ名前でないか検査する
-    // (取り込んだファイルの宣言は取り込み元から参照するためのものであり，同じ名前のstaticで隠すと誤りに気付けないため．
-    //  取り込まれたファイルのstaticは取り込み元の宣言と同じ名前にできるため，向きを区別して検査する)
-    for (const node_t *child : this->root_->children) {
-        // staticでない変数・関数の宣言だけを調べる (構造体名はstaticと別の名前空間にある)
-        if (child->is_static || child->kind == ND_STRUCT_DECL) continue;
-        const auto found = static_decls.find(child->sval);  // 同じ名前のstaticの宣言
-        if (found == static_decls.end()) continue;
-        // 同じ名前のstaticの宣言ごとに，そのファイルがこの宣言のファイルを取り込んでいるかを調べる
-        // (同じファイルの宣言どうしは，名前の重複として検査する)
-        for (const node_t *static_decl : found->second) {
-            if (static_decl->loc.file != child->loc.file
-                && includes_file(this->include_graph_, static_decl->loc.file, child->loc.file)) {
-                throw std::string("compiler error: static '") + static_decl->sval
-                      + "' conflicts with declaration in included file '" + child->loc.file
-                      + "' at " + loc_to_string(static_decl->loc);
-            }
-        }
-    }
-
-    // プログラム直下の宣言ごとに，その宣言を書いたファイルのstaticの名前を番号付きの名前へ置き換える
-    // (取り込んだファイルは宣言と宣言の間で終わるため，1つの宣言はすべて同じファイルに書かれている)
-    for (node_t *child : this->root_->children) {
-        const auto found = numbered_names.find(child->loc.file);  // 宣言を書いたファイルの置き換え表
-        if (found == numbered_names.end()) continue;
-        rename_identifiers(child, found->second);
+        // 宣言を書いたファイルの置き換え表に，番号付きの名前を登録する
+        this->numbered_names_[file][child->sval] = child->sval + "." + std::to_string(file_numbers[file]);
+        // 取り込み元のstaticとの衝突を検査できるよう，名前ごとにstaticの宣言を控える
+        this->static_decls_[child->sval].push_back(child);
     }
 }
 
-// 2パス目: プログラム直下の宣言の索引を作り，名前の重複を検査する
+// 2パス目: プログラム直下の宣言ごとに，staticの名前を番号付きの名前へ置き換え，宣言の索引を作り，名前の重複を検査する
+// 宣言を書いたファイルの中にある同じ名前の識別子は，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
+// これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
 // 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
+        // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
+        // (構造体名はstaticの名前と別の名前空間にある)
+        if (!child->is_static && child->kind != ND_STRUCT_DECL) {
+            this->check_static_in_includer(child);
+        }
+        // 宣言を書いたファイルにstaticの宣言があれば，その名前を番号付きの名前へ置き換える
+        // (取り込んだファイルは宣言と宣言の間で終わるため，1つの宣言はすべて同じファイルに書かれている)
+        const auto found = this->numbered_names_.find(child->loc.file);  // 宣言を書いたファイルの置き換え表
+        if (found != this->numbered_names_.end()) {
+            rename_identifiers(child, found->second);
+        }
+
         // 構造体定義の場合 (構造体名は変数・関数とは別の名前空間のため，構造体名どうしでのみ重複を検査する)
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
@@ -347,6 +331,26 @@ void Analyzer::index_global_decls() {
         } else {
             // 関数定義: 関数名と戻り値型を登録する
             this->func_names_[child->sval] = child->type;
+        }
+    }
+}
+
+// staticを付けていない宣言について，その宣言を書いたファイルを取り込んだファイルに，同じ名前のstaticの宣言があればエラーにする
+// staticの宣言は，それを書いたファイルの中で同じ名前のほかの宣言より優先して参照される．
+// このため取り込み元にstaticの宣言があると，取り込み元で取り込んだファイルの宣言を参照するつもりで書いた名前が，
+// 気付かれないままstaticの宣言を指してしまう．
+// 取り込まれたファイルのstaticの宣言は，取り込み元の同じ名前の宣言を参照する箇所に影響しないため許す
+void Analyzer::check_static_in_includer(const node_t *decl) const {
+    const auto found = this->static_decls_.find(decl->sval);  // 同じ名前のstaticの宣言の並び
+    if (found == this->static_decls_.end()) return;
+    // 同じ名前のstaticの宣言ごとに，staticの宣言を書いたファイルが，検査する宣言を書いたファイルを取り込んでいるかを調べる
+    // (同じファイルに書いた宣言どうしは，名前の重複として検査する)
+    for (const node_t *static_decl : found->second) {
+        if (static_decl->loc.file != decl->loc.file
+            && includes_file(this->include_graph_, static_decl->loc.file, decl->loc.file)) {
+            throw std::string("compiler error: static '") + decl->sval
+                  + "' conflicts with declaration in included file '" + decl->loc.file
+                  + "' at " + loc_to_string(static_decl->loc);
         }
     }
 }

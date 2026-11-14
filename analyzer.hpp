@@ -128,6 +128,8 @@ private:
     int global_size_;                                    // 割り当て済みのグローバル変数・文字列リテラルのバイト数
 
     // 解析の途中で使う情報
+    std::map<std::string, std::map<std::string, std::string>> numbered_names_;  // ファイル名→(そのファイルのstaticの宣言の名前→番号付きの名前)
+    std::map<std::string, std::vector<const node_t *>> static_decls_;           // staticの宣言の名前→その名前のstaticの宣言 (ファイルごとに1つ)
     std::map<std::string, type_t> func_names_;           // 定義済み関数名→戻り値型の対応表
     std::map<std::string, std::shared_ptr<func_sig_t>> func_sigs_;  // 関数名→シグネチャ (関数の番地の型と呼び出しの引数検査に使う)
     std::set<std::string> addr_taken_funcs_;             // 番地を取得された関数名 (関数ポインタを通して呼ばれうる関数)
@@ -143,8 +145,9 @@ private:
     type_t current_return_type_;                         // 現在解析中の関数の戻り値型 (return文の整合性検査用)
 
     // 解析メソッド
-    void localize_static_names();                           // 1パス目: staticを付けた宣言の名前をファイルごとに一意な名前へ置き換える
-    void index_global_decls();                              // 2パス目: グローバル宣言の索引作成と名前の重複検査
+    void collect_static_names();                            // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
+    void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
+    void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
     void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
