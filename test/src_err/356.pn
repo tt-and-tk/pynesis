@@ -1,0 +1,6 @@
+// expect: compiler error: static 'count' conflicts with declaration in included file 'src_err/include/356_lib.pn' at src_err/include/356_back.pn:3
+// 意味解析エラー: #pragma onceを書いたファイルを通して取り込みが循環する場合も，取り込んだファイルで公開した変数と同じ名前の変数に，
+// 取り込み元でstaticを付けられない (異常系)
+#include "include/356_lib.pn"
+void main(void) {
+}
