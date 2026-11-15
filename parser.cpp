@@ -973,6 +973,7 @@ node_t *Parser::parse_var_decl() {
         return node;
     }
 
+    // 配列ならサイズを，スカラー変数なら初期化式を読む
     // 関数ポインタの配列: 要素数は宣言子の中で読み済みのため，サイズとして持たせる
     // (初期化子は，サイズを書いたほかの配列と同じく書けない)
     if (func_pointer_array_size != nullptr) {
@@ -1052,6 +1053,7 @@ node_t *Parser::parse_struct_member() {
                           "inside the parentheses at ") + loc_to_string(node->loc);
     }
 
+    // 配列のメンバならサイズを持たせる (スカラーのメンバは持たない)
     // 関数ポインタの配列のメンバ: 要素数は宣言子の中で読み済みのため，サイズとして持たせる
     if (func_pointer_array_size != nullptr) {
         node->type.is_array = true;
