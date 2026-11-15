@@ -1,0 +1,8 @@
+// expect: compiler error: expected ';' but got '=' at src_err/407.pn:6
+// 構文エラー: 関数ポインタの配列には初期化子を書けない(配列の初期値リストに対応しないため) (異常系)
+int twice(int x) {
+    return x * 2;
+}
+int (*ops[2])(int) = twice;
+void main(void) {
+}

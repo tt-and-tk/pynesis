@@ -1,0 +1,6 @@
+// expect: compiler error: array of function pointers cannot be used as a value (pointer to function pointer is not supported) at src_err/410.pn:4
+// 意味解析エラー: 関数ポインタの配列の名前を，グローバル変数の初期化子に書けない (異常系)
+int (*ops[2])(int);
+int (*op)(int) = ops;
+void main(void) {
+}

@@ -1,0 +1,7 @@
+// expect: compiler error: function pointer cannot be indexed at src_err/411.pn:6
+// 意味解析エラー: 関数ポインタの配列の要素に，さらに添字を付けられない(関数の番地は要素を並べた領域を指さないため) (異常系)
+int (*ops[2])(int);
+int x;
+void main(void) {
+    x = (int)ops[0][1];
+}

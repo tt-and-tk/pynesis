@@ -1,0 +1,6 @@
+// expect: compiler error: cast to array is not supported at src_err/415.pn:5
+// 構文エラー: 要素数を省いた関数ポインタの配列をキャストの型名に書くと，配列への変換としてエラーになる(要素数の省略より先に判定する) (異常系)
+int x;
+void main(void) {
+    x = (int)(int (*[])(int))x;
+}

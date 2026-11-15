@@ -1498,14 +1498,21 @@ void Analyzer::analyze_value(node_t *expr) {
 // これらの式は含まれる副作用(*p++;ならpを進めること)のために評価し，求まった値(*p++;ならpが指していた値)は
 // 代入にも引数にも使われない．このため式全体が値を持たないvoidであること(f();のような戻り値のない関数呼び出し)も許す．
 // 式の途中でvoidの値を使う場合(f() + 1;)は，途中の演算がオペランドを値として検査するためエラーになる．
-// ただし評価の過程では値をレジスタへ読み込むため，1つのレジスタに読み込めない構造体そのものはエラーにし，
-// 配列は中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
+// ただし評価の過程では値をレジスタへ読み込むため，1つのレジスタに読み込めない構造体そのものはエラーにする．
+// 配列は，関数ポインタの配列なら先頭要素へのポインタの型を持てないためエラーにし，
+// それ以外なら中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
 void Analyzer::analyze_discarded(node_t *expr) {
     this->analyze_expr(expr);
     // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
     if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
+    }
+    // 関数ポインタの配列はエラーにする (ほかの配列のように先頭要素へのポインタとして扱うと，
+    // 関数ポインタへのポインタという対応しない型になるため)
+    if (expr->type.is_array && expr->type.base == BASE_FUNC) {
+        throw std::string("compiler error: array of function pointers cannot be used as a value "
+                          "(pointer to function pointer is not supported) at ") + loc_to_string(expr->loc);
     }
     // 配列の場合 (先頭要素へのポインタとして扱う)
     if (expr->type.is_array) {
@@ -1869,8 +1876,14 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot take the address of '") + source_name(operand->sval)
                       + "' (it has no memory address) at " + loc_to_string(expr->loc);
             }
-            // 配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
-            // 要素の番地は&arr[i]で取れる)
+            // 関数ポインタの配列そのものの番地を取る場合は，書き換え方を案内せずにエラーにする
+            // (配列へのポインタも，先頭要素の番地に当たる関数ポインタへのポインタも，対応しない型であるため)
+            if (operand->type.is_array && operand->type.base == BASE_FUNC) {
+                throw std::string("compiler error: cannot take the address of an array of function pointers at ")
+                      + loc_to_string(expr->loc);
+            }
+            // 関数ポインタ以外の配列そのもの(&arr)の番地を取る場合は，先頭要素と要素の番地の書き方を案内してエラーにする
+            // (配列へのポインタに対応しないため．先頭要素の番地は配列の名前arrだけで書け，要素の番地は&arr[i]で取れる)
             if (operand->type.is_array) {
                 throw std::string("compiler error: cannot take the address of an array; "
                                    "use the array itself or the address of its first element at ")

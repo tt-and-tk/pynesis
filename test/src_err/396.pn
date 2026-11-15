@@ -1,0 +1,7 @@
+// expect: compiler error: pointer to function pointer is not supported at src_err/396.pn:6
+// 意味解析エラー: 関数ポインタの配列の要素の番地は取れない(関数ポインタへのポインタは非対応のため) (異常系)
+int (*ops[2])(int);
+int x;
+void main(void) {
+    x = (int)&ops[0];
+}

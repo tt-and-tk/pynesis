@@ -1,0 +1,6 @@
+// expect: compiler error: cast to array is not supported at src_err/401.pn:5
+// 構文エラー: キャストの型名に，関数ポインタの配列を書けない (異常系)
+int x;
+void main(void) {
+    x = (int)(int (*[2])(int))x;
+}

@@ -772,18 +772,29 @@ node_t *Parser::parse_param() {
               + loc_to_string(node->loc);
     }
 
-    // 引数名を読む．関数ポインタは引数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
-    // それ以外は型の直後の識別子を読む
-    if (this->token_kind_is(TK_LPAREN)) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
+    const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か (引数は配列にできないため，そうならエラーにする)
+    node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+    // 引数名を読む (関数ポインタは，引数名が宣言子の括弧の中にある)
+    if (is_func_pointer_decl) {
+        // 宣言子を読み，関数ポインタの型と引数名を得る
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
+        // 型の直後の識別子を引数名として読む
         node->sval = this->get_token(TK_IDENT).value;
     }
     // void型の引数の場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
         throw std::string("compiler error: parameter cannot be void at ") + loc_to_string(node->loc);
     }
-    // 名前の後に[]がある場合 (配列を受け取る書き方は，配列に見えて実体がポインタで紛らわしいため受け付けない)
+    // 配列を受け取る書き方はエラーにする (配列に見えて実体がポインタで紛らわしいため)
+    // 関数ポインタの引数で宣言子の中か後ろに[]がある場合は，書き換え方を案内せずにエラーにする
+    // (書き換え先になる関数ポインタへのポインタに対応しないため)
+    if (is_func_pointer_decl && (is_func_pointer_array || this->token_kind_is(TK_LBRACKET))) {
+        throw std::string("compiler error: array parameter is not supported at ") + loc_to_string(node->loc);
+    }
+    // 関数ポインタ以外の引数で名前の後に[]がある場合は，同じ要素型へのポインタで宣言するよう案内してエラーにする
     if (this->token_kind_is(TK_LBRACKET)) {
         type_t pointer = node->type;   // 同じ要素型へのポインタ (書き換え方の案内に使う)
         pointer.pointer_depth++;
@@ -794,12 +805,15 @@ node_t *Parser::parse_param() {
     return node;
 }
 
-// 関数ポインタの宣言子 (*名前)(引数型...) を読み，関数ポインタの型を返す
-// pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡す．宣言子の中の名前はnameに書き込む
-// 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
-// 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
-// 名前を省いた宣言子はnameを空にする．名前で参照する宣言ではname_requiredをtrueにする
-type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, bool name_required, std::string &name) {
+// 関数ポインタまたはその配列の宣言子を読み，関数ポインタの型を返す
+// 宣言子は (*名前)(引数型...) で，配列なら名前(省いた場合は*)の後ろに[要素数]が付く
+// pointee_return_typeには宣言子の前に読んだ型(指す関数の戻り値型)を渡す．宣言子の中の名前はnameに書き込む
+// 名前で参照する宣言ではname_requiredをtrueにする．falseなら名前を省け，省いた場合はnameを空にする
+// 引数は型だけでも型と名前でもよい(名前は読み捨てる)．(void)・()は引数なし．引数の型にも名前を省いた宣言子を書ける
+// 配列かどうかはis_arrayに，要素数の式はarray_sizeに書き込む(要素数がなければnullptr)
+// 配列にできるかと要素数を省けるかは置き場所で決まるため，ここでは読むだけにして呼び出し元で確かめる
+type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, bool name_required, std::string &name,
+                                             bool &is_array, node_t *&array_size) {
     const loc_t loc = this->peek_token().loc;   // 宣言子の先頭の位置 (エラー報告用)
     // 関数ポインタを返す関数ポインタ・関数ポインタへのポインタは読まない
     // (戻り値型に*が付く場合はポインタを返す関数へのポインタとして扱う．宣言子の中の*は1個に限る)
@@ -809,6 +823,17 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
     name.clear();
     if (name_required || this->token_kind_is(TK_IDENT)) {
         name = this->get_token(TK_IDENT).value;
+    }
+    // [があれば配列として要素数を読む (要素数を省いた[]では，要素数の式を持たない)
+    is_array = this->token_kind_is(TK_LBRACKET);
+    array_size = nullptr;
+    if (is_array) {
+        this->get_token(TK_LBRACKET);
+        // 要素数を書いた場合は読む
+        if (!this->token_kind_is(TK_RBRACKET)) {
+            array_size = this->parse_expr();   // 要素数 (定数式，意味解析で畳み込む)
+        }
+        this->get_token(TK_RBRACKET);
     }
     this->get_token(TK_RPAREN);
 
@@ -838,8 +863,17 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
             type_t param_type = this->parse_type(true);       // 引数の型 (voidは，引数を関数ポインタにする場合の戻り値型としてのみ書ける)
             // 関数ポインタの引数の場合 (宣言子の名前は読み捨てる)
             if (this->token_kind_is(TK_LPAREN)) {
-                std::string ignored_name;   // 読み捨てる宣言子の名前
-                param_type = this->parse_func_pointer_declarator(param_type, false, ignored_name);
+                std::string ignored_name;          // 読み捨てる宣言子の名前
+                bool is_func_pointer_array;        // 関数ポインタの配列の宣言子か (引数は配列にできないため，そうならエラーにする)
+                node_t *func_pointer_array_size;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+                // 宣言子を読み，引数の型を関数ポインタの型にする
+                param_type = this->parse_func_pointer_declarator(param_type, false, ignored_name,
+                                                                 is_func_pointer_array, func_pointer_array_size);
+                // 関数ポインタの配列はエラーにする (関数の引数と同じく，配列を受け取る書き方は受け付けない)
+                if (is_func_pointer_array) {
+                    throw std::string("compiler error: array parameter is not supported at ")
+                          + loc_to_string(param_loc);
+                }
             }
             // void型の引数の場合 (値を持たない型のため)
             if (param_type.base == BASE_VOID) {
@@ -875,6 +909,7 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [const] [signed|unsigned] 型 [*...] 変数名 [= 式] ;
 //       戻り値型 (*変数名)(引数型...) [= 式] ;   (関数ポインタ)
+//       戻り値型 (*変数名[サイズ])(引数型...) ;   (関数ポインタの配列)
 // const変数はスカラー型のみで，初期化子を必須とする．
 // 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
 //   struct 構造体名 変数名;         (単一変数)
@@ -886,22 +921,30 @@ node_t *Parser::parse_var_decl() {
     // 型を読む (voidは関数ポインタの戻り値型としてのみ書ける)
     node->type = this->parse_type(true);
 
-    // 変数名を読む．関数ポインタは変数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
-    // それ以外は型の直後の識別子を読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か
+    node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (関数ポインタの配列でなければnullptr)
+    // 変数名を読む (関数ポインタは，変数名と配列の要素数が宣言子の括弧の中にある)
     if (is_func_pointer_decl) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
+        // 宣言子を読み，関数ポインタの型・変数名・配列の要素数を得る
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
+        // 型の直後の識別子を変数名として読む
         node->sval = this->get_token(TK_IDENT).value;
     }
     // void型の変数の場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
         throw std::string("compiler error: variable cannot be void at ") + loc_to_string(node->loc);
     }
-    // 関数ポインタの配列の場合 (宣言子の書き方を複雑にするため非対応)
+    // 関数ポインタの宣言子の後ろに[がある場合は，要素数を宣言子の括弧の中の名前の後ろに書くよう案内してエラーにする
     if (is_func_pointer_decl && this->token_kind_is(TK_LBRACKET)) {
-        throw std::string("compiler error: array of function pointers is not supported at ")
-              + loc_to_string(node->loc);
+        throw std::string("compiler error: size of an array of function pointers must follow the name "
+                          "inside the parentheses at ") + loc_to_string(node->loc);
+    }
+    // 関数ポインタの配列の要素数を省いた場合はエラーにする (要素数を省いた配列は初期化子から要素数を決めるが，関数ポインタの配列には初期化子を書けないため)
+    if (is_func_pointer_array && func_pointer_array_size == nullptr) {
+        throw std::string("compiler error: array of function pointers requires a size at ") + loc_to_string(node->loc);
     }
 
     // const変数: 配列・構造体は初期値リストで値を与える手段がないため非対応とし，
@@ -941,8 +984,15 @@ node_t *Parser::parse_var_decl() {
         return node;
     }
 
+    // 配列ならサイズを，スカラー変数なら初期化式を読む
+    // 関数ポインタの配列: 要素数は宣言子の中で読み済みのため，サイズとして持たせる
+    // (初期化子は，サイズを書いたほかの配列と同じく書けない)
+    if (func_pointer_array_size != nullptr) {
+        node->type.is_array = true;
+        node->children.push_back(func_pointer_array_size);
+    }
     // 配列宣言: 変数名の後に [ サイズ ] または [] があれば配列
-    if (this->token_kind_is(TK_LBRACKET)) {
+    else if (this->token_kind_is(TK_LBRACKET)) {
         this->get_token(TK_LBRACKET);           // [
         node->type.is_array = true;
         if (this->token_kind_is(TK_RBRACKET)) {
@@ -976,7 +1026,7 @@ node_t *Parser::parse_var_decl() {
 }
 
 // 構造体メンバを1つ解析してND_VAR_DECLを返す (構造体自体の配列ではなく，メンバ自身が配列になりうるだけ)
-// 構文: 型 [*...] 名前 [ 要素数 ] ;，または関数ポインタの宣言子 ;   (初期化子・ネスト構造体メンバは非対応)
+// 構文: 型 [*...] 名前 [ 要素数 ] ;，または関数ポインタ(その配列を含む)の宣言子 ;   (初期化子・ネスト構造体メンバは非対応)
 // parse_struct_declのループから，メンバの数だけ繰り返し呼ばれる
 node_t *Parser::parse_struct_member() {
     node_t *node = this->new_node(ND_VAR_DECL);
@@ -996,25 +1046,40 @@ node_t *Parser::parse_struct_member() {
               + loc_to_string(node->loc);
     }
 
-    // 関数ポインタのメンバなら宣言子からメンバ名を，そうでなければメンバ名を直接読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か
+    node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (関数ポインタの配列でなければnullptr)
+    // 関数ポインタのメンバなら宣言子からメンバ名を，そうでなければメンバ名を直接読む
     if (is_func_pointer_decl) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval);
+        // 宣言子を読み，関数ポインタの型・メンバ名・配列の要素数を得る
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
+        // 型の直後の識別子をメンバ名として読む
         node->sval = this->get_token(TK_IDENT).value;
     }
     // void型のメンバの場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
         throw std::string("compiler error: struct member cannot be void at ") + loc_to_string(node->loc);
     }
-    // 関数ポインタの配列の場合 (変数宣言と同じく非対応)
+    // 関数ポインタの宣言子の後ろに[がある場合は，変数宣言と同じく，要素数を宣言子の括弧の中の名前の後ろに書くよう案内してエラーにする
     if (is_func_pointer_decl && this->token_kind_is(TK_LBRACKET)) {
-        throw std::string("compiler error: array of function pointers is not supported at ")
-              + loc_to_string(node->loc);
+        throw std::string("compiler error: size of an array of function pointers must follow the name "
+                          "inside the parentheses at ") + loc_to_string(node->loc);
+    }
+    // 関数ポインタの配列の要素数を省いた場合はエラーにする (メンバは初期化子を書けず，要素数を必須とするため)
+    if (is_func_pointer_array && func_pointer_array_size == nullptr) {
+        throw std::string("compiler error: array of function pointers requires a size at ") + loc_to_string(node->loc);
     }
 
+    // 配列のメンバならサイズを持たせる (スカラーのメンバは持たない)
+    // 関数ポインタの配列のメンバ: 要素数は宣言子の中で読み済みのため，サイズとして持たせる
+    if (func_pointer_array_size != nullptr) {
+        node->type.is_array = true;
+        node->children.push_back(func_pointer_array_size);
+    }
     // 配列型のメンバ: 名前の後に [ 要素数 ] があれば固定長配列 (要素数省略・初期化子は非対応)
-    if (this->token_kind_is(TK_LBRACKET)) {
+    else if (this->token_kind_is(TK_LBRACKET)) {
         this->get_token(TK_LBRACKET);
         node->type.is_array = true;
         node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
@@ -1196,11 +1261,19 @@ node_t *Parser::parse_cast() {
     node->type = this->parse_type(true);
     // 関数ポインタの型の場合 (宣言子の名前は省く)
     if (this->token_kind_is(TK_LPAREN)) {
-        std::string name;   // 宣言子に書かれた名前 (書けないため，空であることを確かめる)
-        node->type = this->parse_func_pointer_declarator(node->type, false, name);
+        std::string name;                  // 宣言子に書かれた名前 (書けないため，空であることを確かめる)
+        bool is_func_pointer_array;        // 関数ポインタの配列の宣言子か (書けないため，そうならエラーにする)
+        node_t *func_pointer_array_size;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+        // 宣言子を読み，変換先の型を関数ポインタの型にする
+        node->type = this->parse_func_pointer_declarator(node->type, false, name,
+                                                         is_func_pointer_array, func_pointer_array_size);
         if (!name.empty()) {
             throw std::string("compiler error: type name in cast cannot have a declarator name '") + name
                   + "' at " + loc_to_string(type_loc);
+        }
+        // 関数ポインタの配列の型名はエラーにする (キャストの結果は値であり，配列を値として扱う仕組みがないため)
+        if (is_func_pointer_array) {
+            throw std::string("compiler error: cast to array is not supported at ") + loc_to_string(type_loc);
         }
     }
     // voidの場合 (値を捨てる用途は式文で足りるため対応しない)

@@ -1,0 +1,5 @@
+// expect: compiler error: size of an array of function pointers must follow the name inside the parentheses at src_err/402.pn:3
+// 構文エラー: 関数ポインタの配列の要素数は，宣言子の括弧の外には書けない(括弧の中の名前の後ろに書く) (異常系)
+int (*ops)(int)[2];
+void main(void) {
+}

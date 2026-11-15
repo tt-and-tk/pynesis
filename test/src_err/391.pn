@@ -1,0 +1,13 @@
+// expect: compiler error: array of function pointers cannot be used as a value (pointer to function pointer is not supported) at src_err/391.pn:12
+// 意味解析エラー: 関数ポインタの配列の名前を，関数の引数に書けない(先頭要素へのポインタは関数ポインタへのポインタになり，非対応のため) (異常系)
+int twice(int x) {
+    return x * 2;
+}
+int (*ops[2])(int);
+int count(int n) {
+    return n;
+}
+void main(void) {
+    ops[0] = twice;
+    count(ops);
+}

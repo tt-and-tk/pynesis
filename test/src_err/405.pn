@@ -1,0 +1,5 @@
+// expect: compiler error: array of function pointers requires a size at src_err/405.pn:3
+// 構文エラー: 関数ポインタの配列の要素数は省略できない(初期化子から要素数を決められないため) (異常系)
+int (*ops[])(int);
+void main(void) {
+}

@@ -1,0 +1,5 @@
+// expect: compiler error: array parameter is not supported at src_err/400.pn:3
+// 構文エラー: 関数ポインタの宣言子の引数の型に，名前を省いた関数ポインタの配列を書けない (異常系)
+int (*runner)(int (*[2])(int), int);
+void main(void) {
+}
