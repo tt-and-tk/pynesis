@@ -1,0 +1,6 @@
+// expect: compiler error: '++' is not supported for function pointer at src_err/397.pn:5
+// 意味解析エラー: 関数ポインタの配列の要素は，++で増やせない(関数の番地をずらす意味がないため) (異常系)
+int (*ops[2])(int);
+void main(void) {
+    ops[0]++;
+}

@@ -1,0 +1,7 @@
+// expect: compiler error: array parameter is not supported at src_err/404.pn:3
+// 構文エラー: 関数の引数でも，関数ポインタの宣言子の括弧の外に[]を書けない(配列を受け取る書き方は受け付けないため) (異常系)
+int run(int (*op)(int)[], int x) {
+    return x;
+}
+void main(void) {
+}

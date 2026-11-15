@@ -1,0 +1,31 @@
+// 関数ポインタの配列(グローバル変数)の要素へ関数の番地を代入し，添字を付けた要素を通して関数を呼び出せる
+// 要素は，nullptrや同じ型の要素どうしで代入・比較でき，真偽として使える．配列のsizeofは4×要素数になる
+int (*ops[3])(int, int);
+int r;
+int size;
+
+int plus(int a, int b) {
+    return a + b;
+}
+
+int minus(int a, int b) {
+    return a - b;
+}
+
+void main(void) {
+    int i = 1;
+    ops[0] = plus;
+    ops[i] = minus;
+    ops[2] = nullptr;
+    r = ops[i](7, 2);             // minus(7, 2) = 5
+    if (ops[2] == nullptr) {
+        ops[2] = ops[0];          // plusを指す
+    }
+    if (ops[0] == ops[2]) {
+        r = ops[2](r, 1);         // plus(5, 1) = 6
+    }
+    if (ops[i]) {
+        r = r + 1;                // 7
+    }
+    size = sizeof(ops);           // 12
+}

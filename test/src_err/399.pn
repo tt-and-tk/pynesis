@@ -1,0 +1,7 @@
+// expect: compiler error: array parameter is not supported at src_err/399.pn:3
+// 構文エラー: 関数の引数を，関数ポインタの配列として宣言できない (異常系)
+int run(int (*ops[2])(int), int x) {
+    return x;
+}
+void main(void) {
+}

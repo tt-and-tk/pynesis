@@ -1,0 +1,17 @@
+// 関数ポインタの配列の要素を呼び出すとき，添字と引数に関数呼び出しを書ける
+// 引数の中で関数を呼ぶ間も，呼び出す関数の番地は退避して保たれる
+int (*ops[2])(int, int);
+int r;
+
+int plus(int a, int b) {
+    return a + b;
+}
+
+int one(void) {
+    return 1;
+}
+
+void main(void) {
+    ops[1] = plus;
+    r = ops[one()](plus(2, 3), 4);    // plus(plus(2, 3), 4) = 9
+}

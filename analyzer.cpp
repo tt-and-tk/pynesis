@@ -1500,12 +1500,18 @@ void Analyzer::analyze_value(node_t *expr) {
 // 式の途中でvoidの値を使う場合(f() + 1;)は，途中の演算がオペランドを値として検査するためエラーになる．
 // ただし評価の過程では値をレジスタへ読み込むため，1つのレジスタに読み込めない構造体そのものはエラーにし，
 // 配列は中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
+// (関数ポインタの配列は，先頭要素へのポインタの型を持てないためエラーにする)
 void Analyzer::analyze_discarded(node_t *expr) {
     this->analyze_expr(expr);
     // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
     if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
+    }
+    // 関数ポインタの配列の場合 (先頭要素へのポインタは関数ポインタへのポインタになり，それには対応しないため)
+    if (expr->type.is_array && expr->type.base == BASE_FUNC) {
+        throw std::string("compiler error: array of function pointers cannot be used as a value "
+                          "(pointer to function pointer is not supported) at ") + loc_to_string(expr->loc);
     }
     // 配列の場合 (先頭要素へのポインタとして扱う)
     if (expr->type.is_array) {

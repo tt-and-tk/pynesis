@@ -1,0 +1,7 @@
+// expect: compiler error: size of an array of function pointers must follow the name inside the parentheses at src_err/403.pn:4
+// 構文エラー: 構造体のメンバでも，関数ポインタの配列の要素数は宣言子の括弧の外には書けない (異常系)
+struct Table {
+    int (*ops)(int)[2];
+};
+void main(void) {
+}

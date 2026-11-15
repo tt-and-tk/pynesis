@@ -1,0 +1,11 @@
+// expect: compiler error: array of function pointers cannot be used as a value (pointer to function pointer is not supported) at src_err/395.pn:10
+// 意味解析エラー: 構造体のメンバの関数ポインタの配列を，値としてキャストの対象に書けない (異常系)
+struct Table {
+    int (*ops[2])(int);
+};
+struct Table table;
+int x;
+void main(void) {
+    struct Table *p = &table;
+    x = (int)p->ops;
+}

@@ -1,0 +1,5 @@
+// expect: compiler error: function return type cannot be const at src_err/408.pn:3
+// 構文エラー: 関数ポインタの配列にconstを付けられない(constは戻り値型に付いたとみなされ，関数の戻り値型にはconstを使えないため) (異常系)
+const int (*ops[2])(int);
+void main(void) {
+}

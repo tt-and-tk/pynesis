@@ -1,0 +1,7 @@
+// expect: compiler error: cannot dereference a function pointer; call it directly at src_err/398.pn:6
+// 意味解析エラー: 関数ポインタの配列の要素は，*で間接参照できない(呼び出しは*を付けずに書くため) (異常系)
+int (*ops[2])(int);
+int x;
+void main(void) {
+    x = (*ops[0])(1);
+}

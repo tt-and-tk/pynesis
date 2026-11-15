@@ -1,0 +1,9 @@
+// expect: compiler error: incompatible pointer types in assignment: expected 'int (*)(int)' but got 'int (*)(void)' at src_err/409.pn:8
+// 意味解析エラー: 関数ポインタの配列の要素へ，型の異なる関数の番地は代入できない (異常系)
+int one(void) {
+    return 1;
+}
+int (*ops[2])(int);
+void main(void) {
+    ops[0] = one;
+}

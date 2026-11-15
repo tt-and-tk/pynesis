@@ -1,0 +1,5 @@
+// expect: compiler error: array size must be positive at src_err/406.pn:3
+// 意味解析エラー: 関数ポインタの配列の要素数は正の値でなければならない (異常系)
+int (*ops[0])(int);
+void main(void) {
+}

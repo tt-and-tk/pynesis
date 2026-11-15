@@ -1,0 +1,38 @@
+// 関数ポインタの配列を，ローカル変数と構造体のメンバにできる
+// 構造体のメンバの配列の要素は，構造体の変数・構造体へのポインタ・構造体の配列の要素のどれを通しても呼び出せる
+struct Table {
+    int count;
+    int (*ops[2])(int);
+};
+
+struct Table table;
+struct Table tables[2];
+int r1;
+int r2;
+int r3;
+int r4;
+
+int twice(int x) {
+    return x * 2;
+}
+
+int negate(int x) {
+    return 0 - x;
+}
+
+int run(struct Table *t, int i, int x) {
+    return t->ops[i](x);
+}
+
+void main(void) {
+    int (*local[2])(int);
+    int i = 1;
+    local[0] = twice;
+    local[i] = negate;
+    r1 = local[i](3);             // negate(3) = -3
+    table.ops[0] = twice;
+    r2 = table.ops[0](4);         // twice(4) = 8
+    tables[i].ops[i] = negate;
+    r3 = tables[i].ops[i](5);     // negate(5) = -5
+    r4 = run(&tables[1], 1, 6);   // negate(6) = -6
+}

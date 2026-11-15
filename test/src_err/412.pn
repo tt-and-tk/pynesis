@@ -1,0 +1,6 @@
+// expect: compiler error: array of function pointers cannot be used as a value (pointer to function pointer is not supported) at src_err/412.pn:5
+// 意味解析エラー: asm文の入力"i"に，関数ポインタの配列の名前は書けない(先頭要素の番地は関数ポインタへのポインタになるため) (異常系)
+int (*ops[2])(int);
+void main(void) {
+    asm("mov fh r0 r0 %0" : : "i"(ops));
+}

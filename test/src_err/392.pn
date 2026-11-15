@@ -1,0 +1,6 @@
+// expect: compiler error: array of function pointers cannot be used as a value (pointer to function pointer is not supported) at src_err/392.pn:5
+// 意味解析エラー: 関数ポインタの配列の名前を，式文に書けない(値として先頭要素へのポインタを読むため) (異常系)
+int (*ops[2])(int);
+void main(void) {
+    ops;
+}
