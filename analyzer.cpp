@@ -195,7 +195,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     }
 
     // 4パス目: 各関数本体を検査する
-    // (analyze_expr内のND_CALLケースが，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
+    // (analyze_expr内のND_CALLケースとasm文の検査が，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
 
@@ -1173,9 +1173,11 @@ static std::string asm_input_error(const loc_t &loc) {
            + loc_to_string(loc);
 }
 
-// asm文を検査し，雛形へ埋め込む入力の値を各入力の式に書き込む
-// 入力の式を名前解決・型注釈してから，関数名はそのまま残し，ポインタの値の式はグローバル変数の番地として，
-// 整数の式は定数式として値を求める
+// asm文を検査し，関数名以外の入力について，雛形へ埋め込む値を入力の式に書き込む
+// 入力の式を名前解決・型注釈してから，入力の種類ごとに次のとおり扱う
+// - 関数名: 関数ラベルの名前で置き換えるため，値を求めない
+// - ポインタの値の式: グローバル変数の番地として値を求める
+// - 整数の式: 定数式として値を求める
 void Analyzer::analyze_asm(node_t *stmt) {
     for (node_t *input : stmt->children) {
         this->analyze_value(input);

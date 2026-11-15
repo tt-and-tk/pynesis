@@ -1038,7 +1038,7 @@ void Generator::gen_asm(const node_t *stmt) {
     std::string raw;                                            // 置き換える前の行
     while (std::getline(lines, raw)) {
         // コンパイラの局所ラベルの名前の形を書いた場合 (コンパイラが生成するラベルと重なりうるため)
-        // (%N・%=が数字になるため，置き換える前の行で調べる)
+        // (.Lに続く%N・%=は数字になるため，置き換える前の行で調べる)
         if (has_compiler_label_name(raw.substr(0, raw.find(';')))) {
             throw std::string("compiler error: names of the form '.L<number>' are reserved for the compiler") + at;
         }
@@ -1046,6 +1046,10 @@ void Generator::gen_asm(const node_t *stmt) {
         // 空行は捨てる
         if (line.empty()) continue;
         const std::string code = line.substr(0, line.find(';'));   // コメントより前の部分
+        // 置き換えでコンパイラの局所ラベルの名前の形になった場合 (関数名の入力が.Lの直後に入り，.L3のようになる)
+        if (has_compiler_label_name(code)) {
+            throw std::string("compiler error: names of the form '.L<number>' are reserved for the compiler") + at;
+        }
         // ラベルの行の場合
         if (code.find(':') != std::string::npos) {
             // 関数ラベルの場合 (asm文を書いた関数が，その位置で2つの関数に分かれてしまうため)

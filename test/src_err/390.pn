@@ -1,0 +1,7 @@
+// expect: compiler error: names of the form '.L<number>' are reserved for the compiler at src_err/390.pn:6
+// 生成エラー: asm文の入力の関数名を置き換えた結果が，コンパイラの局所ラベルの名前の形(.L3)になる (異常系)
+void L3(void) {
+}
+void main(void) {
+    asm(".%0:" : : "i"(L3));
+}
