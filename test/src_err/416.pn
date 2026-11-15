@@ -1,0 +1,7 @@
+// expect: compiler error: array of function pointers requires a size at src_err/416.pn:4
+// 構文エラー: 構造体のメンバでも，関数ポインタの配列の要素数は省略できない (異常系)
+struct Table {
+    int (*ops[])(int);
+};
+void main(void) {
+}

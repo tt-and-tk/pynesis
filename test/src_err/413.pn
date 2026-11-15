@@ -1,0 +1,7 @@
+// expect: compiler error: cannot take the address of an array of function pointers at src_err/413.pn:6
+// 意味解析エラー: 関数ポインタの配列そのものの番地は取れない(配列へのポインタも，先頭要素へのポインタである関数ポインタへのポインタも非対応のため) (異常系)
+int (*ops[2])(int);
+int x;
+void main(void) {
+    x = (int)&ops;
+}

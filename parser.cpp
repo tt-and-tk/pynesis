@@ -775,9 +775,11 @@ node_t *Parser::parse_param() {
     // 引数名を読む．関数ポインタは引数名が宣言子の括弧の中((*名前)(...))にあるため宣言子ごと読み，
     // それ以外は型の直後の識別子を読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
-    node_t *func_pointer_array_size = nullptr;   // 関数ポインタの宣言子に書いた要素数 (書いた場合はエラーにする)
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か (引数は配列にできないため，そうならエラーにする)
+    node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
     if (is_func_pointer_decl) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval, func_pointer_array_size);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
@@ -786,9 +788,9 @@ node_t *Parser::parse_param() {
         throw std::string("compiler error: parameter cannot be void at ") + loc_to_string(node->loc);
     }
     // 配列を受け取る書き方の場合 (配列に見えて実体がポインタで紛らわしいため受け付けない)
-    // 関数ポインタは，宣言子の中の要素数と宣言子の後ろの[]のどちらも，書き換え先のポインタ(関数ポインタへのポインタ)に
+    // 関数ポインタは，宣言子の中の[]と宣言子の後ろの[]のどちらも，書き換え先のポインタ(関数ポインタへのポインタ)に
     // 対応しないため，書き換え方を案内しない
-    if (is_func_pointer_decl && (func_pointer_array_size != nullptr || this->token_kind_is(TK_LBRACKET))) {
+    if (is_func_pointer_decl && (is_func_pointer_array || this->token_kind_is(TK_LBRACKET))) {
         throw std::string("compiler error: array parameter is not supported at ") + loc_to_string(node->loc);
     }
     // 関数ポインタ以外の引数で，名前の後に[]がある場合 (同じ要素型へのポインタで宣言するよう案内する)
@@ -807,11 +809,13 @@ node_t *Parser::parse_param() {
 // 引数は型だけを書いても，型に続けて名前を書いてもよい(名前は読み捨てる)．(void)・()は引数なし
 // 引数の型にも関数ポインタの宣言子を書け，その宣言子では名前を省ける(int (*)(int))．
 // 名前を省いた宣言子はnameを空にする．名前で参照する宣言ではname_requiredをtrueにする
-// 名前の後ろ(名前を省いた場合は*の後ろ)の[要素数]は関数ポインタの配列を表し，要素数の式をarray_sizeに書き込む．
-// 配列を宣言できるかは置き場所で決まる(変数・構造体のメンバはできるが，関数の引数・キャストの型名はできない)ため，
-// ここでは読むだけにして呼び出し元で確かめる
+// 名前の後ろ(名前を省いた場合は*の後ろ)の[要素数]は関数ポインタの配列を表す．配列かどうかをis_arrayに，
+// 要素数の式をarray_sizeに書き込む(配列でない場合と要素数を省いた場合はnullptr)．
+// 配列を宣言できるかと要素数を省けるかは置き場所で決まる(変数・構造体のメンバは要素数を書いた配列を宣言できるが，
+// 関数の引数・キャストの型名は配列にできない)ため，ここでは読むだけにして呼び出し元で確かめる
+// (要素数を省いた引数を，要素数の省略ではなく配列を受け取る書き方としてエラーにするため)
 type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, bool name_required, std::string &name,
-                                             node_t *&array_size) {
+                                             bool &is_array, node_t *&array_size) {
     const loc_t loc = this->peek_token().loc;   // 宣言子の先頭の位置 (エラー報告用)
     // 関数ポインタを返す関数ポインタ・関数ポインタへのポインタは読まない
     // (戻り値型に*が付く場合はポインタを返す関数へのポインタとして扱う．宣言子の中の*は1個に限る)
@@ -822,16 +826,14 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
     if (name_required || this->token_kind_is(TK_IDENT)) {
         name = this->get_token(TK_IDENT).value;
     }
-    // 要素数を書いた場合は読む (書かなければ配列ではない)
+    // [があれば配列として要素数を読む (要素数を省いた[]では，要素数の式を持たない)
+    is_array = this->token_kind_is(TK_LBRACKET);
     array_size = nullptr;
-    if (this->token_kind_is(TK_LBRACKET)) {
+    if (is_array) {
         this->get_token(TK_LBRACKET);
-        // 要素数を省いた場合 (要素数を決められる初期化子を書けないため，省略を認めない)
-        if (this->token_kind_is(TK_RBRACKET)) {
-            throw std::string("compiler error: array of function pointers requires a size at ")
-                  + loc_to_string(this->peek_token().loc);
+        if (!this->token_kind_is(TK_RBRACKET)) {
+            array_size = this->parse_expr();   // 要素数 (定数式，意味解析で畳み込む)
         }
-        array_size = this->parse_expr();   // 要素数 (定数式，意味解析で畳み込む)
         this->get_token(TK_RBRACKET);
     }
     this->get_token(TK_RPAREN);
@@ -862,11 +864,13 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
             type_t param_type = this->parse_type(true);       // 引数の型 (voidは，引数を関数ポインタにする場合の戻り値型としてのみ書ける)
             // 関数ポインタの引数の場合 (宣言子の名前は読み捨てる)
             if (this->token_kind_is(TK_LPAREN)) {
-                std::string ignored_name;   // 読み捨てる宣言子の名前
-                node_t *func_pointer_array_size;   // 宣言子に書いた要素数 (引数は配列にできないため，書いた場合はエラーにする)
-                param_type = this->parse_func_pointer_declarator(param_type, false, ignored_name, func_pointer_array_size);
+                std::string ignored_name;          // 読み捨てる宣言子の名前
+                bool is_func_pointer_array;        // 関数ポインタの配列の宣言子か (引数は配列にできないため，そうならエラーにする)
+                node_t *func_pointer_array_size;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+                param_type = this->parse_func_pointer_declarator(param_type, false, ignored_name,
+                                                                 is_func_pointer_array, func_pointer_array_size);
                 // 関数ポインタの配列の場合 (関数の引数と同じく，配列を受け取る書き方は受け付けない)
-                if (func_pointer_array_size != nullptr) {
+                if (is_func_pointer_array) {
                     throw std::string("compiler error: array parameter is not supported at ")
                           + loc_to_string(param_loc);
                 }
@@ -920,9 +924,11 @@ node_t *Parser::parse_var_decl() {
     // 変数名を読む．関数ポインタは変数名が宣言子の括弧の中((*名前[要素数])(...))にあるため宣言子ごと読み，
     // それ以外は型の直後の識別子を読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か
     node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (関数ポインタの配列でなければnullptr)
     if (is_func_pointer_decl) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval, func_pointer_array_size);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
@@ -934,6 +940,10 @@ node_t *Parser::parse_var_decl() {
     if (is_func_pointer_decl && this->token_kind_is(TK_LBRACKET)) {
         throw std::string("compiler error: size of an array of function pointers must follow the name "
                           "inside the parentheses at ") + loc_to_string(node->loc);
+    }
+    // 関数ポインタの配列の要素数を省いた場合 (要素数を決められる初期化子を書けないため，省略を認めない)
+    if (is_func_pointer_array && func_pointer_array_size == nullptr) {
+        throw std::string("compiler error: array of function pointers requires a size at ") + loc_to_string(node->loc);
     }
 
     // const変数: 配列・構造体は初期値リストで値を与える手段がないため非対応とし，
@@ -1037,9 +1047,11 @@ node_t *Parser::parse_struct_member() {
 
     // 関数ポインタのメンバなら宣言子からメンバ名を，そうでなければメンバ名を直接読む
     const bool is_func_pointer_decl = this->token_kind_is(TK_LPAREN);   // 関数ポインタの宣言子か
+    bool is_func_pointer_array = false;          // 関数ポインタの配列の宣言子か
     node_t *func_pointer_array_size = nullptr;   // 関数ポインタの配列の要素数の式 (関数ポインタの配列でなければnullptr)
     if (is_func_pointer_decl) {
-        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval, func_pointer_array_size);
+        node->type = this->parse_func_pointer_declarator(node->type, true, node->sval,
+                                                         is_func_pointer_array, func_pointer_array_size);
     } else {
         node->sval = this->get_token(TK_IDENT).value;
     }
@@ -1051,6 +1063,10 @@ node_t *Parser::parse_struct_member() {
     if (is_func_pointer_decl && this->token_kind_is(TK_LBRACKET)) {
         throw std::string("compiler error: size of an array of function pointers must follow the name "
                           "inside the parentheses at ") + loc_to_string(node->loc);
+    }
+    // 関数ポインタの配列の要素数を省いた場合 (変数宣言と同じく，省略を認めない)
+    if (is_func_pointer_array && func_pointer_array_size == nullptr) {
+        throw std::string("compiler error: array of function pointers requires a size at ") + loc_to_string(node->loc);
     }
 
     // 配列のメンバならサイズを持たせる (スカラーのメンバは持たない)
@@ -1242,15 +1258,17 @@ node_t *Parser::parse_cast() {
     node->type = this->parse_type(true);
     // 関数ポインタの型の場合 (宣言子の名前は省く)
     if (this->token_kind_is(TK_LPAREN)) {
-        std::string name;                          // 宣言子に書かれた名前 (書けないため，空であることを確かめる)
-        node_t *func_pointer_array_size;           // 宣言子に書かれた要素数 (書けないため，無いことを確かめる)
-        node->type = this->parse_func_pointer_declarator(node->type, false, name, func_pointer_array_size);
+        std::string name;                  // 宣言子に書かれた名前 (書けないため，空であることを確かめる)
+        bool is_func_pointer_array;        // 関数ポインタの配列の宣言子か (書けないため，そうでないことを確かめる)
+        node_t *func_pointer_array_size;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+        node->type = this->parse_func_pointer_declarator(node->type, false, name,
+                                                         is_func_pointer_array, func_pointer_array_size);
         if (!name.empty()) {
             throw std::string("compiler error: type name in cast cannot have a declarator name '") + name
                   + "' at " + loc_to_string(type_loc);
         }
         // 関数ポインタの配列の場合 (配列を値として扱う仕組みがないため)
-        if (func_pointer_array_size != nullptr) {
+        if (is_func_pointer_array) {
             throw std::string("compiler error: cast to array is not supported at ") + loc_to_string(type_loc);
         }
     }
