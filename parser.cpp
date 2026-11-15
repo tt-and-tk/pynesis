@@ -791,7 +791,7 @@ node_t *Parser::parse_param() {
     if (is_func_pointer_decl && (func_pointer_array_size != nullptr || this->token_kind_is(TK_LBRACKET))) {
         throw std::string("compiler error: array parameter is not supported at ") + loc_to_string(node->loc);
     }
-    // 名前の後に[]がある場合 (同じ要素型へのポインタで宣言するよう案内する)
+    // 関数ポインタ以外の引数で，名前の後に[]がある場合 (同じ要素型へのポインタで宣言するよう案内する)
     if (this->token_kind_is(TK_LBRACKET)) {
         type_t pointer = node->type;   // 同じ要素型へのポインタ (書き換え方の案内に使う)
         pointer.pointer_depth++;
