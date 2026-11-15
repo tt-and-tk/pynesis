@@ -1255,7 +1255,7 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
             break;
     }
 
-    // どの形にも当たらない式は，番地をコンパイル時に求められないためエラーにする
+    // それ以外の式はエラーにする (番地をコンパイル時に求められる式は，ここまでの形に限るため)
     throw asm_input_error(loc);
 }
 
@@ -1271,7 +1271,7 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
         // 配列の要素の場合 (ポインタの指す先は実行時に決まるため，配列そのものの要素に限る)
         case ND_ARRAY_ACCESS: {
             const node_t *index = expr->children[0];   // 添字
-            // 添字が整数定数でなければ，番地を求められない
+            // 添字が実行時に決まる場合は，エラーにする
             if (!Analyzer::is_integer_constant(index)) break;
             const long long offset = this->eval_const_expr(index, true).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
 
@@ -1339,7 +1339,7 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
             break;
     }
 
-    // どの形にも当たらない式は，番地をコンパイル時に求められないためエラーにする
+    // それ以外の式はエラーにする (番地をコンパイル時に求められる式は，ここまでの形に限るため)
     throw asm_input_error(loc);
 }
 
