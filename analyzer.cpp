@@ -1881,7 +1881,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot take the address of an array of function pointers at ")
                       + loc_to_string(expr->loc);
             }
-            // 配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
+            // 関数ポインタ以外の配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
             // 要素の番地は&arr[i]で取れる)
             if (operand->type.is_array) {
                 throw std::string("compiler error: cannot take the address of an array; "
