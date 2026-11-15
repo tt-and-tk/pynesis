@@ -945,7 +945,7 @@ node_t *Parser::parse_var_decl() {
         throw std::string("compiler error: size of an array of function pointers must follow the name "
                           "inside the parentheses at ") + loc_to_string(node->loc);
     }
-    // 関数ポインタの配列の要素数を省いた場合はエラーにする (初期化子を書けず，初期化子から要素数を決められないため)
+    // 関数ポインタの配列の要素数を省いた場合はエラーにする (要素数を省いた配列は初期化子から要素数を決めるが，関数ポインタの配列には初期化子を書けないため)
     if (is_func_pointer_array && func_pointer_array_size == nullptr) {
         throw std::string("compiler error: array of function pointers requires a size at ") + loc_to_string(node->loc);
     }
