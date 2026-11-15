@@ -164,7 +164,8 @@ private:
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
     type_t parse_type(bool allow_void);                    // 型名を読み，型情報を返す (allow_voidならvoidも受け付ける)
     type_t parse_base_type(bool allow_void);               // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
-    // 関数ポインタの宣言子 (*名前[要素数])(引数型...) を読み，関数ポインタ(配列なら要素)の型を返す
+    // 関数ポインタの宣言子 (*名前)(引数型...) を読み，関数ポインタの型を返す
+    // 名前の後ろに[要素数]を付けた関数ポインタの配列の宣言子 (*名前[要素数])(引数型...) なら，要素の型を返す
     // pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡し，宣言子の中の名前はnameに書き込む
     // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合はnameを空にする
     // 関数ポインタの配列の宣言子かどうかはis_arrayに書き込む．要素数の式はarray_sizeに書き込む(配列でない場合と要素数を省いた場合はnullptr)

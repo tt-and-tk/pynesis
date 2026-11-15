@@ -1508,7 +1508,8 @@ void Analyzer::analyze_discarded(node_t *expr) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
     }
-    // 関数ポインタの配列の場合 (先頭要素へのポインタは関数ポインタへのポインタになり，それには対応しないため)
+    // 関数ポインタの配列はエラーにする (ほかの配列のように先頭要素へのポインタとして扱うと，
+    // 関数ポインタへのポインタという対応しない型になるため)
     if (expr->type.is_array && expr->type.base == BASE_FUNC) {
         throw std::string("compiler error: array of function pointers cannot be used as a value "
                           "(pointer to function pointer is not supported) at ") + loc_to_string(expr->loc);
@@ -1875,14 +1876,14 @@ void Analyzer::analyze_expr(node_t *expr) {
                 throw std::string("compiler error: cannot take the address of '") + source_name(operand->sval)
                       + "' (it has no memory address) at " + loc_to_string(expr->loc);
             }
-            // 関数ポインタの配列そのものの場合 (配列へのポインタは非対応．先頭要素の番地も関数ポインタへのポインタになり
-            // 取れないため，ほかの配列と異なり書き換え方の案内を省く)
+            // 関数ポインタの配列そのものの番地を取る場合は，書き換え方を案内せずにエラーにする
+            // (配列へのポインタに対応せず，先頭要素の番地も関数ポインタへのポインタになり取れないため)
             if (operand->type.is_array && operand->type.base == BASE_FUNC) {
                 throw std::string("compiler error: cannot take the address of an array of function pointers at ")
                       + loc_to_string(expr->loc);
             }
-            // 関数ポインタ以外の配列そのもの(&arr)の場合 (配列へのポインタは非対応．先頭要素の番地は配列の名前arrだけで書け，
-            // 要素の番地は&arr[i]で取れる)
+            // 関数ポインタ以外の配列そのもの(&arr)の番地を取る場合は，先頭要素と要素の番地の書き方を案内してエラーにする
+            // (配列へのポインタに対応しないため．先頭要素の番地は配列の名前arrだけで書け，要素の番地は&arr[i]で取れる)
             if (operand->type.is_array) {
                 throw std::string("compiler error: cannot take the address of an array; "
                                    "use the array itself or the address of its first element at ")
