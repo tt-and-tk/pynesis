@@ -182,6 +182,8 @@ std::string Parser::token_kind_name(token_kind_t kind) {
         case TK_LBRACE:    return "'{'";
         case TK_RBRACE:    return "'}'";
         case TK_COMMA:     return "','";
+        case TK_COLON:     return "':'";
+        case TK_STRING_LIT: return "string literal";
         case TK_VOID:      return "'void'";
         case TK_STAR:      return "'*'";
         case TK_IDENT:     return "identifier";
@@ -450,6 +452,10 @@ node_t *Parser::parse_stmt() {
     if (this->token_kind_is(TK_CONTINUE)) {
         return this->parse_continue();
     }
+    // asm文
+    if (this->token_kind_is(TK_ASM)) {
+        return this->parse_asm();
+    }
     // 空文 ; (何もしない文．空ブロックとして表現する)
     if (this->token_kind_is(TK_SEMICOLON)) {
         node_t *node = this->new_node(ND_BLOCK);
@@ -470,6 +476,51 @@ node_t *Parser::parse_return() {
         node->children.push_back(this->parse_expr());
     }
     this->get_token(TK_SEMICOLON);
+    return node;
+}
+
+// asm文を解析してND_ASMを返す
+// 構文: asm ( 雛形 ) ; | asm ( 雛形 : ) ; | asm ( 雛形 : : [入力 { , 入力 }] ) ;   入力: "i" ( 式 )
+// 雛形の後ろには，出力欄・入力欄をコロンで区切って並べる．出力欄には何も書けないため，入力は空の出力欄の後ろに書く
+node_t *Parser::parse_asm() {
+    node_t *node = this->new_node(ND_ASM);
+    this->get_token(TK_ASM);                                                              // asm
+    this->get_token(TK_LPAREN);                                                           // (
+    node->sval = Parser::parse_string_literal(this->get_token(TK_STRING_LIT).value);      // 雛形
+    // 出力欄がある場合
+    if (this->token_kind_is(TK_COLON)) {
+        this->get_token(TK_COLON);                                                        // :
+        // 出力欄に何か書いた場合 (出力欄はコロンか閉じかっこで終わる)
+        if (!this->token_kind_is(TK_COLON) && !this->token_kind_is(TK_RPAREN)) {
+            throw std::string("compiler error: asm output operands are not supported at ")
+                  + loc_to_string(this->peek_token().loc);
+        }
+        // 入力欄がある場合
+        if (this->token_kind_is(TK_COLON)) {
+            this->get_token(TK_COLON);                                                    // :
+            // 入力をカンマで区切って読む (入力欄が空なら閉じかっこが続く)
+            while (!this->token_kind_is(TK_RPAREN) && !this->token_kind_is(TK_COLON)) {
+                // 2つ目以降の入力の場合は，前の入力との区切りのカンマを読む
+                if (!node->children.empty()) this->get_token(TK_COMMA);                   // ,
+                const token_t constraint = this->get_token(TK_STRING_LIT);                // 制約
+                // 定数("i")以外の制約の場合 (雛形へ埋め込める値を，コンパイル時に決まる値に限るため)
+                if (Parser::parse_string_literal(constraint.value) != "i") {
+                    throw std::string("compiler error: asm input constraint must be \"i\" at ")
+                          + loc_to_string(constraint.loc);
+                }
+                this->get_token(TK_LPAREN);                                               // (
+                node->children.push_back(this->parse_expr());                             // 入力の式
+                this->get_token(TK_RPAREN);                                               // )
+            }
+            // 破壊するものの欄がある場合 (文と文の間でレジスタに値を残さないため，知らせる必要がない)
+            if (this->token_kind_is(TK_COLON)) {
+                throw std::string("compiler error: asm clobbers are not supported at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
+        }
+    }
+    this->get_token(TK_RPAREN);                                                           // )
+    this->get_token(TK_SEMICOLON);                                                        // ;
     return node;
 }
 

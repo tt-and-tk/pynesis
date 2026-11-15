@@ -1,0 +1,13 @@
+.global step.0, tick, main
+
+main:
+    call step.0
+    mov fh r0 r1 tick
+    wm fh r0 r1 16
+    ret
+
+step.0:
+    ret
+
+tick:
+    ret

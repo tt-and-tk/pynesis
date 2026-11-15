@@ -1,0 +1,5 @@
+// expect: compiler error: names of the form '.L<number>' are reserved for the compiler at src_err/372.pn:4
+// コード生成エラー: asm文の雛形に，.Lの直後に%が続く形の名前は書けない(置き換えた結果がコンパイラの局所ラベルの名前の形になるため) (異常系)
+void main(void) {
+    asm(".L%=:");
+}

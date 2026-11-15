@@ -1,0 +1,5 @@
+// expect: compiler error: asm input constraint must be "i" at src_err/358.pn:4
+// 構文解析エラー: asm文の入力の制約には"i"だけを書ける (異常系)
+void main(void) {
+    asm("nop" : : "r"(1));
+}

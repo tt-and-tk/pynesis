@@ -1,0 +1,5 @@
+// expect: compiler error: cannot take the address of 'main' at src_err/389.pn:4
+// 意味解析エラー: asm文の入力"i"に，mainの関数名は書けない(mainの番地は取れないため) (異常系)
+void main(void) {
+    asm("call %0" : : "i"(main));
+}

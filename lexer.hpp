@@ -20,6 +20,7 @@ typedef enum {
     // その他キーワード
     TK_SIZEOF,
     TK_NULLPTR,     // どのポインタも指していないことを表す定数
+    TK_ASM,         // アセンブリの命令を直接書く文
     // 組み込み関数キーワード (ユーザー定義の変数・関数名との衝突を防ぐため予約語にする)
     TK_STREQ, TK_STRCOPY,
     TK_SYSCALL, TK_SYSRET,

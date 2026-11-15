@@ -1,0 +1,6 @@
+// expect: compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at src_err/361.pn:5
+// 意味解析エラー: asm文の入力"i"に，グローバル変数の値は書けない(値が実行時に決まるため) (異常系)
+int g;
+void main(void) {
+    asm("mov fh r0 r1 %0" : : "i"(g));
+}

@@ -149,10 +149,11 @@ private:
     void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
     void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
     void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
-    // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値)
+    // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値・asm文の入力)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
-    const_value_t eval_const_expr(const node_t *expr);
+    // is_annotatedには，式の型注釈を終えているかを渡す (終えていれば整数リテラルの符号を注釈した型から決める)
+    const_value_t eval_const_expr(const node_t *expr, bool is_annotated = false);
     // 二項演算の定数式を計算する (両辺は計算済み)
     static const_value_t eval_const_binop(const node_t *expr, const const_value_t &l, const const_value_t &r);
     static long long const_symbol_value(const symbol_t *sym);   // const変数のシンボルが保持する値を型に応じて解釈して返す
@@ -193,6 +194,12 @@ private:
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する
+    void analyze_asm(node_t *stmt);                         // asm文を検査し，入力の値を求める (関数名の入力は呼び出しグラフに加える)
+    // グローバル変数の番地を表す式(配列名・メンバ配列名・&左辺値と，それらに整数定数を足し引きした式)の番地を求める
+    // (名前解決を終えた式を対象にし，求められない式はlocの位置でエラーにする)
+    long long eval_global_address(const node_t *expr, const loc_t &loc);
+    // グローバル変数と，その定数の添字の要素・メンバの番地を求める (求められない左辺値はlocの位置でエラーにする)
+    long long eval_global_lvalue_address(const node_t *expr, const loc_t &loc);
     void analyze_local_decl(node_t *decl);                  // ローカル変数宣言を検査し登録する
     void analyze_expr(node_t *expr);                        // 式を検査し名前解決・型注釈する
     // 評価した結果の値(整数・ポインタ)を使う式(代入の右辺・引数・戻り値・演算のオペランド等)を検査する

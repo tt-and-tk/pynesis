@@ -1,0 +1,5 @@
+// expect: compiler error: expected identifier but got 'asm' at src_err/375.pn:4
+// 構文解析エラー: asmは予約語であり，変数名に使えない (異常系)
+void main(void) {
+    int asm;
+}

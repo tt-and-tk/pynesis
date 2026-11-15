@@ -1,0 +1,65 @@
+.global f, h, main
+
+main:
+    rm fh r0 r0 0
+    mov fh r0 r1 0
+    ne r0 r1 .L0
+    mov fh r0 r0 1
+    wm fh r0 r0 0
+.L0:
+.a1:
+    eq r0 r0 .b1
+    ne r0 r0 .a1
+.b1:
+    nop
+.L2:
+    rm fh r0 r0 0
+    mov fh r0 r1 3
+    egt r0 r1 .L3
+    rm fh r0 r0 0
+    mov fh r0 r1 1
+    add r0 r1 r0
+    wm fh r0 r0 0
+    jmp .L2
+.L3:
+.c4:
+    ne r0 r0 .c4
+    mov fh r0 r0 1
+    wmr fh r16 r0 -8
+    call h
+    mov fh r30 r0
+    wm fh r0 r0 0
+    ret
+
+f:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+h:
+    mov fh r0 r0 8
+    sub r16 r0 r16
+.h5:
+    ne r0 r0 .h5
+    rmr fh r16 r0 4
+    wmr fh r16 r0 0
+    rmr fh r16 r1 4
+    wmr fh r16 r1 -8
+    call f
+    mov fh r30 r1
+    rmr fh r16 r0 0
+    add r0 r1 r0
+    mov fh r0 r30
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 8
+    add r16 r0 r16
+    ret

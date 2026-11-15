@@ -1,0 +1,5 @@
+// expect: compiler error: expected function or variable declaration at src_err/374.pn:3
+// 構文解析エラー: asm文は関数の外に書けない (異常系)
+asm("nop");
+void main(void) {
+}

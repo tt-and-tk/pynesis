@@ -1,0 +1,5 @@
+// expect: compiler error: asm template cannot contain control characters other than newline at src_err/373.pn:4
+// コード生成エラー: asm文の雛形に，改行以外の制御文字(タブなど)は書けない(アセンブラがタブに対応しないため) (異常系)
+void main(void) {
+    asm("\tnop");
+}

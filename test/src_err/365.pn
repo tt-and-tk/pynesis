@@ -1,0 +1,5 @@
+// expect: compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at src_err/365.pn:4
+// 意味解析エラー: asm文の入力"i"に，文字列リテラルは書けない(グローバル変数の番地ではないため) (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %0" : : "i"("ab"));
+}

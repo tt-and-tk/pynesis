@@ -1,0 +1,7 @@
+// expect: compiler error: names of the form '.L<number>' are reserved for the compiler at src_err/371.pn:5
+// コード生成エラー: asm文の雛形に，コンパイラの局所ラベルの名前(.Lの直後に数字が続く形)は書けない．参照するだけでも同じ (異常系)
+void main(void) {
+    while (1) {
+        asm("jmp .L0");
+    }
+}

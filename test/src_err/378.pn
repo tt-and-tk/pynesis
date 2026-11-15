@@ -1,0 +1,5 @@
+// expect: compiler error: asm input '%0' is out of range at src_err/378.pn:4
+// コード生成エラー: 入力欄のないasm文の雛形に%0を書くと，入力の数(0個)以上の番号としてエラーになる (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %0");
+}

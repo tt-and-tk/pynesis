@@ -1,0 +1,5 @@
+// expect: compiler error: expected string literal but got ')' at src_err/385.pn:4
+// 構文解析エラー: asm文の入力欄の末尾にカンマを書けない (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %0" : : "i"(1), );
+}

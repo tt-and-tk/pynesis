@@ -1,0 +1,5 @@
+// expect: compiler error: asm input '%1' is out of range at src_err/366.pn:4
+// コード生成エラー: asm文の雛形の%Nの番号は，入力の数より小さくなければならない(番号は0始まり) (異常系)
+void main(void) {
+    asm("mov fh r0 r1 %1" : : "i"(1));
+}
