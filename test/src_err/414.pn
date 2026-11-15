@@ -1,5 +1,5 @@
 // expect: compiler error: array parameter is not supported at src_err/414.pn:3
-// 構文エラー: 要素数を省いても，関数の引数は関数ポインタの配列として宣言できない(要素数の省略ではなく，配列を受け取る書き方としてエラーにする) (異常系)
+// 構文エラー: 要素数を省いた関数ポインタの配列を関数の引数に書くと，配列を受け取る書き方としてエラーになる(要素数の省略より先に判定する) (異常系)
 int run(int (*ops[])(int), int x) {
     return x;
 }

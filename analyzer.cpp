@@ -1876,7 +1876,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + "' (it has no memory address) at " + loc_to_string(expr->loc);
             }
             // 関数ポインタの配列そのものの場合 (配列へのポインタは非対応．先頭要素の番地も関数ポインタへのポインタになり
-            // 取れないため，ほかの配列と異なり書き換え方を案内しない)
+            // 取れないため，ほかの配列と異なり書き換え方の案内を省く)
             if (operand->type.is_array && operand->type.base == BASE_FUNC) {
                 throw std::string("compiler error: cannot take the address of an array of function pointers at ")
                       + loc_to_string(expr->loc);
