@@ -1,7 +1,8 @@
-// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/364.pn:6
-// 意味解析エラー: asm文の入力"i"に，関数の番地は書けない(関数のPCは雛形に関数名を直接書いて表す) (異常系)
+// expect: compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at src_err/364.pn:7
+// 意味解析エラー: asm文の入力"i"に，関数ポインタの変数の値は書けない(値が実行時に決まるため) (異常系)
 void f(void) {
 }
+void (*fp)(void) = f;
 void main(void) {
-    asm("mov fh r0 r1 %0" : : "i"(f));
+    asm("call %0" : : "i"(fp));
 }

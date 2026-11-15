@@ -1169,15 +1169,21 @@ void Analyzer::analyze_stmt(node_t *stmt) {
 
 // asm文の入力の値を求められない場合のエラーメッセージを返す
 static std::string asm_input_error(const loc_t &loc) {
-    return std::string("compiler error: asm input must be an integer constant expression or an address of a global variable at ")
+    return std::string("compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at ")
            + loc_to_string(loc);
 }
 
 // asm文を検査し，雛形へ埋め込む入力の値を各入力の式に書き込む
-// 入力の式を名前解決・型注釈してから，ポインタの値の式はグローバル変数の番地として，整数の式は定数式として値を求める
+// 入力の式を名前解決・型注釈してから，関数名はそのまま残し，ポインタの値の式はグローバル変数の番地として，
+// 整数の式は定数式として値を求める
 void Analyzer::analyze_asm(node_t *stmt) {
     for (node_t *input : stmt->children) {
         this->analyze_value(input);
+        // 関数名の場合 (雛形の命令がその関数を呼びうるものとして，スタックの量の見積もりに加える)
+        if (input->kind == ND_FUNC_ADDR) {
+            this->call_graph_[this->current_function_].insert(input->sval);
+            continue;
+        }
         // ポインタの値の式の場合
         if (is_pointer_value(input->type)) {
             input->ival = this->eval_global_address(input, input->loc);

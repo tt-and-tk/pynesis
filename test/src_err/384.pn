@@ -1,4 +1,4 @@
-// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/384.pn:6
+// expect: compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at src_err/384.pn:6
 // 意味解析エラー: グローバルのconst変数をローカル変数が隠している場合，asm文の入力"i"の名前はローカル変数を指し，その値は書けない (異常系)
 const int N = 3;
 void main(void) {

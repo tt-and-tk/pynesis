@@ -1111,7 +1111,15 @@ std::string Generator::substitute_asm_line(const std::string &line, const node_t
             || std::stoul(number) >= stmt->children.size()) {
             throw std::string("compiler error: asm input '%") + number + "' is out of range" + at;
         }
-        result += imm_literal(stmt->children[std::stoul(number)]->ival);
+        const node_t *input = stmt->children[std::stoul(number)];   // 番号が指す入力
+        // 関数名の入力の場合は，関数ラベルの名前に置き換える
+        if (input->kind == ND_FUNC_ADDR) {
+            result += input->sval;
+        }
+        // それ以外の入力の場合は，値に置き換える
+        else {
+            result += imm_literal(input->ival);
+        }
         i = end - 1;
     }
     return result;

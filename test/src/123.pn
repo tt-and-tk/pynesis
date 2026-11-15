@@ -1,0 +1,17 @@
+// asm文の入力"i"に書いた関数名は，関数ラベルの名前に置き換える
+// - staticを付けた関数は，番号を付けた関数ラベルの名前(step.0)になる
+// - staticを付けていない関数は，関数名のままになる
+// - 番地の式に足す整数には，const変数との乗算を書ける(g + K * 2は，int4個分進んだ16番地)
+int g[5];
+static void step(void) {
+}
+void tick(void) {
+}
+void main(void) {
+    const int K = 2;
+    asm("call %0\n"
+        "mov fh r0 r1 %1\n"
+        "wm fh r0 r1 %2"
+        :
+        : "i"(step), "i"(tick), "i"(g + K * 2));
+}

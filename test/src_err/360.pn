@@ -1,4 +1,4 @@
-// expect: compiler error: asm input must be an integer constant expression or an address of a global variable at src_err/360.pn:5
+// expect: compiler error: asm input must be an integer constant expression, an address of a global variable or a function name at src_err/360.pn:5
 // 意味解析エラー: asm文の入力"i"に，ローカル変数の番地は書けない(番地が実行時のSPで決まるため) (異常系)
 void main(void) {
     int x;
