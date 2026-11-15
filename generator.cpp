@@ -1042,20 +1042,24 @@ void Generator::gen_asm(const node_t *stmt) {
         if (has_compiler_label_name(raw.substr(0, raw.find(';')))) {
             throw std::string("compiler error: names of the form '.L<number>' are reserved for the compiler") + at;
         }
+
         const std::string line = trim_spaces(this->substitute_asm_line(raw, stmt, unique_number));   // 置き換えた行
         // 空行は捨てる
         if (line.empty()) continue;
+
         const std::string code = line.substr(0, line.find(';'));   // コメントより前の部分
         // 置き換えでコンパイラの局所ラベルの名前の形になった場合 (関数名の入力が.Lの直後に入り，.L3のようになる)
         if (has_compiler_label_name(code)) {
             throw std::string("compiler error: names of the form '.L<number>' are reserved for the compiler") + at;
         }
+
         // ラベルの行の場合
         if (code.find(':') != std::string::npos) {
             // 関数ラベルの場合 (asm文を書いた関数が，その位置で2つの関数に分かれてしまうため)
             if (code[0] != '.') {
                 throw std::string("compiler error: label in asm template must start with '.'") + at;
             }
+
             const std::string label = trim_spaces(code);   // コメントを除いたラベルの行
             // ラベルの名前と:のほかに文字を書いた場合
             // (アセンブラは:より前をラベルの名前として読み，:より後ろを捨てるため，命令を続けて書くと黙って消える)
@@ -1066,13 +1070,18 @@ void Generator::gen_asm(const node_t *stmt) {
                 || label.find(':') != label.size() - 1) {
                 throw std::string("compiler error: label line in asm template must contain only a label name and ':'") + at;
             }
+
+            // 局所ラベルの行は，行頭に出力する
             (*this->out_) << line << "\n";
             continue;
         }
+
         // .global宣言の場合 (プログラムの先頭にだけ書けるため)
         if (code.compare(0, 7, ".global") == 0) {
             throw std::string("compiler error: '.global' cannot be written in asm template") + at;
         }
+
+        // 命令の行とコメントだけの行は，字下げして出力する
         (*this->out_) << "    " << line << "\n";
     }
 }
@@ -1087,18 +1096,24 @@ std::string Generator::substitute_asm_line(const std::string &line, const node_t
         if (static_cast<unsigned char>(c) < 0x20) {
             throw std::string("compiler error: asm template cannot contain control characters other than newline") + at;
         }
-        // %以外の文字はそのまま写す
+
+        // %以外の文字の場合
         if (c != '%') {
+            // そのまま写す
             result += c;
             continue;
         }
-        // %=の場合 (同じasm文の中では同じ番号にする)
+
+        // %=の場合
         if (i + 1 < line.size() && line[i + 1] == '=') {
+            // 最初の%=で，局所ラベルと同じ連番から番号を取る (同じasm文の中では同じ番号にするため)
             if (unique_number.empty()) unique_number = std::to_string(this->label_count_++);
+            // 番号に置き換え，=を読み飛ばす
             result += unique_number;
             i++;
             continue;
         }
+
         // %の後ろに続く数字を，入力の番号(0始まり)として読む
         size_t end = i + 1;   // 番号の数字の終わりの位置
         while (end < line.size() && std::isdigit(static_cast<unsigned char>(line[end]))) end++;
@@ -1106,6 +1121,7 @@ std::string Generator::substitute_asm_line(const std::string &line, const node_t
         if (end == i + 1) {
             throw std::string("compiler error: '%' in asm template must be followed by a number or '='") + at;
         }
+
         const std::string number = line.substr(i + 1, end - i - 1);   // 入力の番号の数字
         // 入力の数以上の番号の場合
         if (
@@ -1115,15 +1131,19 @@ std::string Generator::substitute_asm_line(const std::string &line, const node_t
             || std::stoul(number) >= stmt->children.size()) {
             throw std::string("compiler error: asm input '%") + number + "' is out of range" + at;
         }
+
         const node_t *input = stmt->children[std::stoul(number)];   // 番号が指す入力
-        // 関数名の入力の場合は，関数ラベルの名前に置き換える
+        // 関数名の入力の場合
         if (input->kind == ND_FUNC_ADDR) {
+            // 関数ラベルの名前に置き換える
             result += input->sval;
         }
-        // それ以外の入力の場合は，値に置き換える
+        // それ以外の入力の場合
         else {
+            // 意味解析が求めた値に置き換える
             result += imm_literal(input->ival);
         }
+        // 番号の数字を読み飛ばす
         i = end - 1;
     }
     return result;

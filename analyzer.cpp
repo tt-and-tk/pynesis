@@ -664,9 +664,7 @@ void Analyzer::collect_globals() {
 // また sizeof(変数名) も例外で許可する．sizeofが必要とするのは変数の「値」ではなく「型のサイズ」であり，
 // 型は変数の値と無関係にシンボルテーブルから分かるため，変数参照であってもコンパイル時に確定できるため
 // (いずれも参照先が後方で宣言されたグローバルの宣言なら，その時点で宣言ノードから型・値を解決する)
-// 型注釈を終えた式では，整数リテラルの符号を注釈した型から決める
-// (名前解決はconst変数の参照を値のリテラルに置き換え，宣言した型をリテラルの型に残すため．
-//  値から決めると，const unsigned intの小さい値が符号付きになる)
+// 整数リテラルの符号は，型注釈を終えた式では注釈した型から，終えていない式では値から決める (const変数を置き換えたリテラルは，宣言した型で符号が決まるため)
 const_value_t Analyzer::eval_const_expr(const node_t *expr, bool is_annotated) {
     // 整数リテラル
     if (expr->kind == ND_INT_LIT) {
@@ -1180,21 +1178,28 @@ static std::string asm_input_error(const loc_t &loc) {
 // - 整数の式: 定数式として値を求める
 void Analyzer::analyze_asm(node_t *stmt) {
     for (node_t *input : stmt->children) {
+        // 入力の式を名前解決・型注釈する
         this->analyze_value(input);
-        // 関数名の場合 (雛形の命令がその関数を呼びうるものとして，スタックの量の見積もりに加える)
+
+        // 関数名の場合
         if (input->kind == ND_FUNC_ADDR) {
+            // asm文を書いた関数から呼ばれうる関数として，呼び出しグラフに加える (スタックの量の見積もりに含めるため)
             this->call_graph_[this->current_function_].insert(input->sval);
             continue;
         }
+
         // ポインタの値の式の場合
         if (is_pointer_value(input->type)) {
+            // グローバル変数の番地を，雛形へ埋め込む値として書き込む
             input->ival = this->eval_global_address(input, input->loc);
             continue;
         }
+
         // 整数の定数式でない場合 (変数の値など，実行時に値が決まる)
         if (!Analyzer::is_integer_constant(input)) {
             throw asm_input_error(input->loc);
         }
+        // 定数式の値を，雛形へ埋め込む値として書き込む
         input->ival = this->eval_const_expr(input, true).value;
     }
 }
@@ -1205,15 +1210,20 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
         // 配列の先頭の番地として使われる変数・メンバ配列の場合
         case ND_VAR:
         case ND_MEMBER_ACCESS:
+            // 配列の先頭の番地として使われている場合は，その配列の番地を返す
             if (expr->is_decayed) return this->eval_global_lvalue_address(expr, loc);
             break;
+
         // &の場合
         case ND_ADDR_OF:
+            // &を付けた変数・要素・メンバの番地を返す
             return this->eval_global_lvalue_address(expr->children[0], loc);
+
         // 番地に整数定数を足し引きした式の場合 (整数に，指す先1個分のバイト数を掛けて足し引きする)
         case ND_BINOP: {
             const node_t *lhs = expr->children[0];   // 左辺
             const node_t *rhs = expr->children[1];   // 右辺
+
             // 整数定数+番地の場合
             if (
                 // 足し算である
@@ -1223,8 +1233,10 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
                 // かつ，右辺が番地である
                 && is_pointer_value(rhs->type)) {
                 const long long bytes = type_size_bytes(pointee_type(rhs->type), this->struct_defs_);   // 指す先1個分のバイト数
+                // 右辺の番地に，整数の分のバイト数を足して返す
                 return this->eval_const_expr(lhs, true).value * bytes + this->eval_global_address(rhs, loc);
             }
+
             // 番地±整数定数の場合 (ポインタどうしの差は，右辺が整数定数でないため当たらない)
             if (
                 // 左辺が番地である
@@ -1233,13 +1245,17 @@ long long Analyzer::eval_global_address(const node_t *expr, const loc_t &loc) {
                 && Analyzer::is_integer_constant(rhs)) {
                 const long long bytes = type_size_bytes(pointee_type(lhs->type), this->struct_defs_);   // 指す先1個分のバイト数
                 const long long offset = this->eval_const_expr(rhs, true).value * bytes;                 // 足し引きするバイト数
+                // 左辺の番地に，バイト数を足し引きして返す
                 return this->eval_global_address(lhs, loc) + (expr->sval == "+" ? offset : -offset);
             }
             break;
         }
+
         default:
             break;
     }
+
+    // どの形にも当たらない式は，番地をコンパイル時に求められないためエラーにする
     throw asm_input_error(loc);
 }
 
@@ -1248,13 +1264,17 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
     switch (expr->kind) {
         // 変数の場合
         case ND_VAR:
+            // グローバル変数なら，その番地を返す
             if (expr->sym->location == LOC_GLOBAL) return expr->sym->address;
             break;
+
         // 配列の要素の場合 (ポインタの指す先は実行時に決まるため，配列そのものの要素に限る)
         case ND_ARRAY_ACCESS: {
             const node_t *index = expr->children[0];   // 添字
+            // 添字が整数定数でなければ，番地を求められない
             if (!Analyzer::is_integer_constant(index)) break;
             const long long offset = this->eval_const_expr(index, true).value * type_size_bytes(expr->type, this->struct_defs_);   // 先頭からのバイト数
+
             // 配列変数の要素の場合
             if (expr->children.size() == 1) {
                 // グローバルの配列の要素の場合
@@ -1263,10 +1283,12 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
                     expr->sym->type.is_array
                     // かつ，グローバル変数である
                     && expr->sym->location == LOC_GLOBAL) {
+                    // 配列の番地に，先頭からのバイト数を足して返す
                     return expr->sym->address + offset;
                 }
                 break;
             }
+
             const node_t *base = expr->children[1];   // 添字を付ける基底の式
             // メンバ配列の要素の場合
             if (
@@ -1274,18 +1296,23 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
                 base->kind == ND_MEMBER_ACCESS
                 // かつ，そのメンバが配列である (ポインタでない)
                 && base->type.is_array) {
+                // メンバ配列の番地に，先頭からのバイト数を足して返す
                 return this->eval_global_lvalue_address(base, loc) + offset;
             }
             break;
         }
+
         // 構造体のメンバの場合
         case ND_MEMBER_ACCESS: {
             const node_t *base = expr->children[0];   // メンバが属する構造体の式
+
             // 構造体変数のメンバの場合 (名前解決が，メンバの番地を持つシンボルを合成している)
             if (base->kind == ND_VAR) {
+                // グローバル変数のメンバなら，その番地を返す
                 if (expr->sym->location == LOC_GLOBAL) return expr->sym->address;
                 break;
             }
+
             // 構造体配列の要素のメンバの場合 (配列の番地 + 添字 × 構造体1個分のバイト数 + メンバの位置)
             if (base->kind == ND_ARRAY_ACCESS && base->children.size() == 1) {
                 const symbol_t *array = base->sym;          // 構造体配列のシンボル
@@ -1302,13 +1329,17 @@ long long Analyzer::eval_global_lvalue_address(const node_t *expr, const loc_t &
                 }
                 const long long stride = this->struct_defs_.at(array->type.struct_name).total_words * 4;              // 構造体1個分のバイト数
                 const long long member_offset = this->find_member(array->type.struct_name, expr).offset_words * 4;   // メンバの位置
+                // 要素の番地に，メンバの位置を足して返す
                 return array->address + this->eval_const_expr(index, true).value * stride + member_offset;
             }
             break;
         }
+
         default:
             break;
     }
+
+    // どの形にも当たらない式は，番地をコンパイル時に求められないためエラーにする
     throw asm_input_error(loc);
 }
 
