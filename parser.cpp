@@ -1195,27 +1195,31 @@ std::vector<node_t *> Parser::parse_enum_decl() {
     // } が来るまで列挙子を繰り返し読む
     while (!this->token_kind_is(TK_RBRACE)) {
         node_t *enumerator = this->new_node(ND_VAR_DECL);   // 列挙子の宣言
-        enumerator->type.is_const = true;
-        enumerator->sval = this->get_token(TK_IDENT).value;
+        enumerator->type.is_const = true;                     // 列挙子はconst intとして扱う (値の埋め込み・書き換えの禁止をconst変数と共有する)
+        enumerator->sval = this->get_token(TK_IDENT).value;   // 列挙子の名前
 
         // 列挙子の値を表す初期化子を，明示した値・先頭の列挙子・それ以外の場合に分けて作る
         node_t *init;   // 列挙子の初期化子
         // 値を明示した場合
         if (this->token_kind_is(TK_ASSIGN)) {
+            // =の後ろの定数式を初期化子にする (定数式かどうかは意味解析で検査する)
             this->get_token();
             init = this->parse_expr();
         }
         // 値を省略した先頭の列挙子の場合
         else if (prev_name.empty()) {
+            // 値0の整数リテラルを初期化子にする
             init = this->new_node(ND_INT_LIT);
             init->loc = enumerator->loc;
         }
         // 値を省略した2つ目以降の列挙子の場合
         else {
+            // 直前の列挙子の値に1を足す初期化子にする
             init = this->new_node(ND_ENUM_NEXT);
             init->sval = prev_name;
             init->loc = enumerator->loc;
         }
+        // 初期化子を持たせた列挙子の宣言を返す並びへ加え，次の列挙子から直前の列挙子として参照できるよう名前を控える
         enumerator->children.push_back(init);
         result.push_back(enumerator);
         prev_name = enumerator->sval;

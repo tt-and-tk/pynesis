@@ -182,7 +182,7 @@ private:
     // (register_struct_varと同じく，シンボル表への格納はグローバル/ローカルの区別を知る呼び出し元が行う)
     symbol_t *register_const_var(const node_t *decl);
     // 型に構造体名が現れる場合(ポインタの指す先・関数ポインタの引数と戻り値を含む)，その構造体が定義済みであることを確かめる
-    void check_type_exists(const type_t &type, const loc_t &loc) const;
+    void check_struct_exists(const type_t &type, const loc_t &loc) const;
     // mainの定義が，出力先で許す形(ROMはvoid main(void)，実行ファイルはint main(void)かint main(int, char **))であることを確かめる
     void check_main_signature(const node_t *func) const;
     // ポインタ型のグローバル変数の初期化子が，コンパイル時に値が決まる番地の式であることを確かめる

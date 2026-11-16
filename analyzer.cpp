@@ -410,7 +410,7 @@ void Analyzer::check_enum_name(const type_t &type, const loc_t &loc) const {
 // 構造体型なら構造体定義を解決し，配列なら要素数を文字列リテラルの長さ，または定数式から計算して畳み込む
 void Analyzer::resolve_decl_type(node_t *decl) {
     // 型に現れる構造体が定義済みか確認する
-    this->check_type_exists(decl->type, decl->loc);
+    this->check_struct_exists(decl->type, decl->loc);
     // 構造体そのものの場合 (メンバ構成が確定しないとサイズを求められないため，先に構造体定義を解決する．
     //  構造体へのポインタは1ワードの番地であり，指す先の定義は解決しない．解決すると，自身を指すメンバ
     //  (struct Node *next)を持つ構造体の定義が自身に依存する循環になるため)
@@ -624,7 +624,7 @@ void Analyzer::collect_globals() {
                 child->sym = sym;
             } else if (is_pointer_value(child->type)) {
                 // ポインタ変数: 型に構造体が現れる場合はその定義が済んでいるか確かめ，1ワードを割り当てて登録する
-                this->check_type_exists(child->type, child->loc);
+                this->check_struct_exists(child->type, child->loc);
                 symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
                                              this->alloc_var(4, LOC_GLOBAL), true, true};
                 this->symbols_[child->sval] = sym;
@@ -671,14 +671,14 @@ void Analyzer::collect_globals() {
                 this->check_main_signature(child);
             }
             // 戻り値型に構造体が現れる場合はその定義が済んでいるか確かめる
-            this->check_type_exists(child->type, child->loc);
+            this->check_struct_exists(child->type, child->loc);
             auto sig = std::make_shared<func_sig_t>();   // この関数のシグネチャ
             sig->return_type = child->type;
             std::vector<const symbol_t *> params;
             for (size_t i = 0; i + 1 < child->children.size(); i++) {
                 node_t *param = child->children[i];
                 // 引数の型に構造体が現れる場合はその定義が済んでいるか確かめる
-                this->check_type_exists(param->type, param->loc);
+                this->check_struct_exists(param->type, param->loc);
 
                 // 同一関数内での引数名重複はエラー
                 for (const symbol_t *p : params) {
@@ -924,7 +924,7 @@ int type_size_bytes(const type_t &type, const std::map<std::string, struct_def_t
 
 // 型に構造体名が現れる場合，その構造体が定義済みであることを確かめる (現れなければ何もしない)
 // ポインタの指す先の構造体は宣言時に定義を解決しないため，名前が存在することだけをここで確かめる
-void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
+void Analyzer::check_struct_exists(const type_t &type, const loc_t &loc) const {
     // 構造体型(構造体へのポインタを含む)で，その構造体が定義されていない場合
     if (type.base == BASE_STRUCT && this->struct_decl_nodes_.count(type.struct_name) == 0) {
         throw std::string("compiler error: use of undeclared struct '") + type.struct_name
@@ -932,9 +932,9 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
     }
     // 関数ポインタの場合 (戻り値型・引数型にも構造体へのポインタが現れうる)
     if (type.base == BASE_FUNC) {
-        this->check_type_exists(type.func_sig->return_type, loc);
+        this->check_struct_exists(type.func_sig->return_type, loc);
         for (const type_t &param_type : type.func_sig->param_types) {
-            this->check_type_exists(param_type, loc);
+            this->check_struct_exists(param_type, loc);
         }
     }
 }
@@ -1489,7 +1489,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         decl->sym = sym;
     } else {
         // スカラー変数(ポインタを含む): 指す先の構造体が定義済みか確かめる
-        this->check_type_exists(decl->type, decl->loc);
+        this->check_struct_exists(decl->type, decl->loc);
         // 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
         if (!decl->children.empty()) {
             // 初期化子を値として検査し，名前解決と型注釈を行う
@@ -2000,7 +2000,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + type_to_string(expr->type) + "' (function pointer types differ) at " + loc_to_string(expr->loc);
             }
             // キャストした型に構造体名が現れる場合は，その構造体が定義済みであることを確かめる
-            this->check_type_exists(expr->type, expr->loc);
+            this->check_struct_exists(expr->type, expr->loc);
             return;
         }
 
