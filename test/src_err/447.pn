@@ -1,0 +1,5 @@
+// expect: compiler error: expected identifier but got ',' at src_err/447.pn:3
+// 構文エラー: 列挙子の間のカンマが2つ続いている (異常系)
+enum Color { RED,, BLUE };
+void main(void) {
+}

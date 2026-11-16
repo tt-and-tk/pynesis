@@ -1,0 +1,6 @@
+// expect: compiler error: cannot take the address of 'RED' (it has no memory address) at src_err/442.pn:5
+// 意味エラー: 列挙子の番地を取っている (異常系)
+enum Color { RED };
+void main(void) {
+    int *p = &RED;
+}

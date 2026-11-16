@@ -136,6 +136,7 @@ private:
     std::map<std::string, std::vector<type_t>> indirect_call_types_;  // 関数ポインタを通した呼び出しを含む関数(呼び出し元)の名前→呼び出した関数ポインタの型の並び
     std::map<std::string, node_t *> global_var_decls_;   // グローバル変数名(const変数を含む)→宣言ノード (宣言順によらず型・値を解決する)
     std::map<std::string, node_t *> struct_decl_nodes_;  // 構造体名→構造体定義ノード (宣言順によらずメンバ構成を解決する)
+    std::set<std::string> enum_names_;                   // 定義済みの列挙型名 (構造体名と同じ名前空間にある)
     std::set<const node_t *> resolving_decls_;           // 型・値を解決中の宣言ノード (循環参照の検出用)
     int local_size_;                                     // 現在解析中の関数のローカル変数領域に確保済みのバイト数
     std::vector<std::map<std::string, const symbol_t *>> scopes_;  // ローカル変数のスコープスタック (内側ほど後ろ)
@@ -148,6 +149,10 @@ private:
     void collect_static_names();                            // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
     void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
     void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
+    // 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
+    // (列挙型はintと同じに扱い，以降の検査で型を区別しないため，型を参照する経路によらずここでまとめて確かめる)
+    void check_enum_names(const node_t *node) const;
+    void check_enum_name(const type_t &type, const loc_t &loc) const;  // 型(関数ポインタの戻り値型・引数型を含む)に現れる列挙型名が定義済みであることを確かめる
     void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値・asm文の入力)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す

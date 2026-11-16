@@ -1,0 +1,5 @@
+// expect: compiler error: value of const variable 'A' is out of range for its type at src_err/417.pn:3
+// 意味エラー: 明示した列挙子の値がintの範囲を超えている (異常系)
+enum { A = 0x80000000 };
+void main(void) {
+}

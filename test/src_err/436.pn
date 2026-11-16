@@ -1,0 +1,5 @@
+// expect: compiler error: redefinition of 'SP' at src_err/436.pn:3
+// 意味エラー: ハードウェア変数と同じ名前の列挙子を定義している (異常系)
+enum Reg { SP };
+void main(void) {
+}

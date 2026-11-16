@@ -1,0 +1,49 @@
+// enum 列挙型名は，intと同じ型として，intを書ける場所に書ける
+// - グローバル変数・配列・構造体のメンバ・const変数・staticを付けたグローバル変数・関数ポインタ・引数・戻り値・ローカル変数・キャスト・sizeof
+// - 列挙型へのポインタとintへのポインタ，列挙型を使う関数ポインタとintを使う関数ポインタは，それぞれ同じ型として代入できる
+// - 列挙子でない値も格納できる
+// - 列挙型を定義より前に参照でき，列挙型名と同じ名前の列挙子を定義できる
+// - ローカル変数で列挙子をシャドーイングできる
+enum Color g = GREEN;               // 1
+enum Color colors[2];
+struct Pixel {
+    enum Color color;
+    int level;
+};
+struct Pixel px;
+const enum Color FIRST = BLUE;      // 2
+static enum Color hidden;
+enum Color (*fp)(enum Color);
+int r1;
+int r2;
+int r3;
+int r4;
+int r5;
+int r6;
+
+enum Color next(enum Color c) {
+    return c + 1;
+}
+
+void main(void) {
+    enum Color c = BLUE;
+    int *p = &c;
+    enum Color *q = p;
+    int (*f)(int) = next;
+    fp = f;
+    px.color = *q;                  // 2
+    colors[1] = (enum Color)7;      // 7
+    hidden = FIRST;                 // 2
+    r1 = sizeof(enum Color);        // 4
+    r2 = sizeof(enum Color *);      // 4
+    r3 = sizeof(RED);               // 4
+    r4 = fp(GREEN);                 // 2
+    {
+        int RED = 9;
+        r5 = RED;                   // 9
+    }
+    r6 = Mode;                      // 0
+}
+
+enum Color { RED, GREEN, BLUE };
+enum Mode { Mode };

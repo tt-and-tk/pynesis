@@ -1,0 +1,5 @@
+// expect: compiler error: static cannot be applied to enum definition at src_err/439.pn:3
+// 構文エラー: 列挙型の定義にstaticを付けている (異常系)
+static enum Color { RED };
+void main(void) {
+}

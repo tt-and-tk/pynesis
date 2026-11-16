@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/422.pn:3
+// 意味エラー: 未定義の列挙型をsizeofに書いている (異常系)
+int g = sizeof(enum Color);
+void main(void) {
+}

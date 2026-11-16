@@ -34,6 +34,8 @@ typedef struct type_t {
     // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
     // メンバの型としてbase==BASE_STRUCTが現れることはそもそもない
     std::string struct_name;
+    // 列挙型名 (enum 列挙型名と書いた型のときのみ空でない．型としてはintと同じに扱い，列挙型の定義の有無の検査にだけ使う)
+    std::string enum_name;
     // const修飾されているかどうか (constを付けられない対象への付与は構文解析でエラーにする)
     bool is_const = false;
     // ポインタの段数 (`*`の個数．0ならポインタでない)
@@ -70,6 +72,9 @@ typedef enum {
     // 宣言
     ND_VAR_DECL,    // 変数宣言
     ND_STRUCT_DECL, // 構造体定義 (svalに構造体名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
+    // 列挙型の定義 (svalに列挙型名．列挙子は，定義の後ろに並べたconst intの変数宣言(ND_VAR_DECL)で表す．
+    //  無名の列挙型は，列挙型名で参照されることがないため，このノードを作らず列挙子の変数宣言だけを並べる)
+    ND_ENUM_DECL,
     // 制御構文
     ND_IF,          // if文
     ND_WHILE,       // while文
@@ -98,6 +103,7 @@ typedef enum {
     ND_CHAR_LIT,    // 文字リテラル
     ND_STRING_LIT,  // 文字列リテラル (svalに引用符なしの文字列内容を格納)
     ND_NULLPTR,     // 組み込み定数nullptr
+    ND_ENUM_NEXT,   // 値を省略した列挙子の初期化子 (svalに直前の列挙子の名前を持ち，その値に1を足した値を表す)
     ND_VAR,         // 変数参照
     ND_FUNC_ADDR,   // 関数の番地 (svalに関数名．式に書かれた関数名を意味解析が置き換える)
     ND_ADDR_OF,     // 番地の取得 &x (children: [番地を取る式])
@@ -182,6 +188,9 @@ private:
     // 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
     std::vector<node_t *> parse_struct_decl();
     node_t *parse_struct_member();  // 構造体メンバ宣言 (型 名前 [配列サイズ] ;)
+    // 列挙型の定義 enum [列挙型名] { 列挙子 [= 定数式], ... [,] } ;
+    // 戻り値: 列挙型名があれば[0]に列挙型の定義(ND_ENUM_DECL)を置き，続けて列挙子ごとのconst intの変数宣言(ND_VAR_DECL)を並べる
+    std::vector<node_t *> parse_enum_decl();
     node_t *parse_return();     // return文
     node_t *parse_if();         // if文 (else if / else を含む)
     node_t *parse_while();      // while文

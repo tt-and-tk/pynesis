@@ -144,10 +144,10 @@ node_t *Parser::new_node(node_kind_t kind) {
 // 型の先頭になりうるトークン種別(型キーワード・修飾子)かどうか返す
 bool Parser::is_type_start(token_kind_t kind) {
     return kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_VOID
-        || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT || kind == TK_CONST;
+        || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT || kind == TK_ENUM || kind == TK_CONST;
 }
 
-// 現在位置から始まる型(const・符号修飾子・型キーワードまたはstruct 構造体名・ポインタの*)が占めるトークン数を返す
+// 現在位置から始まる型(const・符号修飾子・型キーワード(struct 構造体名・enum 列挙型名を含む)・ポインタの*)が占めるトークン数を返す
 // 宣言の種類(関数定義か変数宣言か)を，型を読み進める前に判定するために使う
 int Parser::count_type_tokens() const {
     int offset = 0;   // 現在位置から数えたトークン数
@@ -156,9 +156,10 @@ int Parser::count_type_tokens() const {
     const token_kind_t sign_kind = this->peek_kind_ahead(offset);   // 符号修飾子がありうる位置のトークン種別
     // 符号修飾子がある場合
     if (sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED) offset++;
-    // 構造体型は構造体名の分も数える
-    if (this->peek_kind_ahead(offset) == TK_STRUCT) offset++;
-    offset++;   // 型キーワード(構造体型なら構造体名)
+    const token_kind_t keyword_kind = this->peek_kind_ahead(offset);   // 型キーワードがありうる位置のトークン種別
+    // 構造体型・列挙型は，続く構造体名・列挙型名の分も数える
+    if (keyword_kind == TK_STRUCT || keyword_kind == TK_ENUM) offset++;
+    offset++;   // 型キーワード(構造体型・列挙型なら構造体名・列挙型名)
     // ポインタの*を数える
     while (this->peek_kind_ahead(offset) == TK_STAR) offset++;
     return offset;
@@ -250,6 +251,14 @@ type_t Parser::parse_base_type(bool allow_void) {
         return type;
     }
 
+    // 列挙型: enum 列挙型名 (intと同じ型として扱う)
+    if (this->token_kind_is(TK_ENUM)) {
+        this->get_token();
+        type.base = BASE_INT;
+        type.enum_name = this->get_token(TK_IDENT).value;
+        return type;
+    }
+
     // void型 (関数の戻り値型でのみ許可する)
     if (allow_void && this->token_kind_is(TK_VOID)) {
         type.base = BASE_VOID;
@@ -282,10 +291,11 @@ node_t *Parser::parse_program() {
         // 宣言の先頭のstaticを読む (付いていれば，続く宣言を参照できる範囲を宣言したファイルの中に限る)
         const bool is_static = this->token_kind_is(TK_STATIC);  // staticが付いているか
         if (is_static) this->get_token();
-        const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;   // struct の直後に構造体名があるか
+        const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;   // struct・enumの直後に構造体名・列挙型名があるか
+        const bool is_definition = this->peek_kind_ahead(has_tag ? 2 : 1) == TK_LBRACE;   // 構造体名・列挙型名(無名ならstruct・enum)の直後が'{'か
         // 構造体定義の場合 (構造体名の直後，無名構造体ならstructキーワードの直後が'{')
         // 名前のみ／名前+即座の変数宣言／無名構造体+即座の変数宣言のいずれも，parse_struct_declが一括して構文解析する
-        if (this->token_kind_is(TK_STRUCT) && this->peek_kind_ahead(has_tag ? 2 : 1) == TK_LBRACE) {
+        if (this->token_kind_is(TK_STRUCT) && is_definition) {
             // staticを付けた場合 (構造体名には付けられず，定義と同時に宣言する変数だけに付くのか紛らわしいため，
             //  変数にstaticを付けるには定義と変数の宣言を分けて書かせる)
             if (is_static) {
@@ -294,6 +304,18 @@ node_t *Parser::parse_program() {
             }
             // 構造体定義と，それと同時に宣言した変数の宣言を，順にプログラムの要素へ加える
             for (node_t *decl : this->parse_struct_decl()) {
+                node->children.push_back(decl);
+            }
+        }
+        // 列挙型の定義の場合 (列挙型名の直後，無名の列挙型ならenumキーワードの直後が'{')
+        else if (this->token_kind_is(TK_ENUM) && is_definition) {
+            // staticを付けた場合 (列挙型名と列挙子はプログラム全体で共有するため，構造体定義と同じく付けられない)
+            if (is_static) {
+                throw std::string("compiler error: static cannot be applied to enum definition at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
+            // 列挙型の定義と列挙子の宣言を，順にプログラムの要素へ加える
+            for (node_t *decl : this->parse_enum_decl()) {
                 node->children.push_back(decl);
             }
         }
@@ -413,6 +435,15 @@ node_t *Parser::parse_stmt() {
             }
             // ここでエラーにならなければ，struct 構造体名 変数名; (既存の構造体定義を使った変数宣言)であり，
             // 通常の変数宣言と同じくparse_var_declに処理を委ねてよい
+        }
+        // enum [列挙型名] { ... : 列挙型の定義はグローバル直下でのみ許可する
+        if (this->token_kind_is(TK_ENUM)) {
+            const bool has_tag = this->peek_kind_ahead(1) == TK_IDENT;   // enumの直後に列挙型名があるか
+            // 列挙型名(無名ならenumキーワード)の直後が'{'の場合
+            if (this->peek_kind_ahead(has_tag ? 2 : 1) == TK_LBRACE) {
+                throw std::string("compiler error: enum definition is only allowed at global scope at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
         }
         return this->parse_var_decl();
     }
@@ -732,7 +763,7 @@ node_t *Parser::parse_mode_switch() {
 
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
-// 型名は整数型(符号修飾子付きを含む)のみ．型名の場合はnode->typeに型を格納し(children空)，
+// 型名は整数型(符号修飾子付き・列挙型を含む)のみ．型名の場合はnode->typeに型を格納し(children空)，
 // 変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
 node_t *Parser::parse_sizeof() {
     node_t *node = this->new_node(ND_SIZEOF);
@@ -740,8 +771,8 @@ node_t *Parser::parse_sizeof() {
     this->get_token(TK_LPAREN);                      // (
 
     const token_kind_t kind = this->peek_token().kind;
-    // 整数型キーワード(符号修飾子付きを含む)なら型名として読む
-    if (kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_SIGNED || kind == TK_UNSIGNED) {
+    // 整数型キーワード(符号修飾子付き・列挙型を含む)なら型名として読む
+    if (kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_ENUM) {
         node->type = this->parse_type(false);
     } else {
         // 型名でなければ変数名として解析する (意味解析で型を確定する)
@@ -1134,6 +1165,67 @@ std::vector<node_t *> Parser::parse_struct_decl() {
         throw std::string("compiler error: anonymous struct must declare a variable at ")
               + loc_to_string(this->peek_token().loc);
     }
+
+    this->get_token(TK_SEMICOLON);
+    return result;
+}
+
+// 列挙型の定義を解析する
+// 構文: enum [列挙型名] { 列挙子 [= 定数式], ... [,] } ;
+// 列挙子は，値を省略すると先頭なら0，それ以外は直前の列挙子の値に1を足した値になるconst intの変数として宣言する
+// 戻り値: 列挙型名があれば[0]に列挙型の定義(ND_ENUM_DECL)を置き，続けて列挙子ごとの変数宣言(ND_VAR_DECL)を並べる
+std::vector<node_t *> Parser::parse_enum_decl() {
+    node_t *decl = this->new_node(ND_ENUM_DECL);   // 列挙型の定義
+    this->get_token(TK_ENUM);
+    std::vector<node_t *> result;                   // 返す宣言の並び
+
+    // 列挙型名がある場合 (無名の列挙型は列挙型名で参照されないため，定義のノードを返さない)
+    if (this->token_kind_is(TK_IDENT)) {
+        decl->sval = this->get_token().value;
+        result.push_back(decl);
+    }
+
+    this->get_token(TK_LBRACE);   // 開き波括弧
+    // 列挙子が1つもない場合
+    if (this->token_kind_is(TK_RBRACE)) {
+        throw std::string("compiler error: enum must have at least one enumerator at ")
+              + loc_to_string(this->peek_token().loc);
+    }
+    std::string prev_name;   // 直前の列挙子の名前 (先頭の列挙子を読む前は空)
+    // } が来るまで列挙子を繰り返し読む
+    while (!this->token_kind_is(TK_RBRACE)) {
+        node_t *enumerator = this->new_node(ND_VAR_DECL);   // 列挙子の宣言
+        enumerator->type.is_const = true;
+        enumerator->sval = this->get_token(TK_IDENT).value;
+
+        // 列挙子の値を表す初期化子を，明示した値・先頭の列挙子・それ以外の場合に分けて作る
+        node_t *init;   // 列挙子の初期化子
+        // 値を明示した場合
+        if (this->token_kind_is(TK_ASSIGN)) {
+            this->get_token();
+            init = this->parse_expr();
+        }
+        // 値を省略した先頭の列挙子の場合
+        else if (prev_name.empty()) {
+            init = this->new_node(ND_INT_LIT);
+            init->loc = enumerator->loc;
+        }
+        // 値を省略した2つ目以降の列挙子の場合
+        else {
+            init = this->new_node(ND_ENUM_NEXT);
+            init->sval = prev_name;
+            init->loc = enumerator->loc;
+        }
+        enumerator->children.push_back(init);
+        result.push_back(enumerator);
+        prev_name = enumerator->sval;
+
+        // 閉じ波括弧の前でなければ，列挙子の区切りのカンマを読む (最後の列挙子の後ろのカンマは省ける)
+        if (!this->token_kind_is(TK_RBRACE)) {
+            this->get_token(TK_COMMA);
+        }
+    }
+    this->get_token(TK_RBRACE);   // 閉じ波括弧
 
     this->get_token(TK_SEMICOLON);
     return result;

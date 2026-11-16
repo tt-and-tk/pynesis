@@ -1,0 +1,5 @@
+// expect: compiler error: expected ';' but got 'c' at src_err/445.pn:3
+// 構文エラー: 列挙型の定義と同時に変数を宣言している (異常系)
+enum Color { RED } c;
+void main(void) {
+}
