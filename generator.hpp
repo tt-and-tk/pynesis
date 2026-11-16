@@ -14,7 +14,7 @@ const std::string RAX_REGISTER = "r30";
 const std::string SP_REGISTER = "r16";
 // ハードウェア制約: スタックポインタ(SP)のレジスタの番地 (SPのハードウェア変数を見分けるために使う)
 const int SP_ADDRESS = 0x10;
-// ヌルポインタの値 (メモリの番地にもPCの値にもならない値のため，指す先の読み書きと呼び出しをCPUが例外として検出する)
+// ヌルポインタの値 (メモリの番地とPCの値のどちらにもならない値のため，指す先の読み書きと呼び出しをCPUが例外として検出する)
 const long long NULLPTR_VALUE = 0x80000000LL;
 
 // 注釈付きASTと意味解析の結果を受け取り，アセンブリコードを生成するジェネレータ
