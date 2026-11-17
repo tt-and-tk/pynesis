@@ -1,0 +1,58 @@
+.global is_null, is_null_func, main
+
+main:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    mov fh r0 r0 80000000h
+    wmr fh r16 r0 -8
+    call is_null_func
+    mov fh r30 r0
+    wmr fh r16 r0 0
+    mov fh r0 r0 80000000h
+    wmr fh r16 r0 -8
+    call is_null
+    mov fh r30 r0
+    wm fh r0 r0 0
+    rmr fh r16 r0 0
+    wm fh r0 r0 4
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+is_null:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 80000000h
+    eq r0 r1 .L0
+    mov fh r0 r0 0
+    jmp .L1
+.L0:
+    mov fh r0 r0 1
+.L1:
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+
+is_null_func:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 80000000h
+    eq r0 r1 .L2
+    mov fh r0 r0 0
+    jmp .L3
+.L2:
+    mov fh r0 r0 1
+.L3:
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
