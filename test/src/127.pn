@@ -1,0 +1,19 @@
+// 関数の引数へのnullptr: データを指すポインタの引数と関数ポインタの引数のどちらにも渡せる
+// 呼び出し側は，引数へnullptrの値(80000000h)を書き込む
+// 呼び出した関数側では，受け取った引数がnullptrと等しいため，比較は真になる
+int r1;
+int r2;
+
+int is_null(int *p) {
+    return p == nullptr;
+}
+
+int is_null_func(int (*f)(int)) {
+    return f == nullptr;
+}
+
+void main(void) {
+    int local = is_null_func(nullptr);    // 1
+    r1 = is_null(nullptr);                // 1
+    r2 = local;                           // 1
+}
