@@ -1,5 +1,5 @@
 // expect: compiler error: expression must be a constant expression at src_err/418.pn:3
-// 意味解析エラー: グローバルのchar配列のサイズに文字列リテラルは書けず，文字列で初期化した配列にもならない (異常系)
+// 意味解析エラー: グローバルのchar配列のサイズに書いた文字列リテラルは，サイズの式として扱い，定数式でないことをエラーにする (異常系)
 char buf["abc"];
 void main(void) {
 }
