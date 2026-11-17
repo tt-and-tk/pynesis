@@ -199,7 +199,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
     }
 
     // 5パス目: 各関数本体を検査する
-    // (analyze_expr内のND_CALLケースとasm文の検査が，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
+    // (関数呼び出しの式とasm文の検査が，通りがけに全関数の呼び出し先を呼び出しグラフへ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
 
