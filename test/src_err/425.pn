@@ -1,0 +1,5 @@
+// expect: compiler error: expected ';' but got '=' at src_err/425.pn:3
+// 構文解析エラー: サイズを書いたグローバルのchar配列は，文字列リテラルで初期化できない (異常系)
+char buf[8] = "abc";
+void main(void) {
+}
