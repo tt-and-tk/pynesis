@@ -149,11 +149,11 @@ private:
     void collect_static_names();                            // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
     void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
     void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
-    // 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
+    // 3パス目: 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
     // (列挙型はintと同じに扱い，以降の検査で型を区別しないため，型を参照する経路によらずここでまとめて確かめる)
     void check_enum_names(const node_t *node) const;
     void check_enum_name(const type_t &type, const loc_t &loc) const;  // 型(関数ポインタの戻り値型・引数型を含む)に現れる列挙型名が定義済みであることを確かめる
-    void collect_globals();                                 // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
+    void collect_globals();                                 // 4パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集
     // 定数式をコンパイル時に計算する (初期化子・配列サイズ・case値・asm文の入力)
     // 実行時の演算と同じく，整数昇格と符号の規則に従い32ビットで折り返した値を返す
     // sizeof(変数名)の解決にシンボルテーブル参照が必要なため非static
@@ -195,7 +195,7 @@ private:
     static bool is_static_lvalue(const node_t *expr);
     // 値がコンパイル時に決まる整数の式かを返す (名前解決・定数の埋め込みを終えた式を対象にする)
     static bool is_integer_constant(const node_t *expr);
-    void analyze_functions();                               // 4パス目: 各関数本体を検査する
+    void analyze_functions();                               // 5パス目: 各関数本体を検査する
     void analyze_block(node_t *block);                      // ブロックを検査する (新しいスコープを積む)
     void analyze_stmt(node_t *stmt);                        // 文を検査する
     void analyze_switch(node_t *stmt);                      // switch文を検査する

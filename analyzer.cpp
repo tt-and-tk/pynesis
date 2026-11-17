@@ -185,10 +185,10 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 
     // 2パス目: staticの名前を一意な名前へ置き換えながら，グローバル宣言の索引を作り，名前の重複を検査する
     this->index_global_decls();
-    // 型に現れる列挙型名が定義済みか確かめる (列挙型名は宣言順によらず参照できるため，すべての定義を索引に加えた後に行う)
+    // 3パス目: 型に現れる列挙型名が定義済みか確かめる (列挙型名は宣言順によらず参照できるため，すべての定義を索引に加えた後に行う)
     this->check_enum_names(this->root_);
 
-    // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+    // 4パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
     // ポインタ型のグローバル変数の初期化子を検査する (後方で宣言された変数・関数の番地も使えるよう，全グローバル変数の登録後に行う)
     this->check_global_pointer_inits();
@@ -198,7 +198,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 4パス目: 各関数本体を検査する
+    // 5パス目: 各関数本体を検査する
     // (analyze_expr内のND_CALLケースとasm文の検査が，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
@@ -380,9 +380,10 @@ void Analyzer::check_static_in_includer(const node_t *decl) const {
     }
 }
 
-// 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
+// 3パス目: 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
 // 意味解析が型を注釈する前に呼ぶため，ほかのノードの型は列挙型名を持たない
 void Analyzer::check_enum_names(const node_t *node) const {
+    // このノードの型を確かめる
     this->check_enum_name(node->type, node->loc);
     // 子を順に確かめる (for文の省いた初期化部・条件部・更新部は空の子として並ぶため飛ばす)
     for (const node_t *child : node->children) {
@@ -399,7 +400,9 @@ void Analyzer::check_enum_name(const type_t &type, const loc_t &loc) const {
     }
     // 関数ポインタの場合 (戻り値型・引数型にも列挙型が現れうる)
     if (type.base == BASE_FUNC) {
+        // 戻り値型を確かめる
         this->check_enum_name(type.func_sig->return_type, loc);
+        // 引数型を宣言順に確かめる
         for (const type_t &param_type : type.func_sig->param_types) {
             this->check_enum_name(param_type, loc);
         }
@@ -602,7 +605,7 @@ long long Analyzer::const_symbol_value(const symbol_t *sym) {
     return sym->address;
 }
 
-// 3パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+// 4パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
 // 後方の宣言が先に参照された場合，その宣言はこの走査で到達するより前に参照した時点で解決済みになっている
 // (名前の重複はグローバル宣言の索引を作る際に検査済み)
@@ -1089,7 +1092,7 @@ bool Analyzer::is_integer_constant(const node_t *expr) {
     }
 }
 
-// 4パス目: 各関数本体を検査する
+// 5パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (引数がなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
