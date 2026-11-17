@@ -1,0 +1,5 @@
+// expect: compiler error: expression must be a constant expression at src_err/419.pn:4
+// 意味解析エラー: ローカルのchar配列のサイズに文字列リテラルは書けず，文字列で初期化した配列にもならない (異常系)
+void main(void) {
+    char buf["abc"];
+}
