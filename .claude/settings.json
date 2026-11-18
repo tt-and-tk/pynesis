@@ -10,6 +10,7 @@
   "enabledPlugins": {
     "for-pynthesis-skills@for-pynthesis-skills": true
   },
+  "autoMemoryEnabled": false,
   "permissions": {
     "defaultMode": "auto",
     "ask": [
