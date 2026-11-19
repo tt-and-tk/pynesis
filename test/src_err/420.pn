@@ -1,0 +1,5 @@
+// expect: compiler error: expression must be a constant expression at src_err/420.pn:4
+// 意味解析エラー: int配列のサイズに文字列リテラルは書けず，サイズが定数式でないことを報告する (異常系)
+void main(void) {
+    int t["ab"];
+}

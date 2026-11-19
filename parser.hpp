@@ -68,7 +68,7 @@ typedef enum {
     ND_FUNC_DEF,    // 関数定義
     ND_BLOCK,       // ブロック文 { ... }
     // 宣言
-    ND_VAR_DECL,    // 変数宣言
+    ND_VAR_DECL,    // 変数宣言 (childrenに，配列ならサイズの式か初期化子の文字列リテラル，スカラーなら初期化式を格納)
     ND_STRUCT_DECL, // 構造体定義 (svalに構造体名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
     // 制御構文
     ND_IF,          // if文
@@ -126,6 +126,9 @@ struct node_t {
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
     bool is_static = false;         // staticを付けた宣言か (staticはグローバル変数宣言・関数定義にだけ書けるため，ほかのノードでは常にfalse)
+    // サイズを省いた配列の宣言か (省いた場合，子は初期化子の文字列リテラル．配列の宣言以外のノードでは常にfalse)
+    // 子の種類では判定しない．サイズの式にも文字列リテラルを書けてしまい，初期化子と区別できないため
+    bool is_size_omitted = false;
     const symbol_t *sym = nullptr;  // 名前解決の結果 (ND_VAR等がどの宣言を指すか，意味解析後に確定)
     // 配列を値の位置(代入の右辺・引数等)に書いた式か (意味解析後に確定)
     // trueならtypeは先頭要素へのポインタであり，コード生成は先頭の番地を値として求める．falseなら式の値そのものを求める

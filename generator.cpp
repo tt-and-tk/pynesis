@@ -455,9 +455,9 @@ void Generator::gen_var_decl(node_t *decl) {
     // const変数はメモリを持たず，参照箇所へ値が埋め込み済みのため何も出力しない
     if (decl->type.is_const) return;
 
-    // 配列宣言: 文字列リテラルによる初期化のみ対応 (サイズ指定のみの宣言はスキップ)
+    // 配列宣言: サイズを省いた配列は初期化子の文字列リテラルを書き込む (サイズを書いた配列は初期化子を持たないためスキップ)
     if (decl->type.is_array) {
-        if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
+        if (decl->is_size_omitted) {
             this->gen_string_init(decl->sym, decl->children[0]->sval);
         }
         return;

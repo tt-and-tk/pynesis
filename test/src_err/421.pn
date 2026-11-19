@@ -1,0 +1,7 @@
+// expect: compiler error: expression must be a constant expression at src_err/421.pn:4
+// 意味解析エラー: 構造体のメンバの配列のサイズに文字列リテラルは書けない (異常系)
+struct Entry {
+    char name["abc"];
+};
+void main(void) {
+}
