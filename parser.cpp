@@ -952,7 +952,7 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
 // 構造体型の場合は次の形式のみ許可する．
 //   struct 構造体名 変数名 [= 式];   (単一変数．初期化子は同じ型の構造体を写す元で，ローカル変数だけに書けることは意味解析が検査する)
 //   struct 構造体名 変数名[サイズ];  (配列，サイズは省略不可，初期化子は非対応)
-// 構造体へのポインタはこの制限を受けず，他の型のポインタと同じく初期化子を書ける．
+// 構造体へのポインタは構造体型の形式の制限を受けず，他の型のポインタと同じく初期化子を書ける．
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
 
