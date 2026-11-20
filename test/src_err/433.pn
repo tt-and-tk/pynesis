@@ -1,6 +1,5 @@
-// expect: compiler error: redefinition of 'RED' at src_err/433.pn:4
-// 意味エラー: 別の列挙型の列挙子と同じ名前の列挙子を定義している (異常系)
-enum Color { RED };
-enum Signal { RED };
+// expect: compiler error: use of undeclared enum 'Color' at src_err/433.pn:3
+// 意味エラー: 未定義の列挙型をsizeofに書いている (異常系)
+int g = sizeof(enum Color);
 void main(void) {
 }

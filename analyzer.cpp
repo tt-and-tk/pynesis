@@ -425,8 +425,8 @@ void Analyzer::resolve_decl_type(node_t *decl) {
     //  配列の要素数は正の値に限るため，0は未確定を表す)
     if (!decl->type.is_array || decl->type.array_size > 0) return;
 
-    // 文字列リテラルで初期化されている場合 (要素数は文字列長から決まるため，定数式を計算しない)
-    if (!decl->children.empty() && decl->children[0]->kind == ND_STRING_LIT) {
+    // サイズを省いた配列の場合 (子は初期化子の文字列リテラルであり，要素数は文字列長から決まるため，定数式を計算しない)
+    if (decl->is_size_omitted) {
         // 文字列リテラルによる初期化: char msg[] = "hello";
         // char以外の配列(charへのポインタの配列を含む)の場合
         if (decl->type.base != BASE_CHAR || decl->type.pointer_depth > 0) {

@@ -1,0 +1,6 @@
+// expect: compiler error: static 'RED' conflicts with declaration in included file 'src_err/include/460_lib.pn' at src_err/460.pn:4
+// 意味エラー: 取り込んだファイルの列挙子と同じ名前のstaticを付けたグローバル変数を宣言している (異常系)
+#include "include/460_lib.pn"
+static int RED;
+void main(void) {
+}

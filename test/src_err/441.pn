@@ -1,6 +1,6 @@
-// expect: compiler error: 'RED' is not writable at src_err/441.pn:5
-// 意味エラー: 列挙子へ代入している (異常系)
+// expect: compiler error: use of undeclared struct 'Color' at src_err/441.pn:4
+// 意味エラー: 列挙型名をstructで参照している (異常系)
 enum Color { RED };
+struct Color *p;
 void main(void) {
-    RED = 1;
 }

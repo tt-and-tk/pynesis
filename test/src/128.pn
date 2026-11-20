@@ -1,49 +1,49 @@
-// enum 列挙型名は，intと同じ型として，intを書ける場所に書ける
-// - グローバル変数・配列・構造体のメンバ・const変数・staticを付けたグローバル変数・関数ポインタ・引数・戻り値・ローカル変数・キャスト・sizeof
-// - 列挙型へのポインタとintへのポインタ，列挙型を使う関数ポインタとintを使う関数ポインタは，それぞれ同じ型として代入できる
-// - 列挙子でない値も格納できる
-// - 列挙型を定義より前に参照でき，列挙型名と同じ名前の列挙子を定義できる
-// - ローカル変数で列挙子をシャドーイングできる
-enum Color g = GREEN;               // 1
-enum Color colors[2];
-struct Pixel {
-    enum Color color;
-    int level;
-};
-struct Pixel px;
-const enum Color FIRST = BLUE;      // 2
-static enum Color hidden;
-enum Color (*fp)(enum Color);
+// 列挙子の値: 省略すると先頭は0，それ以外は直前の列挙子の値に1を足した値になる
+// - 値には定数式を書け，後で定義した列挙子・const変数も参照できる
+// - 値の重複・負の値・intの最大値・末尾のカンマを書ける．無名の列挙型も定義できる
+// - 列挙子はconst intの変数と同じく，参照する箇所へ値を埋め込む(グローバル変数の初期化子・配列の要素数・case・asm文の入力にも使える)
+int table[LAST];                // 要素数4
+int g = DONE * 2;               // 12
 int r1;
 int r2;
 int r3;
 int r4;
 int r5;
 int r6;
-
-enum Color next(enum Color c) {
-    return c + 1;
-}
+int r7;
+int r8;
 
 void main(void) {
-    enum Color c = BLUE;
-    int *p = &c;
-    enum Color *q = p;
-    int (*f)(int) = next;
-    fp = f;
-    px.color = *q;                  // 2
-    colors[1] = (enum Color)7;      // 7
-    hidden = FIRST;                 // 2
-    r1 = sizeof(enum Color);        // 4
-    r2 = sizeof(enum Color *);      // 4
-    r3 = sizeof(RED);               // 4
-    r4 = fp(GREEN);                 // 2
-    {
-        int RED = 9;
-        r5 = RED;                   // 9
+    r1 = IDLE;                  // 0
+    r2 = RUNNING;               // 1
+    r3 = WAITING;               // 5
+    r4 = DONE;                  // 6
+    r5 = SAME;                  // 5
+    r6 = NEG;                   // -2
+    r7 = NEG_NEXT;              // -1
+    r8 = BIG;                   // 2147483647
+    switch (r1) {
+        case RUNNING:
+            r1 = 10;
+            break;
+        case DONE:
+            r1 = 20;
+            break;
     }
-    r6 = Mode;                      // 0
+    asm("mov fh r0 r1 %0" : : "i"(WAITING));
 }
 
-enum Color { RED, GREEN, BLUE };
-enum Mode { Mode };
+enum State {
+    IDLE,
+    RUNNING,
+    WAITING = BASE + 3,         // 後で宣言したconst変数を参照する
+    DONE,
+    SAME = WAITING,             // ほかの列挙子と同じ値
+};
+const int BASE = 2;
+enum {
+    NEG = -2,
+    NEG_NEXT,
+    BIG = 2147483647,
+    LAST = DONE - 2             // 別の列挙型の列挙子を参照する
+};

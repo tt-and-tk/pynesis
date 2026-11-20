@@ -1,6 +1,6 @@
-// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/444.pn:4
-// 構文エラー: 列挙型に符号修飾子を付けている (異常系)
+// expect: compiler error: redefinition of 'RED' at src_err/444.pn:4
+// 意味エラー: 別の列挙型の列挙子と同じ名前の列挙子を定義している (異常系)
 enum Color { RED };
-unsigned enum Color c;
+enum Signal { RED };
 void main(void) {
 }

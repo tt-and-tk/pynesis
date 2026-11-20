@@ -939,6 +939,8 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
 
 // 変数宣言を解析してND_VAR_DECLを返す
 // 構文: [const] [signed|unsigned] 型 [*...] 変数名 [= 式] ;
+//       [signed|unsigned] 型 [*...] 変数名[サイズ] ;   (配列)
+//       [signed|unsigned] char 変数名[] = 文字列リテラル ;   (サイズを省いた配列)
 //       戻り値型 (*変数名)(引数型...) [= 式] ;   (関数ポインタ)
 //       戻り値型 (*変数名[サイズ])(引数型...) ;   (関数ポインタの配列)
 // const変数はスカラー型のみで，初期化子を必須とする．
@@ -1029,6 +1031,8 @@ node_t *Parser::parse_var_decl() {
         if (this->token_kind_is(TK_RBRACKET)) {
             // サイズ省略: char msg[] = "hello"; の形式 (サイズは意味解析で文字列長から決定する)
             this->get_token(TK_RBRACKET);       // ]
+            // サイズを省いた配列として記録する (意味解析と生成は，これを見て子を初期化子として扱う)
+            node->is_size_omitted = true;
             this->get_token(TK_ASSIGN);         // =
             // 初期化子が文字列リテラルでなければエラーにする
             // サイズの省略は，初期化する文字列の長さからサイズを決められる場合にだけ認めるため

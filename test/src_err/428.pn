@@ -1,6 +1,5 @@
-// expect: compiler error: redefinition of struct 'Color' as enum at src_err/428.pn:4
-// 意味エラー: 構造体名と同じ名前の列挙型を定義している(列挙型名は構造体名と同じ名前空間にある) (異常系)
-struct Color { int x; };
-enum Color { RED };
+// expect: compiler error: value of const variable 'A' is out of range for its type at src_err/428.pn:3
+// 意味エラー: 明示した列挙子の値がintの範囲を超えている (異常系)
+enum { A = 0x80000000 };
 void main(void) {
 }

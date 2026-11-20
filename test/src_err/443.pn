@@ -1,5 +1,5 @@
-// expect: compiler error: circular reference in declaration of 'A' at src_err/443.pn:3
-// 意味エラー: 値を省略した列挙子を経由して，列挙子の値が自身に依存している (異常系)
-enum { A = C, B, C };
+// expect: compiler error: redefinition of 'RED' at src_err/443.pn:3
+// 意味エラー: 同じ列挙型の中で列挙子の名前が重複している (異常系)
+enum Color { RED, RED };
 void main(void) {
 }

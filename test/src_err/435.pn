@@ -1,8 +1,7 @@
-// expect: compiler error: redefinition of 'f' at src_err/435.pn:4
-// 意味エラー: 関数と同じ名前の列挙子を定義している (異常系)
-enum Color { RED, f };
-int f(void) {
-    return 0;
-}
+// expect: compiler error: use of undeclared enum 'Color' at src_err/435.pn:4
+// 意味エラー: 未定義の列挙型を構造体のメンバに使っている (異常系)
+struct S {
+    enum Color c;
+};
 void main(void) {
 }

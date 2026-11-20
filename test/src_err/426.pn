@@ -1,7 +1,5 @@
-// expect: compiler error: use of undeclared enum 'Color' at src_err/426.pn:3
-// 意味エラー: 未定義の列挙型を関数の戻り値型に使っている (異常系)
-enum Color f(void) {
-    return 0;
-}
+// expect: compiler error: expected ';' but got '=' at src_err/426.pn:4
+// 構文解析エラー: サイズを書いたローカルのchar配列は，文字列リテラルで初期化できない (異常系)
 void main(void) {
+    char buf[8] = "abc";
 }

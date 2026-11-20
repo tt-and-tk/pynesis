@@ -1,6 +1,6 @@
-// expect: compiler error: cannot take the address of 'RED' (it has no memory address) at src_err/442.pn:5
-// 意味エラー: 列挙子の番地を取っている (異常系)
-enum Color { RED };
+// expect: compiler error: use of undeclared enum 'Color' at src_err/442.pn:4
+// 意味エラー: 構造体名をenumで参照している (異常系)
+struct Color { int x; };
+enum Color c;
 void main(void) {
-    int *p = &RED;
 }

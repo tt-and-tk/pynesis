@@ -1,6 +1,5 @@
-// expect: compiler error: expression must be a constant expression at src_err/450.pn:4
-// 意味エラー: 列挙子の値に通常の変数を書いている(列挙子の値は定数式に限る) (異常系)
-int g;
-enum Color { RED = g };
+// expect: compiler error: static cannot be applied to enum definition at src_err/450.pn:3
+// 構文エラー: 列挙型の定義にstaticを付けている (異常系)
+static enum Color { RED };
 void main(void) {
 }

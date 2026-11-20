@@ -1,5 +1,5 @@
-// expect: compiler error: expected identifier but got ',' at src_err/447.pn:3
-// 構文エラー: 列挙子の間のカンマが2つ続いている (異常系)
-enum Color { RED,, BLUE };
+// expect: compiler error: redefinition of 'SP' at src_err/447.pn:3
+// 意味エラー: ハードウェア変数と同じ名前の列挙子を定義している (異常系)
+enum Reg { SP };
 void main(void) {
 }

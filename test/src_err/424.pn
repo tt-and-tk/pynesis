@@ -1,7 +1,5 @@
-// expect: compiler error: use of undeclared enum 'Color' at src_err/424.pn:4
-// 意味エラー: 未定義の列挙型を構造体のメンバに使っている (異常系)
-struct S {
-    enum Color c;
-};
+// expect: compiler error: expression must be a constant expression at src_err/424.pn:4
+// 意味解析エラー: 括弧で囲んだ文字列リテラルも，配列のサイズには書けない (異常系)
 void main(void) {
+    char buf[("abc")];
 }

@@ -1,5 +1,8 @@
-// expect: compiler error: expected identifier after type at src_err/446.pn:3
-// 構文エラー: 列挙子を持たない列挙型の宣言(前方宣言)を書いている (異常系)
-enum Color;
+// expect: compiler error: redefinition of 'f' at src_err/446.pn:4
+// 意味エラー: 関数と同じ名前の列挙子を定義している (異常系)
+enum Color { RED, f };
+int f(void) {
+    return 0;
+}
 void main(void) {
 }

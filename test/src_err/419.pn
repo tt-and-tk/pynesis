@@ -1,5 +1,5 @@
-// expect: compiler error: use of undeclared enum 'Color' at src_err/419.pn:3
-// 意味エラー: 未定義の列挙型でグローバル変数を宣言している (異常系)
-enum Color g;
+// expect: compiler error: expression must be a constant expression at src_err/419.pn:4
+// 意味解析エラー: ローカルのchar配列のサイズに書いた文字列リテラルは，サイズの式として扱い，定数式でないことをエラーにする (異常系)
 void main(void) {
+    char buf["abc"];
 }
