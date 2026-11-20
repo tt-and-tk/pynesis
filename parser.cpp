@@ -27,6 +27,11 @@ bool is_func_pointer(const type_t &type) {
     return type.base == BASE_FUNC && is_pointer_value(type);
 }
 
+// 構造体そのもの(構造体の配列・構造体へのポインタでない)かどうかを返す
+bool is_struct_object(const type_t &type) {
+    return type.base == BASE_STRUCT && type.pointer_depth == 0 && !type.is_array;
+}
+
 // ポインタが指す先の型を返す
 type_t pointee_type(const type_t &type) {
     type_t pointee = type;   // 指す先の型
@@ -944,9 +949,9 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
 //       戻り値型 (*変数名)(引数型...) [= 式] ;   (関数ポインタ)
 //       戻り値型 (*変数名[サイズ])(引数型...) ;   (関数ポインタの配列)
 // const変数はスカラー型のみで，初期化子を必須とする．
-// 構造体型の場合は次の2形式のみ許可する(初期化子は非対応)．
-//   struct 構造体名 変数名;         (単一変数)
-//   struct 構造体名 変数名[サイズ]; (配列，サイズは省略不可)
+// 構造体型の場合は次の形式のみ許可する．
+//   struct 構造体名 変数名 [= 式];   (単一変数．初期化子は同じ型の構造体を写す元で，ローカル変数だけに書けることは意味解析が検査する)
+//   struct 構造体名 変数名[サイズ];  (配列，サイズは省略不可，初期化子は非対応)
 // 構造体へのポインタはこの制限を受けず，他の型のポインタと同じく初期化子を書ける．
 node_t *Parser::parse_var_decl() {
     node_t *node = this->new_node(ND_VAR_DECL);    // 変数宣言部
@@ -1001,17 +1006,24 @@ node_t *Parser::parse_var_decl() {
         }
     }
 
-    // 構造体変数: 配列にも対応する(要素数省略・初期化子はメンバ初期化の仕組みが無いため非対応)
+    // 構造体変数: 配列にも対応する(配列の要素数省略・初期化子は，要素ごとの初期値を書く仕組みが無いため非対応)
     if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
-        // 変数名の後に[があれば配列宣言 (無ければ単一変数)
+        // 変数名の後に[があれば配列宣言
         if (this->token_kind_is(TK_LBRACKET)) {
             this->get_token(TK_LBRACKET);
             node->type.is_array = true;
             node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
             this->get_token(TK_RBRACKET);
-        } else if (this->token_kind_is(TK_ASSIGN)) {
-            throw std::string("compiler error: struct variable initializer is not supported at ")
-                  + loc_to_string(this->peek_token().loc);
+            // 構造体の配列に初期化子を書いた場合
+            if (this->token_kind_is(TK_ASSIGN)) {
+                throw std::string("compiler error: struct array initializer is not supported at ")
+                      + loc_to_string(this->peek_token().loc);
+            }
+        }
+        // 単一変数で初期化子がある場合 (写す元の構造体の式を読む)
+        else if (this->token_kind_is(TK_ASSIGN)) {
+            this->get_token(TK_ASSIGN);
+            node->children.push_back(this->parse_expr());   // 初期化子
         }
         this->get_token(TK_SEMICOLON);
         return node;

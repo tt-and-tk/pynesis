@@ -56,6 +56,8 @@ struct func_sig_t {
 bool is_pointer_value(const type_t &type);
 // 関数ポインタかどうかを返す
 bool is_func_pointer(const type_t &type);
+// 構造体そのもの(構造体の配列・構造体へのポインタでない)かどうかを返す
+bool is_struct_object(const type_t &type);
 // ポインタが指す先の型を返す (段数を1つ減らす)
 type_t pointee_type(const type_t &type);
 // 配列を値として使う際の型(先頭要素へのポインタ)を返す．配列でなければそのままの型を返す

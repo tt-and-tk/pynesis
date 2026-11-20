@@ -1,0 +1,7 @@
+// expect: compiler error: cannot convert 'int' to 'struct Tag' in initialization at src_err/476.pn:6
+// 意味解析エラー: 構造体のローカル変数を，整数で初期化できない (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+void main(void) {
+    struct Tag a = 1;
+}

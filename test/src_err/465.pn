@@ -1,0 +1,9 @@
+// expect: compiler error: '+=' is not supported for struct at src_err/465.pn:8
+// 意味解析エラー: 構造体へ複合代入できない(構造体には演算を定めていないため) (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+struct Tag a;
+struct Tag b;
+void main(void) {
+    a += b;
+}

@@ -1,0 +1,9 @@
+// expect: compiler error: incompatible struct types in assignment: expected 'struct Tag' but got 'struct Other' at src_err/464.pn:8
+// 意味解析エラー: 型の異なる構造体どうしは代入できない(メンバの構成が同じでも構造体名で区別する) (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+struct Tag a;
+struct Other b;
+void main(void) {
+    a = b;
+}

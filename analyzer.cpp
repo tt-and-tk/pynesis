@@ -621,7 +621,12 @@ void Analyzer::collect_globals() {
                 // const変数: 値を確定させて登録する (メモリ番地は割り当てない)
                 this->resolve_global_const(child->sval);
             } else if (child->type.base == BASE_STRUCT && child->type.pointer_depth == 0) {
-                // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+                // 配列でない構造体変数で初期化子がある場合 (グローバル変数の初期化子は定数式に限るため，構造体を写す元を書けない)
+                if (!child->type.is_array && !child->children.empty()) {
+                    throw std::string("compiler error: struct variable initializer is not supported for a global variable at ")
+                          + loc_to_string(child->children[0]->loc);
+                }
+                // 構造体変数(配列宣言含む): メンバ構成に基づくアドレス確保のみ行う
                 symbol_t *sym = this->register_struct_var(child, LOC_GLOBAL);
                 this->symbols_[child->sval] = sym;
                 child->sym = sym;
@@ -1477,7 +1482,14 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
     } else if (decl->type.base == BASE_STRUCT && decl->type.pointer_depth == 0) {
-        // 構造体変数(配列宣言含む): 初期化子は非対応のため，メンバ構成に基づくアドレス確保のみ行う
+        // 構造体変数(配列宣言含む): 構造体が定義済みか確かめる
+        this->check_struct_exists(decl->type, decl->loc);
+        // 配列でない構造体変数で初期化子がある場合は，写す元として先に検査する
+        // (登録より前に行い，自己参照 struct Tag v = v; では外側のvを参照させる．配列の子は要素数の式)
+        if (!decl->type.is_array && !decl->children.empty()) {
+            this->analyze_struct_source(decl->children[0], decl->type, "initialization");
+        }
+        // メンバ構成に基づいてアドレスを確保し，登録する
         symbol_t *sym = this->register_struct_var(decl, LOC_LOCAL);
         this->scopes_.back()[decl->sval] = sym;
         decl->sym = sym;
@@ -1544,9 +1556,15 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
 // (代入の右辺・引数・戻り値・演算のオペランド等．書き込み先や&の対象として使う式はanalyze_lvalueで検査する)
 // 値を持たないvoid(戻り値のない関数呼び出し)・構造体をエラーにし，配列は先頭要素へのポインタとして型を書き込む
 // (配列を代入の右辺・引数・演算等に使うと，C言語と同じく先頭要素の番地を表す)
-// 構造体・配列の扱いは式文，およびfor文の更新部に書いた式と共通のため，その検査に任せ，ここではvoidだけを検査する
+// 構造体・配列の扱いは式文，およびfor文の更新部に書いた式と共通のため，その検査に任せる．
+// その検査は構造体の代入式を許すため，ここでは構造体の代入式とvoidを検査する
 void Analyzer::analyze_value(node_t *expr) {
     this->analyze_discarded(expr);
+    // 構造体の代入式の場合 (式の値は左辺の構造体であり，1つのレジスタに読み込めないため)
+    if (is_struct_object(expr->type)) {
+        throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
+              + loc_to_string(expr->loc);
+    }
     // void値の場合
     if (expr->type.base == BASE_VOID) {
         throw std::string("compiler error: cannot use void value in expression at ") + loc_to_string(expr->loc);
@@ -1558,12 +1576,13 @@ void Analyzer::analyze_value(node_t *expr) {
 // 代入にも引数にも使われない．このため式全体が値を持たないvoidであること(f();のような戻り値のない関数呼び出し)も許す．
 // 式の途中でvoidの値を使う場合(f() + 1;)は，途中の演算がオペランドを値として検査するためエラーになる．
 // ただし評価の過程では値をレジスタへ読み込むため，1つのレジスタに読み込めない構造体そのものはエラーにする．
+// 構造体の代入式は，値を読み込まずに領域どうしで写すため許す．
 // 配列は，関数ポインタの配列なら先頭要素へのポインタの型を持てないためエラーにし，
 // それ以外なら中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
 void Analyzer::analyze_discarded(node_t *expr) {
     this->analyze_expr(expr);
-    // 構造体そのものの場合 (値をまとめて読み書きする仕組みが無いため．構造体の配列は先頭要素へのポインタになる)
-    if (expr->type.base == BASE_STRUCT && expr->type.pointer_depth == 0 && !expr->type.is_array) {
+    // 構造体の代入式以外で，構造体そのものの場合 (値をまとめてレジスタへ読み込めないため．構造体の配列は先頭要素へのポインタになる)
+    if (is_struct_object(expr->type) && expr->kind != ND_ASSIGN) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
     }
@@ -1577,6 +1596,24 @@ void Analyzer::analyze_discarded(node_t *expr) {
     if (expr->type.is_array) {
         expr->type = decayed_type(expr->type);
         expr->is_decayed = true;
+    }
+}
+
+// 構造体を写す元の式(構造体の代入の右辺・構造体変数の初期化子)を検査し，名前解決と型注釈を行う
+// 型dstの構造体と同じ型の構造体であることを検査する．contextはエラーメッセージ用の写す操作の種類
+// 構造体の型を持つ式は，構造体の左辺値と構造体の代入式に限られるため，式の型だけで判定する
+// (三項演算子の各分岐は値として検査され，キャストの結果と関数の戻り値は構造体にならないため)
+void Analyzer::analyze_struct_source(node_t *src, const type_t &dst, const std::string &context) {
+    this->analyze_expr(src);
+    // 構造体そのものでない場合 (整数・ポインタ・構造体の配列等)
+    if (!is_struct_object(src->type)) {
+        throw std::string("compiler error: cannot convert '") + type_to_string(src->type) + "' to '"
+              + type_to_string(dst) + "' in " + context + " at " + loc_to_string(src->loc);
+    }
+    // 型の異なる構造体の場合
+    if (!Analyzer::is_same_type(dst, src->type)) {
+        throw std::string("compiler error: incompatible struct types in ") + context + ": expected '"
+              + type_to_string(dst) + "' but got '" + type_to_string(src->type) + "' at " + loc_to_string(src->loc);
     }
 }
 
@@ -2114,7 +2151,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             return;
         }
 
-        // 代入: 左辺は書き込み可能なスカラー(整数またはポインタ)の左辺値でなければならない
+        // 代入: 左辺は書き込み可能なスカラー(整数またはポインタ)か構造体そのものの左辺値でなければならない
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];   // 代入先(左辺)
             // 左辺を名前解決する
@@ -2122,7 +2159,18 @@ void Analyzer::analyze_expr(node_t *expr) {
             //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
             //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
             this->analyze_lvalue(lhs);
-            // 配列・構造体そのものへの代入を禁止する
+            // 構造体そのものへの代入の場合 (右辺の構造体の全ワードを写す．代入式の値の型は左辺の型とする)
+            if (is_struct_object(lhs->type)) {
+                // 複合代入の場合 (構造体には演算を定めていないため)
+                if (expr->sval != "=") {
+                    throw std::string("compiler error: '") + expr->sval + "' is not supported for struct at "
+                          + loc_to_string(expr->loc);
+                }
+                this->analyze_struct_source(expr->children[1], lhs->type, "assignment");
+                expr->type = lhs->type;
+                return;
+            }
+            // 配列そのものへの代入を禁止する
             Analyzer::check_scalar_operand(lhs, "assignment");
             // 書き込みできない左辺には代入できない (シンボルを持たないポインタの指す先は，常に書き込める)
             if (lhs->sym != nullptr && !lhs->sym->writable) {

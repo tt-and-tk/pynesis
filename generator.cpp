@@ -465,6 +465,14 @@ void Generator::gen_var_decl(node_t *decl) {
     // 初期化子がなければ何も出力しない (番地は確保済み，未初期化ローカルは不定値)
     if (decl->children.empty()) return;
 
+    // 構造体変数の場合 (初期化子が表す構造体の番地をr0に，変数の番地をr1に求め，全ワードを写す)
+    if (is_struct_object(decl->type)) {
+        this->gen_struct_addr(decl->children[0], 0);
+        this->gen_var_addr(1, decl->sym);
+        this->gen_struct_copy(0, decl->type.struct_name, decl->children[0]->loc);
+        return;
+    }
+
     // 初期化式をr0に評価し，変数へ書き込む
     this->gen_expr(decl->children[0], 0);        // r0 = 初期値
     this->gen_store(0, decl->sym);               // 変数 = r0
@@ -625,6 +633,75 @@ void Generator::gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg) {
     (*this->out_) << "    add r" << r_base_dst << " r" << r_index << " r" << r_addr << "\n";
     (*this->out_) << "    wm 1h r" << r_addr << " r" << r_zero << "\n";
     (*this->out_) << end << ":\n";
+}
+
+// 構造体の代入 左辺 = 右辺 を生成し，代入式の値として左辺の構造体の番地をr{reg}に残す
+// 右辺・左辺の順に番地を求めてから写すため，左辺の添字の評価で右辺の構造体が書き換わると，書き換わった後の内容が写る
+void Generator::gen_struct_assign(node_t *expr, int reg) {
+    // 右辺の構造体の番地をr{reg}に求める
+    this->gen_struct_addr(expr->children[1], reg);
+    // 左辺の構造体の番地をr{reg+1}に求める (添字の関数呼び出しからr{reg}の右辺の番地を保護する)
+    this->gen_lvalue_addr(expr->children[0], reg + 1, {reg});
+    // 右辺の構造体を左辺の構造体へ写す
+    this->gen_struct_copy(reg, expr->type.struct_name, expr->loc);
+}
+
+// 構造体の式(構造体の左辺値・構造体の代入式)が表す構造体の番地をr{reg}に求める
+// 構造体の代入式は，代入を実行して左辺の構造体を表す(連続代入 c = b = a; の右辺のb = a)
+void Generator::gen_struct_addr(node_t *expr, int reg) {
+    // 構造体の代入式の場合
+    if (expr->kind == ND_ASSIGN) {
+        this->gen_struct_assign(expr, reg);
+    }
+    // 構造体の左辺値の場合
+    else {
+        this->gen_lvalue_addr(expr, reg);
+    }
+}
+
+// r{reg}が指す構造体の全ワードを，r{reg+1}が指す構造体へ写し，写した先の番地をr{reg}に残す
+// 構造体はワード単位で詰めて確保するため，先頭から1ワードずつ全ワードを写すと全メンバが写る．
+// 命令数を構造体の大きさによらず一定にするため，1ワードを写す処理をループで繰り返す．
+// レジスタ使用: r{reg}=写す元の位置, r{reg+1}=写す先の先頭番地(不変), r{reg+2}=写す先の位置,
+//              r{reg+3}=写す元の末尾の次の番地(不変), r{reg+4}=4(位置を進める量，不変), r{reg+5}=写すワード(作業用)
+void Generator::gen_struct_copy(int reg, const std::string &struct_name, const loc_t &loc) {
+    const int words = this->analysis_.struct_defs.at(struct_name).total_words;   // 写すワード数
+    // メンバの無い構造体の場合 (写す先の番地を残すだけにする．ループは1ワード写してから末尾かを判定し，0ワードでも1ワード写すため)
+    if (words == 0) {
+        (*this->out_) << "    mov fh r" << (reg + 1) << " r" << reg << "\n";
+        return;
+    }
+    // 作業用のr{reg+5}が上限(r15)を超えないことを確認する
+    if (reg + 5 >= MAX_REG) {
+        throw std::string("compiler error: expression too complex (out of registers) at ") + loc_to_string(loc);
+    }
+    const std::string loop = this->new_label();   // 1ワードを写す処理の先頭
+
+    // 各レジスタの役割に名前を付ける(この関数内では役割の使い回しをしない)
+    const int r_src = reg;             // 写す元の位置
+    const int r_dst_base = reg + 1;    // 写す先の先頭番地(不変)
+    const int r_dst = reg + 2;         // 写す先の位置
+    const int r_src_end = reg + 3;     // 写す元の末尾の次の番地(不変)
+    const int r_four = reg + 4;        // 4(位置を進める量，不変)
+    const int r_word = reg + 5;        // 写すワード(作業用)
+
+    // ループで使う値をレジスタに格納する
+    (*this->out_) << "    mov fh r" << r_dst_base << " r" << r_dst << "\n";                    // 写す先の位置を先頭番地から始める
+    (*this->out_) << "    mov fh r0 r" << r_four << " 4\n";                                    // 位置を進める量を格納する
+    (*this->out_) << "    mov fh r0 r" << r_src_end << " " << (words * 4) << "\n";             // 構造体のバイト数を格納する
+    (*this->out_) << "    add r" << r_src << " r" << r_src_end << " r" << r_src_end << "\n";   // 写す元の末尾の次の番地を求める
+
+    (*this->out_) << loop << ":\n";
+    // 写す元の位置のワードを読み込み，写す先の位置へ書き込む
+    (*this->out_) << "    rm fh r" << r_src << " r" << r_word << "\n";
+    (*this->out_) << "    wm fh r" << r_dst << " r" << r_word << "\n";
+    // 写す元と写す先の位置を1ワード進める
+    (*this->out_) << "    add r" << r_src << " r" << r_four << " r" << r_src << "\n";
+    (*this->out_) << "    add r" << r_dst << " r" << r_four << " r" << r_dst << "\n";
+    // 写す元の末尾に達していなければ，次のワードを写す
+    (*this->out_) << "    ne r" << r_src << " r" << r_src_end << " " << loop << "\n";
+    // 写す先の先頭番地を，代入式の値としてr{reg}に残す
+    (*this->out_) << "    mov fh r" << r_dst_base << " r" << reg << "\n";
 }
 
 // 一意な局所ラベル (.L0, .L1, ...) を生成して返す
@@ -1487,8 +1564,14 @@ void Generator::gen_expr(node_t *expr, int reg) {
             break;
 
         // 代入: 右辺(複合代入は左辺の現在値と右辺の演算結果)をr{reg}に求め，変数へ書き込む
+        // (構造体の代入は，右辺の構造体の全ワードを左辺へ写し，左辺の構造体の番地をr{reg}に残す)
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];   // 代入先(左辺)
+            // 構造体の代入の場合
+            if (is_struct_object(lhs->type)) {
+                this->gen_struct_assign(expr, reg);
+                break;
+            }
             // ポインタへの複合代入(+=/-=)か (右辺の整数を指す先のバイト数倍してから足し引きする)
             const bool is_pointer_compound = expr->sval != "=" && is_pointer_value(lhs->type);
             // 番地が実行時に決まる代入先の場合

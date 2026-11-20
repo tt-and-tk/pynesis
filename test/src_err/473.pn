@@ -1,0 +1,9 @@
+// expect: compiler error: expression is not a variable, array element, struct member or dereference at src_err/473.pn:8
+// 意味解析エラー: 構造体の代入式は，番地を取れない(代入式は左辺値ではないため) (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+struct Tag a;
+struct Tag b;
+void main(void) {
+    struct Tag *p = &(b = a);
+}
