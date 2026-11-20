@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of enum 'Color' as struct at src_err/440.pn:4
+// 意味エラー: 列挙型名と同じ名前の構造体を定義している(列挙型名は構造体名と同じ名前空間にある) (異常系)
+enum Color { RED };
+struct Color { int x; };
+void main(void) {
+}

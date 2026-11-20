@@ -1,0 +1,6 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/463.pn:4
+// 意味エラー: for文の初期化部のキャストに未定義の列挙型を書いている (異常系)
+void main(void) {
+    for (int i = (enum Color)0; i < 1; i++) {
+    }
+}

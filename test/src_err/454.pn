@@ -1,0 +1,5 @@
+// expect: compiler error: circular reference in declaration of 'A' at src_err/454.pn:3
+// 意味エラー: 値を省略した列挙子を経由して，列挙子の値が自身に依存している (異常系)
+enum { A = C, B, C };
+void main(void) {
+}

@@ -1,0 +1,8 @@
+// expect: compiler error: redefinition of 'f' at src_err/446.pn:4
+// 意味エラー: 関数と同じ名前の列挙子を定義している (異常系)
+enum Color { RED, f };
+int f(void) {
+    return 0;
+}
+void main(void) {
+}

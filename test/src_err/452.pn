@@ -1,0 +1,6 @@
+// expect: compiler error: 'RED' is not writable at src_err/452.pn:5
+// 意味エラー: 列挙子へ代入している (異常系)
+enum Color { RED };
+void main(void) {
+    RED = 1;
+}

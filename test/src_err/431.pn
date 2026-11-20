@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/431.pn:4
+// 意味エラー: 未定義の列挙型でローカル変数を宣言している (異常系)
+void main(void) {
+    enum Color c;
+}

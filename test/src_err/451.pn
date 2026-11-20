@@ -1,0 +1,5 @@
+// expect: compiler error: enum must have at least one enumerator at src_err/451.pn:3
+// 構文エラー: 列挙子が1つもない列挙型を定義している (異常系)
+enum Color {};
+void main(void) {
+}

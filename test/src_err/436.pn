@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/436.pn:3
+// 意味エラー: 未定義の列挙型を関数ポインタの引数の型に使っている (異常系)
+void (*fp)(enum Color);
+void main(void) {
+}

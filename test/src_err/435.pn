@@ -1,0 +1,7 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/435.pn:4
+// 意味エラー: 未定義の列挙型を構造体のメンバに使っている (異常系)
+struct S {
+    enum Color c;
+};
+void main(void) {
+}

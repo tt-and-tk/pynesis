@@ -1,0 +1,5 @@
+// expect: compiler error: enum definition is only allowed at global scope at src_err/448.pn:4
+// 構文エラー: 関数の中で列挙型を定義している(列挙型の定義はグローバルにだけ書ける) (異常系)
+void main(void) {
+    enum Color { RED };
+}

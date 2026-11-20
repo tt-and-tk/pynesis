@@ -1,0 +1,6 @@
+// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/455.pn:4
+// 構文エラー: 列挙型に符号修飾子を付けている (異常系)
+enum Color { RED };
+unsigned enum Color c;
+void main(void) {
+}

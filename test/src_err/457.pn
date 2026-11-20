@@ -1,0 +1,5 @@
+// expect: compiler error: expected identifier after type at src_err/457.pn:3
+// 構文エラー: 列挙子を持たない列挙型の宣言(前方宣言)を書いている (異常系)
+enum Color;
+void main(void) {
+}

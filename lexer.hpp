@@ -8,7 +8,7 @@
 typedef enum {
     // 型キーワード
     TK_INT, TK_CHAR, TK_SHORT, TK_VOID, TK_SIGNED, TK_UNSIGNED,
-    TK_STRUCT,
+    TK_STRUCT, TK_ENUM,
     // 型修飾子キーワード
     TK_CONST,
     // 宣言を参照できる範囲を宣言したファイルの中に限るキーワード

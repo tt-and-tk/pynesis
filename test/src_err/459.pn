@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of 'RED' at src_err/459.pn:4
+// 意味エラー: 同じファイルのstaticを付けたグローバル変数と同じ名前の列挙子を定義している (異常系)
+static int RED;
+enum Color { RED };
+void main(void) {
+}

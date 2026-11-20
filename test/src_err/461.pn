@@ -1,0 +1,6 @@
+// expect: compiler error: expression must be a constant expression at src_err/461.pn:4
+// 意味エラー: 列挙子の値に通常の変数を書いている(列挙子の値は定数式に限る) (異常系)
+int g;
+enum Color { RED = g };
+void main(void) {
+}

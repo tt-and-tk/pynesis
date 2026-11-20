@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/432.pn:3
+// 意味エラー: 未定義の列挙型でconst変数を宣言している (異常系)
+const enum Color C = 0;
+void main(void) {
+}

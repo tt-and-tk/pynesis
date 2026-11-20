@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Color' at src_err/434.pn:3
+// 意味エラー: 定数式のキャストに未定義の列挙型を書いている (異常系)
+int table[(enum Color)2];
+void main(void) {
+}

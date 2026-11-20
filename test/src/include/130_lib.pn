@@ -1,0 +1,6 @@
+#pragma once
+enum Shape { SQUARE, CIRCLE, LIB_LAST = 2 };
+
+int lib_value(void) {
+    return MAIN_FIRST * 2;          // 取り込み元の列挙子を参照する
+}

@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of enum 'Color' at src_err/438.pn:4
+// 意味エラー: 同じ名前の列挙型を2回定義している (異常系)
+enum Color { RED };
+enum Color { BLUE };
+void main(void) {
+}

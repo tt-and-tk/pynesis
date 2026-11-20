@@ -119,7 +119,7 @@ std::string source_name(const std::string &name) {
 }
 
 // 部分木の中で，置き換え表にある名前を持つノードの名前を番号付きの名前へ置き換える
-// 構造体名と構造体のメンバ名は，グローバル変数・関数と別の名前空間のため置き換えない
+// 構造体名・列挙型名と構造体のメンバ名は，グローバル変数・関数と別の名前空間のため置き換えない
 static void rename_identifiers(node_t *node, const std::map<std::string, std::string> &numbered_names) {
     // グローバル変数・関数と同じ名前空間の名前を持つノードなら，置き換え表にある名前を番号付きの名前へ置き換える
     if (// 関数定義
@@ -129,7 +129,9 @@ static void rename_identifiers(node_t *node, const std::map<std::string, std::st
         // 変数参照
         || node->kind == ND_VAR
         // 名前で添字を付ける配列要素
-        || node->kind == ND_ARRAY_ACCESS) {
+        || node->kind == ND_ARRAY_ACCESS
+        // 値を省略した列挙子の初期化子 (直前の列挙子を名前で指す)
+        || node->kind == ND_ENUM_NEXT) {
         const auto found = numbered_names.find(node->sval);  // 名前に対応する番号付きの名前
         if (found != numbered_names.end()) node->sval = found->second;
     }
@@ -183,8 +185,10 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 
     // 2パス目: staticの名前を一意な名前へ置き換えながら，グローバル宣言の索引を作り，名前の重複を検査する
     this->index_global_decls();
+    // 3パス目: 型に現れる列挙型名が定義済みか確かめる (列挙型名は宣言順によらず参照できるため，すべての定義を索引に加えた後に行う)
+    this->check_enum_names(this->root_);
 
-    // 3パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+    // 4パス目: const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
     this->collect_globals();
     // ポインタ型のグローバル変数の初期化子を検査する (後方で宣言された変数・関数の番地も使えるよう，全グローバル変数の登録後に行う)
     this->check_global_pointer_inits();
@@ -194,8 +198,8 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         throw std::string("compiler error: 'main' function is not defined");
     }
 
-    // 4パス目: 各関数本体を検査する
-    // (analyze_expr内のND_CALLケースとasm文の検査が，通りがけに全関数の呼び出し先をcall_graph_へ記録する．
+    // 5パス目: 各関数本体を検査する
+    // (関数呼び出しの式とasm文の検査が，通りがけに全関数の呼び出し先を呼び出しグラフへ記録する．
     //  ここまで完了した時点で，どの関数がどの関数を呼ぶかの記録がすべて出揃っている)
     this->analyze_functions();
 
@@ -294,12 +298,12 @@ void Analyzer::collect_static_names() {
 // 宣言を書いたファイルの中にある同じ名前の識別子は，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
 // これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
-// 変数(const変数を含む)・関数・ハードウェア変数は同じ名前空間，構造体名はそれとは別の名前空間として検査する
+// 変数(const変数・列挙子を含む)・関数・ハードウェア変数は同じ名前空間，構造体名・列挙型名はそれとは別の名前空間として検査する
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
         // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
-        // (構造体名はstaticの名前と別の名前空間にある)
-        if (!child->is_static && child->kind != ND_STRUCT_DECL) {
+        // (構造体名・列挙型名はstaticの名前と別の名前空間にある)
+        if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL) {
             this->check_static_in_includer(child);
         }
         // 宣言を書いたファイルにstaticの宣言があれば，その名前を番号付きの名前へ置き換える
@@ -309,14 +313,34 @@ void Analyzer::index_global_decls() {
             rename_identifiers(child, found->second);
         }
 
-        // 構造体定義の場合 (構造体名は変数・関数とは別の名前空間のため，構造体名どうしでのみ重複を検査する)
+        // 構造体定義の場合 (構造体名は変数・関数とは別の名前空間のため，構造体名・列挙型名とだけ重複を検査する)
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
             if (this->struct_decl_nodes_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of struct '") + child->sval
                       + "' at " + loc_to_string(child->loc);
             }
+            // 同じ名前の列挙型が定義済みの場合
+            if (this->enum_names_.count(child->sval)) {
+                throw std::string("compiler error: redefinition of enum '") + child->sval
+                      + "' as struct at " + loc_to_string(child->loc);
+            }
             this->struct_decl_nodes_[child->sval] = child;
+            continue;
+        }
+        // 列挙型の定義の場合 (構造体定義と同じく，構造体名・列挙型名とだけ重複を検査する．列挙子は後ろに並ぶ変数宣言として検査する)
+        if (child->kind == ND_ENUM_DECL) {
+            // 同じ名前の列挙型が定義済みの場合
+            if (this->enum_names_.count(child->sval)) {
+                throw std::string("compiler error: redefinition of enum '") + child->sval
+                      + "' at " + loc_to_string(child->loc);
+            }
+            // 同じ名前の構造体が定義済みの場合
+            if (this->struct_decl_nodes_.count(child->sval)) {
+                throw std::string("compiler error: redefinition of struct '") + child->sval
+                      + "' as enum at " + loc_to_string(child->loc);
+            }
+            this->enum_names_.insert(child->sval);
             continue;
         }
 
@@ -356,11 +380,40 @@ void Analyzer::check_static_in_includer(const node_t *decl) const {
     }
 }
 
+// 3パス目: 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
+// 意味解析が型を注釈する前に呼ぶため，ほかのノードの型は列挙型名を持たない
+void Analyzer::check_enum_names(const node_t *node) const {
+    // このノードの型を確かめる
+    this->check_enum_name(node->type, node->loc);
+    // 子を順に確かめる (for文の省いた初期化部・条件部・更新部は空の子として並ぶため飛ばす)
+    for (const node_t *child : node->children) {
+        if (child != nullptr) this->check_enum_names(child);
+    }
+}
+
+// 型(関数ポインタの戻り値型・引数型を含む)に現れる列挙型名が定義済みであることを確かめる (現れなければ何もしない)
+void Analyzer::check_enum_name(const type_t &type, const loc_t &loc) const {
+    // 列挙型(列挙型へのポインタを含む)で，その列挙型が定義されていない場合
+    if (!type.enum_name.empty() && this->enum_names_.count(type.enum_name) == 0) {
+        throw std::string("compiler error: use of undeclared enum '") + type.enum_name
+              + "' at " + loc_to_string(loc);
+    }
+    // 関数ポインタの場合 (戻り値型・引数型にも列挙型が現れうる)
+    if (type.base == BASE_FUNC) {
+        // 戻り値型を確かめる
+        this->check_enum_name(type.func_sig->return_type, loc);
+        // 引数型を宣言順に確かめる
+        for (const type_t &param_type : type.func_sig->param_types) {
+            this->check_enum_name(param_type, loc);
+        }
+    }
+}
+
 // 宣言ノードの型を確定させる (確定済みなら何もしない)
 // 構造体型なら構造体定義を解決し，配列なら要素数を文字列リテラルの長さ，または定数式から計算して畳み込む
 void Analyzer::resolve_decl_type(node_t *decl) {
     // 型に現れる構造体が定義済みか確認する
-    this->check_type_exists(decl->type, decl->loc);
+    this->check_struct_exists(decl->type, decl->loc);
     // 構造体そのものの場合 (メンバ構成が確定しないとサイズを求められないため，先に構造体定義を解決する．
     //  構造体へのポインタは1ワードの番地であり，指す先の定義は解決しない．解決すると，自身を指すメンバ
     //  (struct Node *next)を持つ構造体の定義が自身に依存する循環になるため)
@@ -506,8 +559,14 @@ symbol_t *Analyzer::register_struct_var(node_t *decl, location_t location) {
 // const変数の初期化子を定数式として計算し，値を持つシンボルを生成して返す
 // メモリ番地は割り当てず，値は参照箇所(analyze_exprのND_VAR)で整数リテラルとして埋め込まれる
 symbol_t *Analyzer::register_const_var(const node_t *decl) {
-    const node_t *init = decl->children[0];                          // 初期化子の式
-    const long long value = this->eval_const_expr(init).value;       // 初期化子を計算した値
+    const node_t *init = decl->children[0];   // 初期化子の式
+    // 初期化子の値を，値を省略した列挙子とそれ以外の場合に分けて求める
+    // (列挙子の値はintの範囲を超えても折り返さず，型の範囲の検査でエラーにする)
+    const long long value =
+        // 値を省略した列挙子の場合: 直前の列挙子の値に1を足した値
+        (init->kind == ND_ENUM_NEXT) ? Analyzer::const_symbol_value(this->resolve_global_const(init->sval)) + 1
+        // それ以外の場合: 初期化子を定数式として計算した値
+        : this->eval_const_expr(init).value;
 
     // 値を宣言した型の範囲に収める (範囲外の値を黙って切り詰めると，同じ型の通常の変数と値が食い違うため)
     long long min_value;   // 宣言した型で表せる最小値
@@ -546,7 +605,7 @@ long long Analyzer::const_symbol_value(const symbol_t *sym) {
     return sym->address;
 }
 
-// 3パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
+// 4パス目: プログラム直下を宣言順に走査し，const変数・構造体定義・グローバル変数の登録と関数名の収集を行う
 // 先に全グローバルを登録することで，関数本体からの前方参照(後ろで宣言された変数の使用)を可能にする．
 // 後方の宣言が先に参照された場合，その宣言はこの走査で到達するより前に参照した時点で解決済みになっている
 // (名前の重複はグローバル宣言の索引を作る際に検査済み)
@@ -568,7 +627,7 @@ void Analyzer::collect_globals() {
                 child->sym = sym;
             } else if (is_pointer_value(child->type)) {
                 // ポインタ変数: 型に構造体が現れる場合はその定義が済んでいるか確かめ，1ワードを割り当てて登録する
-                this->check_type_exists(child->type, child->loc);
+                this->check_struct_exists(child->type, child->loc);
                 symbol_t *sym = new symbol_t{child->sval, child->type, LOC_GLOBAL,
                                              this->alloc_var(4, LOC_GLOBAL), true, true};
                 this->symbols_[child->sval] = sym;
@@ -615,14 +674,14 @@ void Analyzer::collect_globals() {
                 this->check_main_signature(child);
             }
             // 戻り値型に構造体が現れる場合はその定義が済んでいるか確かめる
-            this->check_type_exists(child->type, child->loc);
+            this->check_struct_exists(child->type, child->loc);
             auto sig = std::make_shared<func_sig_t>();   // この関数のシグネチャ
             sig->return_type = child->type;
             std::vector<const symbol_t *> params;
             for (size_t i = 0; i + 1 < child->children.size(); i++) {
                 node_t *param = child->children[i];
                 // 引数の型に構造体が現れる場合はその定義が済んでいるか確かめる
-                this->check_type_exists(param->type, param->loc);
+                this->check_struct_exists(param->type, param->loc);
 
                 // 同一関数内での引数名重複はエラー
                 for (const symbol_t *p : params) {
@@ -868,7 +927,7 @@ int type_size_bytes(const type_t &type, const std::map<std::string, struct_def_t
 
 // 型に構造体名が現れる場合，その構造体が定義済みであることを確かめる (現れなければ何もしない)
 // ポインタの指す先の構造体は宣言時に定義を解決しないため，名前が存在することだけをここで確かめる
-void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
+void Analyzer::check_struct_exists(const type_t &type, const loc_t &loc) const {
     // 構造体型(構造体へのポインタを含む)で，その構造体が定義されていない場合
     if (type.base == BASE_STRUCT && this->struct_decl_nodes_.count(type.struct_name) == 0) {
         throw std::string("compiler error: use of undeclared struct '") + type.struct_name
@@ -876,9 +935,9 @@ void Analyzer::check_type_exists(const type_t &type, const loc_t &loc) const {
     }
     // 関数ポインタの場合 (戻り値型・引数型にも構造体へのポインタが現れうる)
     if (type.base == BASE_FUNC) {
-        this->check_type_exists(type.func_sig->return_type, loc);
+        this->check_struct_exists(type.func_sig->return_type, loc);
         for (const type_t &param_type : type.func_sig->param_types) {
-            this->check_type_exists(param_type, loc);
+            this->check_struct_exists(param_type, loc);
         }
     }
 }
@@ -1033,7 +1092,7 @@ bool Analyzer::is_integer_constant(const node_t *expr) {
     }
 }
 
-// 4パス目: 各関数本体を検査する
+// 5パス目: 各関数本体を検査する
 // ND_FUNC_DEFのchildren = [param0, param1, ..., block] (引数がなければchildren[0]がブロック)
 void Analyzer::analyze_functions() {
     for (node_t *child : this->root_->children) {
@@ -1433,7 +1492,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
         decl->sym = sym;
     } else {
         // スカラー変数(ポインタを含む): 指す先の構造体が定義済みか確かめる
-        this->check_type_exists(decl->type, decl->loc);
+        this->check_struct_exists(decl->type, decl->loc);
         // 初期化式があれば先に検査する (登録より前に行い，自己参照 int x = x; では外側のxを参照させる)
         if (!decl->children.empty()) {
             // 初期化子を値として検査し，名前解決と型注釈を行う
@@ -1944,7 +2003,7 @@ void Analyzer::analyze_expr(node_t *expr) {
                       + type_to_string(expr->type) + "' (function pointer types differ) at " + loc_to_string(expr->loc);
             }
             // キャストした型に構造体名が現れる場合は，その構造体が定義済みであることを確かめる
-            this->check_type_exists(expr->type, expr->loc);
+            this->check_struct_exists(expr->type, expr->loc);
             return;
         }
 
