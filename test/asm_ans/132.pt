@@ -73,13 +73,17 @@ main:
     add r2 r4 r2
     ne r0 r3 .L2
     mov fh r1 r0
-    mov fh r0 r0 0
+    call pick
+    mov fh r30 r0
     mov fh r0 r1 8
     mul r0 r1 r0
     mov fh r0 r1 0
     add r0 r1 r0
-    mov fh r0 r1 8
-    add r16 r1 r1
+    mov fh r0 r1 0
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    mov fh r0 r2 0
+    add r1 r2 r1
     mov fh r1 r2
     mov fh r0 r4 4
     mov fh r0 r3 8
@@ -91,13 +95,14 @@ main:
     add r2 r4 r2
     ne r0 r3 .L3
     mov fh r1 r0
-    mov fh r0 r0 1
-    mov fh r0 r1 8
-    mul r0 r1 r0
-    mov fh r0 r1 0
-    add r0 r1 r0
-    mov fh r0 r1 8
-    add r16 r1 r1
+    wmr fh r16 r0 32
+    call pick
+    mov fh r30 r1
+    rmr fh r16 r0 32
+    mov fh r0 r2 8
+    mul r1 r2 r1
+    rmr fh r16 r2 0
+    add r1 r2 r1
     mov fh r1 r2
     mov fh r0 r4 4
     mov fh r0 r3 8
@@ -109,7 +114,12 @@ main:
     add r2 r4 r2
     ne r0 r3 .L4
     mov fh r1 r0
-    mov fh r0 r1 16
+    mov fh r0 r0 0
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 0
+    add r0 r1 r0
+    mov fh r0 r1 8
     add r16 r1 r1
     mov fh r1 r2
     mov fh r0 r4 4
@@ -122,6 +132,37 @@ main:
     add r2 r4 r2
     ne r0 r3 .L5
     mov fh r1 r0
+    mov fh r0 r0 1
+    mov fh r0 r1 8
+    mul r0 r1 r0
+    mov fh r0 r1 0
+    add r0 r1 r0
+    mov fh r0 r1 8
+    add r16 r1 r1
+    mov fh r1 r2
+    mov fh r0 r4 4
+    mov fh r0 r3 8
+    add r0 r3 r3
+.L6:
+    rm fh r0 r5
+    wm fh r2 r5
+    add r0 r4 r0
+    add r2 r4 r2
+    ne r0 r3 .L6
+    mov fh r1 r0
+    mov fh r0 r1 16
+    add r16 r1 r1
+    mov fh r1 r2
+    mov fh r0 r4 4
+    mov fh r0 r3 8
+    add r0 r3 r3
+.L7:
+    rm fh r0 r5
+    wm fh r2 r5
+    add r0 r4 r0
+    add r2 r4 r2
+    ne r0 r3 .L7
+    mov fh r1 r0
     mov fh r0 r0 16
     add r16 r0 r0
     mov fh r0 r1 24
@@ -130,22 +171,22 @@ main:
     mov fh r0 r4 4
     mov fh r0 r3 8
     add r0 r3 r3
-.L9:
+.L11:
     rm fh r0 r5
     wm fh r2 r5
     add r0 r4 r0
     add r2 r4 r2
-    ne r0 r3 .L9
+    ne r0 r3 .L11
     mov fh r1 r0
-.L6:
+.L8:
     rmr fh r16 r0 4
     mov fh r0 r1 3
-    egt r0 r1 .L8
+    egt r0 r1 .L10
     rmr fh r16 r0 4
     mov fh r0 r1 1
     add r0 r1 r1
     wmr fh r16 r1 4
-.L7:
+.L9:
     mov fh r0 r0 24
     add r16 r0 r0
     mov fh r0 r1 8
@@ -154,15 +195,15 @@ main:
     mov fh r0 r4 4
     mov fh r0 r3 8
     add r0 r3 r3
-.L10:
+.L12:
     rm fh r0 r5
     wm fh r2 r5
     add r0 r4 r0
     add r2 r4 r2
-    ne r0 r3 .L10
+    ne r0 r3 .L12
     mov fh r1 r0
-    jmp .L6
-.L8:
+    jmp .L8
+.L10:
     mov fh r0 r0 16
     add r16 r0 r0
     mov fh r0 r1 8
@@ -171,24 +212,24 @@ main:
     mov fh r0 r4 4
     mov fh r0 r3 8
     add r0 r3 r3
-.L14:
+.L16:
     rm fh r0 r5
     wm fh r2 r5
     add r0 r4 r0
     add r2 r4 r2
-    ne r0 r3 .L14
+    ne r0 r3 .L16
     mov fh r1 r0
-.L11:
+.L13:
     rmr fh r16 r0 4
     mov fh r0 r1 4
-    egt r0 r1 .L13
-.L12:
+    egt r0 r1 .L15
+.L14:
     rmr fh r16 r0 4
     mov fh r0 r1 1
     add r0 r1 r1
     wmr fh r16 r1 4
-    jmp .L11
-.L13:
+    jmp .L13
+.L15:
     mov fh r0 r0 36
     add r16 r0 r16
     ret

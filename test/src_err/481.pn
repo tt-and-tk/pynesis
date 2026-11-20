@@ -1,0 +1,7 @@
+// expect: compiler error: use of undeclared struct 'Unknown' at src_err/481.pn:6
+// 意味解析エラー: 初期化子を持つ構造体のローカル変数でも，未定義の構造体は宣言できない (異常系)
+struct Tag { int x; int y; };
+struct Tag b;
+void main(void) {
+    struct Unknown a = b;
+}

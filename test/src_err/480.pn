@@ -1,0 +1,10 @@
+// expect: compiler error: incompatible struct types in assignment: expected 'struct Other' but got 'struct Tag' at src_err/480.pn:9
+// 意味解析エラー: 連続代入の途中の代入で構造体の型が異なる場合も，その代入でエラーになる (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+struct Tag a;
+struct Tag b;
+struct Other o;
+void main(void) {
+    a = o = b;
+}
