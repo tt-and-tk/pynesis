@@ -2322,7 +2322,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             }
             // 要素の型を求める
             // (構造体の配列の要素・構造体へのポインタに添字を付けた要素(p[i])は構造体そのものであり，
-            //  メンバアクセス・&・構造体の代入を介してのみ使える．値として使った場合はanalyze_valueがエラーにする)
+            //  メンバアクセス・&・構造体の代入を介してのみ使える．値として使った場合は，値として使う式の検査がエラーにする)
             if (base_type.is_array) {
                 expr->type = base_type;
                 expr->type.is_array = false;
