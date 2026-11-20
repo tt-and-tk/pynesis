@@ -1,7 +1,6 @@
-// expect: compiler error: use of undeclared identifier 'a' at src_err/477.pn:6
+// expect: compiler error: use of undeclared identifier 'a' at src_err/477.pn:5
 // 意味解析エラー: 構造体の初期化子で宣言中の変数と同じ名前を参照すると，外側のスコープの変数を指す(外側に無ければ未宣言) (異常系)
 struct Tag { int x; int y; };
-struct Other { int x; int y; };
 void main(void) {
     struct Tag a = a;
 }

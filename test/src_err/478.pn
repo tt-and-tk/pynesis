@@ -1,7 +1,6 @@
-// expect: compiler error: struct array initializer is not supported at src_err/478.pn:7
+// expect: compiler error: struct array initializer is not supported at src_err/478.pn:6
 // 構文解析エラー: ローカル変数でも，構造体の配列には初期化子を書けない (異常系)
 struct Tag { int x; int y; };
-struct Other { int x; int y; };
 struct Tag b;
 void main(void) {
     struct Tag a[2] = b;

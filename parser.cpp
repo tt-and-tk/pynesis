@@ -797,7 +797,7 @@ node_t *Parser::parse_param() {
 
     // 引数の型 (voidは関数ポインタの戻り値型としてのみ書ける)
     node->type = this->parse_type(true);
-    // 構造体そのものの場合 (値をコピーする仕組みが無いため．構造体へのポインタは渡せる)
+    // 構造体そのものの場合 (引数は1つにつきスタック上の1ワードで渡すため．構造体へのポインタは渡せる)
     if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
         throw std::string("compiler error: struct cannot be used as a function parameter type at ")
               + loc_to_string(node->loc);

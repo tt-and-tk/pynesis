@@ -1543,8 +1543,9 @@ void Analyzer::check_char_array_operand(node_t *target, const std::string &built
 }
 
 // 演算の対象(名前解決・型注釈済み)がスカラー(整数またはポインタ)であることを検査する
-// 配列・構造体を丸ごと読み書きするコード生成の仕組みは無く，そのまま通すと先頭ワードだけを
-// 読み書きするコードになる(構造体は内部エラーになる)ため，意味解析の段階でエラーにする
+// 配列を丸ごと読み書きするコード生成の仕組みは無く，そのまま通すと先頭ワードだけを読み書きするコードになるため，
+// 意味解析の段階でエラーにする．構造体そのものも，1つのレジスタに読み込めず演算できないためエラーにする
+// (構造体の代入は全ワードを写す処理で扱うため，呼び出し元がこの検査より先に分岐する)
 void Analyzer::check_scalar_operand(const node_t *target, const std::string &operation) {
     if (target->type.is_array || (target->type.base == BASE_STRUCT && target->type.pointer_depth == 0)) {
         throw std::string("compiler error: ") + operation + " is not supported for array or struct at "
@@ -2321,7 +2322,7 @@ void Analyzer::analyze_expr(node_t *expr) {
             }
             // 要素の型を求める
             // (構造体の配列の要素・構造体へのポインタに添字を付けた要素(p[i])は構造体そのものであり，
-            //  メンバアクセスか&を介してのみ使える．値として使った場合はanalyze_valueがエラーにする)
+            //  メンバアクセス・&・構造体の代入を介してのみ使える．値として使った場合はanalyze_valueがエラーにする)
             if (base_type.is_array) {
                 expr->type = base_type;
                 expr->type.is_array = false;
