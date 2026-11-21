@@ -1,0 +1,9 @@
+// expect: compiler error: sizeof of type 'struct S *' is not supported at src_err/545.pn:7
+// 構文エラー: 構造体へのポインタの別名は，sizeof(struct 構造体名 *)と同じくsizeofの型名に書けない (異常系)
+struct S {
+    int x;
+};
+typedef struct S *P;
+int n = sizeof(P);
+void main(void) {
+}

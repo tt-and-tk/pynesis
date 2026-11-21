@@ -298,7 +298,8 @@ void Analyzer::collect_static_names() {
 // 宣言を書いたファイルの中にある同じ名前の識別子は，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
 // これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
-// 変数(const変数・列挙子を含む)・関数・ハードウェア変数・構造体名・列挙型名はすべて同じ名前空間にあり，互いに同じ名前にできない．
+// 変数(const変数・列挙子を含む)・関数・ハードウェア変数・構造体名・列挙型名・typedef名はすべて同じ名前空間にあり，互いに同じ名前にできない．
+// typedef名とハードウェア変数以外の名前の重複は，構文解析が検査する．
 // 構造体名・列挙型名・列挙子はプログラム全体で共有するため，staticを付けた宣言とも，ファイルによらず同じ名前にできない．
 // staticを付けた宣言は番号付きの名前へ置き換えてあるため，変数・関数の宣言を検査する時点では構造体名・列挙型名と一致しない．
 // そのため，staticを付けた宣言と構造体名・列挙型名の重複は，構造体・列挙型の定義を検査する際に，置き換える前の名前で調べる
@@ -425,7 +426,7 @@ bool Analyzer::is_value_name_declared(const std::string &name) const {
 
 // ローカル変数・引数の名前が，構造体名・列挙型名・列挙子と同じならエラーにする
 // 構造体・列挙型の定義で付けた名前はプログラム全体で共有するため，シャドーイングを認めない
-void Analyzer::check_not_type_def_name(const node_t *decl) const {
+void Analyzer::check_not_struct_enum_name(const node_t *decl) const {
     // 同じ名前の構造体が定義済みなら，エラーにする
     if (this->struct_decl_nodes_.count(decl->sval)) {
         throw std::string("compiler error: '") + source_name(decl->sval) + "' is already declared as a struct at "
@@ -798,7 +799,7 @@ void Analyzer::collect_globals() {
                           + loc_to_string(param->loc);
                 }
                 // 構造体名・列挙型名・列挙子と同名の引数は禁止する
-                this->check_not_type_def_name(param);
+                this->check_not_struct_enum_name(param);
                 // ハードウェア変数と同名の引数は禁止する (ハードウェア変数のレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
@@ -1568,7 +1569,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
               + loc_to_string(decl->loc);
     }
     // 構造体名・列挙型名・列挙子と同名のローカル変数は宣言できない
-    this->check_not_type_def_name(decl);
+    this->check_not_struct_enum_name(decl);
     // ハードウェア変数と同名のローカル変数は宣言できない (ハードウェア変数のレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {

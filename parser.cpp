@@ -221,7 +221,7 @@ std::string Parser::token_kind_name(token_kind_t kind) {
     }
 }
 
-// const修飾子・signed/unsigned修飾子と型キーワードに続けてポインタの*を読み，型情報を返す
+// const修飾子・signed/unsigned修飾子と型キーワードまたはtypedef名に続けてポインタの*を読み，型情報を返す
 // 関数戻り値型・引数型・変数宣言型・構造体メンバ型のいずれからも共通で呼ばれる
 // allow_voidがtrueのときのみvoid型を許可する(関数の戻り値型と，関数ポインタの戻り値型になりうる宣言の先頭で許可する)
 // constはどの文脈でも読んで型情報に記録し，許可するかどうかは呼び出し元が文脈に応じて判定する
@@ -912,7 +912,7 @@ node_t *Parser::parse_mode_switch() {
 
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
-// 型名は整数型(符号修飾子付き・列挙型を含む)のみ．型名の場合はnode->typeに型を格納し(children空)，
+// 型名は整数型(符号修飾子付き・列挙型を含む)と，整数型とそのポインタのtypedef名のみ．型名の場合はnode->typeに型を格納し(children空)，
 // 変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
 node_t *Parser::parse_sizeof() {
     node_t *node = this->new_node(ND_SIZEOF);
@@ -1103,7 +1103,7 @@ type_t Parser::parse_func_pointer_declarator(const type_t &pointee_return_type, 
 }
 
 // 変数宣言を解析してND_VAR_DECLを返す
-// 構文: [const] [signed|unsigned] 型 [*...] 変数名 [= 式] ;
+// 構文: [const] [signed|unsigned] 型 [*...] 変数名 [= 式] ;   (型はtypedef名でもよい)
 //       [signed|unsigned] 型 [*...] 変数名[サイズ] ;   (配列)
 //       [signed|unsigned] char 変数名[] = 文字列リテラル ;   (サイズを省いた配列)
 //       戻り値型 (*変数名)(引数型...) [= 式] ;   (関数ポインタ)
@@ -1636,7 +1636,7 @@ node_t *Parser::parse_unary() {
 }
 
 // キャスト (型名)式 を解析してND_CASTを返す
-// 型名は整数型・ポインタ・関数ポインタ(戻り値型 (*)(引数型...))のいずれか．変換する式は前置単項演算子を含む式として
+// 型名は整数型・ポインタ・関数ポインタ(戻り値型 (*)(引数型...))・それらのtypedef名のいずれか．変換する式は前置単項演算子を含む式として
 // 再帰的に読むため，(int)-xや(int)(char)xのような連続も読め，(int *)p[i]は添字を付けた要素を変換する
 // 変換できる型の組み合わせは，変換する式の型が決まる意味解析で確かめる
 node_t *Parser::parse_cast() {

@@ -1,0 +1,6 @@
+// expect: compiler error: sizeof of type 'void (*)(void)' is not supported at src_err/546.pn:4
+// 構文エラー: 関数ポインタの別名は，sizeofの型名に書けない (異常系)
+typedef void (*FP)(void);
+int n = sizeof(FP);
+void main(void) {
+}
