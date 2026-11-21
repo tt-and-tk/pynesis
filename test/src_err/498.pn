@@ -1,0 +1,13 @@
+// expect: compiler error: 'Item' is already declared as a struct at src_err/498.pn:7
+// 構造体名と同じ名前の引数は宣言できない(シャドーイングできない)
+struct Item {
+    int x;
+};
+
+int get(int Item) {
+    return Item;
+}
+
+void main(void) {
+    get(0);
+}

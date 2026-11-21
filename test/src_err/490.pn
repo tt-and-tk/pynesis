@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of enum 'Color' as variable at src_err/490.pn:3
+// 列挙子は，自身の列挙型名と同じ名前にできない
+enum Color { Color };
+
+void main(void) {
+}

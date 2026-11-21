@@ -1,0 +1,9 @@
+// expect: compiler error: 'Item' is already declared as a struct at src_err/495.pn:8
+// 構造体名と同じ名前のローカル変数は宣言できない(シャドーイングできない)
+struct Item {
+    int x;
+};
+
+void main(void) {
+    int Item = 0;
+}

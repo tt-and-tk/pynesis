@@ -1,7 +1,7 @@
 .global next, main
 
 main:
-    mov fh r0 r0 20
+    mov fh r0 r0 16
     sub r16 r0 r16
     mov fh r0 r0 1
     wm fh r0 r0 0
@@ -40,13 +40,9 @@ main:
     call r0
     mov fh r30 r0
     wm fh r0 r0 40
-    mov fh r0 r0 9
-    wmr fh r16 r0 16
-    rmr fh r16 r0 16
-    wm fh r0 r0 44
     mov fh r0 r0 0
-    wm fh r0 r0 48
-    mov fh r0 r0 20
+    wm fh r0 r0 44
+    mov fh r0 r0 16
     add r16 r0 r16
     ret
 

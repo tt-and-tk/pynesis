@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'Item' as struct at src_err/493.pn:3
+// 構造体名と同じ名前のstaticを付けたグローバル変数は，構造体の定義の後に宣言してもエラー
+struct Item {
+    int x;
+};
+static int Item;
+
+void main(void) {
+}

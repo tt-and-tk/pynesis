@@ -1,0 +1,11 @@
+// expect: compiler error: 'RED' is already declared as an enumerator at src_err/500.pn:5
+// 列挙子と同じ名前の引数は宣言できない(シャドーイングできない)
+enum Color { RED };
+
+int get(int RED) {
+    return RED;
+}
+
+void main(void) {
+    get(0);
+}

@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'Item' as struct at src_err/494.pn:4
+// 取り込んだファイルのstaticを付けたグローバル変数と同じ名前の構造体は，ファイルが異なっても定義できない
+#include "include/494_lib.pn"
+struct Item {
+    int x;
+};
+
+void main(void) {
+}

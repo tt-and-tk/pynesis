@@ -134,6 +134,7 @@ struct node_t {
     type_t type;                    // 型情報 (意味解析後に確定)
     loc_t loc;                      // ソース上の位置 (エラー報告用)
     bool is_static = false;         // staticを付けた宣言か (staticはグローバル変数宣言・関数定義にだけ書けるため，ほかのノードでは常にfalse)
+    bool is_enumerator = false;     // 列挙子を表す変数宣言か (列挙子と同じ名前のローカル変数・引数を禁止するため，const変数の宣言と区別する)
     // サイズを省いた配列の宣言か (省いた場合，子は初期化子の文字列リテラル．配列の宣言以外のノードでは常にfalse)
     // 子の種類では判定しない．サイズの式にも文字列リテラルを書けてしまい，初期化子と区別できないため
     bool is_size_omitted = false;
