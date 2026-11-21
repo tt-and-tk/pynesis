@@ -1729,8 +1729,12 @@ void Analyzer::analyze_binop(node_t *expr) {
             throw std::string("compiler error: function pointer can only be compared with '==' or '!=' at ")
                   + loc_to_string(expr->loc);
         }
-        // データのポインタどうしでない場合，または型が異なる場合 (nullptrとの大小は意味を持たない)
-        if (!is_pointer_value(lhs) || !Analyzer::is_same_type(lhs, rhs)) {
+        // 大小を比較できない組み合わせの場合
+        if (
+            // 左辺がデータのポインタでない (nullptrとの大小は意味を持たない)
+            !is_pointer_value(lhs)
+            // 両辺の型が異なる
+            || !Analyzer::is_same_type(lhs, rhs)) {
             throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
                   + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
         }
