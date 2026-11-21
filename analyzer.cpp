@@ -2160,14 +2160,16 @@ void Analyzer::analyze_expr(node_t *expr) {
             //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
             //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
             this->analyze_lvalue(lhs);
-            // 構造体そのものへの代入は，右辺の構造体の全ワードを写す代入として検査し，式の型を左辺の型にする
+            // 構造体そのものへの代入は，右辺の構造体の全ワードを写す単純代入(=)として検査する
             if (is_struct_object(lhs->type)) {
                 // 複合代入はエラーにする (構造体には演算を定めていないため)
                 if (expr->sval != "=") {
                     throw std::string("compiler error: '") + expr->sval + "' is not supported for struct at "
                           + loc_to_string(expr->loc);
                 }
+                // 右辺を，左辺と同じ構造体名の構造体を写す元として検査する
                 this->analyze_struct_source(expr->children[1], lhs->type, "assignment");
+                // 代入式の型を左辺の型にする (代入式の値は左辺の構造体のため)
                 expr->type = lhs->type;
                 return;
             }
