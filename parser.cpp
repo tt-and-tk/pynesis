@@ -797,7 +797,7 @@ node_t *Parser::parse_param() {
 
     // 引数の型 (voidは関数ポインタの戻り値型としてのみ書ける)
     node->type = this->parse_type(true);
-    // 構造体そのものの場合 (引数は1つにつきスタック上の1ワードで渡すため．構造体へのポインタは渡せる)
+    // 構造体そのものを引数の型にした場合はエラーにする (引数は1つにつきスタック上の1ワードで渡すため．構造体へのポインタは渡せる)
     if (node->type.base == BASE_STRUCT && node->type.pointer_depth == 0) {
         throw std::string("compiler error: struct cannot be used as a function parameter type at ")
               + loc_to_string(node->loc);
@@ -1014,13 +1014,13 @@ node_t *Parser::parse_var_decl() {
             node->type.is_array = true;
             node->children.push_back(this->parse_expr());   // 配列サイズ (定数式，意味解析で畳み込む)
             this->get_token(TK_RBRACKET);
-            // 構造体の配列に初期化子を書いた場合
+            // 構造体の配列に初期化子を書いた場合はエラーにする (要素ごとの初期値を書く仕組みが無いため)
             if (this->token_kind_is(TK_ASSIGN)) {
                 throw std::string("compiler error: struct array initializer is not supported at ")
                       + loc_to_string(this->peek_token().loc);
             }
         }
-        // 単一変数で初期化子がある場合 (写す元の構造体の式を読む)
+        // 単一変数で初期化子がある場合は，写す元の構造体の式を読む
         else if (this->token_kind_is(TK_ASSIGN)) {
             this->get_token(TK_ASSIGN);
             node->children.push_back(this->parse_expr());   // 初期化子

@@ -621,7 +621,7 @@ void Analyzer::collect_globals() {
                 // const変数: 値を確定させて登録する (メモリ番地は割り当てない)
                 this->resolve_global_const(child->sval);
             } else if (child->type.base == BASE_STRUCT && child->type.pointer_depth == 0) {
-                // 配列でない構造体変数で初期化子がある場合 (グローバル変数の初期化子は定数式に限るため，構造体を写す元を書けない)
+                // 配列でない構造体変数に初期化子を書いた場合はエラーにする (グローバル変数の初期化子は定数式に限り，構造体を写す元は定数式にならないため)
                 if (!child->type.is_array && !child->children.empty()) {
                     throw std::string("compiler error: struct variable initializer is not supported for a global variable at ")
                           + loc_to_string(child->children[0]->loc);
@@ -1561,7 +1561,7 @@ void Analyzer::check_scalar_operand(const node_t *target, const std::string &ope
 // その検査は構造体の代入式を許すため，ここでは構造体の代入式とvoidを検査する
 void Analyzer::analyze_value(node_t *expr) {
     this->analyze_discarded(expr);
-    // 構造体の代入式の場合 (式の値は左辺の構造体であり，1つのレジスタに読み込めないため)
+    // 構造体の代入式はエラーにする (式の値は左辺の構造体であり，1つのレジスタに読み込めないため)
     if (is_struct_object(expr->type)) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
@@ -1582,7 +1582,7 @@ void Analyzer::analyze_value(node_t *expr) {
 // それ以外なら中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
 void Analyzer::analyze_discarded(node_t *expr) {
     this->analyze_expr(expr);
-    // 構造体の代入式以外で，構造体そのものの場合 (値をまとめてレジスタへ読み込めないため．構造体の配列は先頭要素へのポインタになる)
+    // 構造体の代入式以外の，構造体そのものはエラーにする (全メンバの値を1つのレジスタへ読み込めないため．構造体の配列はこの後で先頭要素へのポインタにする)
     if (is_struct_object(expr->type) && expr->kind != ND_ASSIGN) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
@@ -1606,12 +1606,12 @@ void Analyzer::analyze_discarded(node_t *expr) {
 // (三項演算子の各分岐は値として検査され，キャストの結果と関数の戻り値は構造体にならないため)
 void Analyzer::analyze_struct_source(node_t *src, const type_t &dst, const std::string &context) {
     this->analyze_expr(src);
-    // 構造体そのものでない場合 (整数・ポインタ・構造体の配列等)
+    // 構造体そのものでない式(整数・ポインタ・構造体の配列等)はエラーにする
     if (!is_struct_object(src->type)) {
         throw std::string("compiler error: cannot convert '") + type_to_string(src->type) + "' to '"
               + type_to_string(dst) + "' in " + context + " at " + loc_to_string(src->loc);
     }
-    // 型の異なる構造体の場合
+    // 構造体名の異なる構造体はエラーにする
     if (!Analyzer::is_same_type(dst, src->type)) {
         throw std::string("compiler error: incompatible struct types in ") + context + ": expected '"
               + type_to_string(dst) + "' but got '" + type_to_string(src->type) + "' at " + loc_to_string(src->loc);
@@ -2160,9 +2160,9 @@ void Analyzer::analyze_expr(node_t *expr) {
             //  読み取り不可の変数をエラーにする．書き込み先にその検査を当てると誤るが，
             //  読み出し側では必要な振る舞いのため，analyze_expr自体は変えられない)
             this->analyze_lvalue(lhs);
-            // 構造体そのものへの代入の場合 (右辺の構造体の全ワードを写す．代入式の値の型は左辺の型とする)
+            // 構造体そのものへの代入は，右辺の構造体の全ワードを写す代入として検査し，式の型を左辺の型にする
             if (is_struct_object(lhs->type)) {
-                // 複合代入の場合 (構造体には演算を定めていないため)
+                // 複合代入はエラーにする (構造体には演算を定めていないため)
                 if (expr->sval != "=") {
                     throw std::string("compiler error: '") + expr->sval + "' is not supported for struct at "
                           + loc_to_string(expr->loc);

@@ -465,7 +465,7 @@ void Generator::gen_var_decl(node_t *decl) {
     // 初期化子がなければ何も出力しない (番地は確保済み，未初期化ローカルは不定値)
     if (decl->children.empty()) return;
 
-    // 構造体変数の場合 (初期化子が表す構造体の番地をr0に，変数の番地をr1に求め，全ワードを写す)
+    // 構造体変数は，初期化子が表す構造体の番地をr0に，変数の番地をr1に求め，全ワードを写す
     if (is_struct_object(decl->type)) {
         this->gen_struct_addr(decl->children[0], 0);
         this->gen_var_addr(1, decl->sym);
@@ -649,11 +649,11 @@ void Generator::gen_struct_assign(node_t *expr, int reg) {
 // 構造体の式(構造体の左辺値・構造体の代入式)が表す構造体の番地をr{reg}に求める
 // 構造体の代入式は，代入を実行して左辺の構造体を表す(連続代入 c = b = a; の右辺のb = a)
 void Generator::gen_struct_addr(node_t *expr, int reg) {
-    // 構造体の代入式の場合
+    // 構造体の代入式は，代入を実行して左辺の構造体の番地を残す
     if (expr->kind == ND_ASSIGN) {
         this->gen_struct_assign(expr, reg);
     }
-    // 構造体の左辺値の場合
+    // 構造体の左辺値は，その番地を求める
     else {
         this->gen_lvalue_addr(expr, reg);
     }
@@ -666,7 +666,7 @@ void Generator::gen_struct_addr(node_t *expr, int reg) {
 //              r{reg+3}=写す元の末尾の次の番地(不変), r{reg+4}=4(位置を進める量，不変), r{reg+5}=写すワード(作業用)
 void Generator::gen_struct_copy(int reg, const std::string &struct_name, const loc_t &loc) {
     const int words = this->analysis_.struct_defs.at(struct_name).total_words;   // 写すワード数
-    // メンバの無い構造体の場合 (写す先の番地を残すだけにする．ループは1ワード写してから末尾かを判定し，0ワードでも1ワード写すため)
+    // メンバの無い構造体は，ループを生成せず写す先の番地を残すだけにする (ループは1ワード写してから末尾かを判定するため，0ワードでも1ワード写してしまう)
     if (words == 0) {
         (*this->out_) << "    mov fh r" << (reg + 1) << " r" << reg << "\n";
         return;
@@ -1567,7 +1567,7 @@ void Generator::gen_expr(node_t *expr, int reg) {
         // (構造体の代入は，右辺の構造体の全ワードを左辺へ写し，左辺の構造体の番地をr{reg}に残す)
         case ND_ASSIGN: {
             node_t *lhs = expr->children[0];   // 代入先(左辺)
-            // 構造体の代入の場合
+            // 構造体の代入は，構造体の全ワードを写すコードを生成する
             if (is_struct_object(lhs->type)) {
                 this->gen_struct_assign(expr, reg);
                 break;
