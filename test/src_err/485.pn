@@ -1,0 +1,12 @@
+// expect: compiler error: comparison between 'int *' and 'int (*)(void)' at src_err/485.pn:11
+// 意味解析エラー: データのポインタと関数ポインタは，大小も一致・不一致も比較できないため，型の不一致として扱う (異常系)
+int zero(void) {
+    return 0;
+}
+int arr[4];
+int r;
+void main(void) {
+    int *p = arr;
+    int (*f)(void) = zero;
+    r = p < f;
+}

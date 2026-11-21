@@ -1728,6 +1728,18 @@ void Analyzer::analyze_binop(node_t *expr) {
     // 比較・論理演算か (結果は0/1のint)
     const bool is_boolean = op == "==" || op == "!=" || op == "<" || op == ">"
                          || op == "<=" || op == ">=" || op == "&&" || op == "||";
+    // 一致・不一致を比較できる組み合わせか
+    const bool is_equality_comparable =
+        // 左辺がポインタ(nullptrを含む)である
+        is_lhs_pointer
+        // 右辺がポインタ(nullptrを含む)である
+        && is_rhs_pointer
+        // 左辺がnullptrである
+        && (lhs.base == BASE_NULLPTR
+            // 右辺がnullptrである
+            || rhs.base == BASE_NULLPTR
+            // 両辺が同じ型である
+            || Analyzer::is_same_type(lhs, rhs));
 
     // 整数どうしの場合 (演算の符号で，符号付きで演算するならint，符号なしならunsigned int)
     if (!is_lhs_pointer && !is_rhs_pointer) {
@@ -1741,17 +1753,36 @@ void Analyzer::analyze_binop(node_t *expr) {
     }
     // 一致の比較の場合 (同じ型のポインタどうしか，ポインタとnullptrに限る)
     if (op == "==" || op == "!=") {
-        const bool has_nullptr = lhs.base == BASE_NULLPTR || rhs.base == BASE_NULLPTR;   // nullptrとの比較か
-        if (!is_lhs_pointer || !is_rhs_pointer || (!has_nullptr && !Analyzer::is_same_type(lhs, rhs))) {
+        if (!is_equality_comparable) {
             throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
                   + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
         }
         expr->type = type_t{BASE_INT, true};
         return;
     }
-    // 大小比較の場合 (同じ配列を指す同じ型のポインタどうしに限る．関数の番地とnullptrは大小に意味を持たない)
+    // 大小比較の場合 (同じ配列を指す同じ型のポインタどうしに限る)
     if (is_boolean) {
-        if (!is_pointer_value(lhs) || is_func_pointer(lhs) || !Analyzer::is_same_type(lhs, rhs)) {
+        // 関数ポインタを含み，一致・不一致なら比較できる組み合わせか
+        // (関数の番地はメモリの番地とは別の空間のため，大小に意味を持たない．一致・不一致でも比較できない組み合わせは，
+        //  '=='か'!='に直しても通らないため，ここでは除き，大小を比較できない組み合わせとして型の不一致のエラーにする)
+        const bool is_func_pointer_ordering =
+            // 一致・不一致なら比較できる組み合わせである
+            is_equality_comparable
+            // 左辺が関数ポインタである
+            && (is_func_pointer(lhs)
+                // 右辺が関数ポインタである
+                || is_func_pointer(rhs));
+        // 関数ポインタを含み，一致・不一致なら比較できる組み合わせの場合
+        if (is_func_pointer_ordering) {
+            throw std::string("compiler error: function pointer can only be compared with '==' or '!=' at ")
+                  + loc_to_string(expr->loc);
+        }
+        // 大小を比較できない組み合わせの場合
+        if (
+            // 左辺がデータのポインタでない (nullptrとの大小は意味を持たない)
+            !is_pointer_value(lhs)
+            // 両辺の型が異なる
+            || !Analyzer::is_same_type(lhs, rhs)) {
             throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
                   + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
         }
