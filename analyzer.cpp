@@ -1711,9 +1711,15 @@ void Analyzer::analyze_binop(node_t *expr) {
         expr->type = type_t{BASE_INT, true};
         return;
     }
-    // 大小比較の場合 (同じ配列を指す同じ型のポインタどうしに限る．関数の番地とnullptrは大小に意味を持たない)
+    // 大小比較の場合 (同じ配列を指す同じ型のポインタどうしに限る)
     if (is_boolean) {
-        if (!is_pointer_value(lhs) || is_func_pointer(lhs) || !Analyzer::is_same_type(lhs, rhs)) {
+        // 関数ポインタを含む場合 (関数の番地はメモリの番地とは別の空間のため，大小に意味を持たない)
+        if (is_func_pointer(lhs) || is_func_pointer(rhs)) {
+            throw std::string("compiler error: function pointer can only be compared with '==' or '!=' at ")
+                  + loc_to_string(expr->loc);
+        }
+        // データのポインタどうしでない場合，または型が異なる場合 (nullptrとの大小は意味を持たない)
+        if (!is_pointer_value(lhs) || !Analyzer::is_same_type(lhs, rhs)) {
             throw std::string("compiler error: comparison between '") + type_to_string(lhs) + "' and '"
                   + type_to_string(rhs) + "' at " + loc_to_string(expr->loc);
         }
