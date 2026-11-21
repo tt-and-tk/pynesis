@@ -336,6 +336,8 @@ void Generator::gen_syscall(node_t *expr, int reg) {
     }
     // 並べてシステムコールを呼ぶ
     this->gen_syscall_enter(value_regs, "r" + std::to_string(work_reg));
+    // 生成中の関数を，syscallを呼ぶ関数として記録する (スタックの量の見積もりで，並べる値の分を数えるため)
+    this->syscall_funcs_.insert(this->func_name_);
     // 戻り値の置き場(SP+0)から戻り値を読む
     (*this->out_) << "    rmr fh " << SP_REGISTER << " r" << reg << " 0\n";
     // 並べた値の分だけ下げたSPを戻す
@@ -2018,7 +2020,9 @@ void Generator::check_memory_usage() {
 }
 
 // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
-// func自身のフレームに，呼び出し先の中で最も多く使うものの使用量を足す
+// func自身のフレームに，フレームの下へ積む量の最大を足す．フレームの下へ積むのは，関数の呼び出しと組み込み関数syscallである
+// (両者は同時に積まないため，足し合わせず最大を取る．syscallは並べる値を評価し終えてからSPを下げ，
+//  呼び出し先はその評価の中で戻り終えている)
 int Generator::calc_stack_bytes(const std::string &func, std::set<std::string> &path,
                                 std::map<std::string, int> &recorded, bool &is_recursive) {
     // 現在の経路に既にfuncがある場合 (直接・間接を問わず再帰であり，深さが定まらない)
@@ -2033,15 +2037,17 @@ int Generator::calc_stack_bytes(const std::string &func, std::set<std::string> &
 
     path.insert(func);   // 経路にfuncを追加してから呼び出し先を探索する
 
-    int max_callee_bytes = 0;   // 呼び出し先のうち最も多いスタック使用量
+    int max_below_frame_bytes = 0;   // フレームの下へ積む量の最大
+    // syscallを呼ぶ場合は，SPから並べる値(戻り値の置き場・番号・引数)の分を積む
+    if (this->syscall_funcs_.count(func)) max_below_frame_bytes = SYSCALL_ARGS_BYTES;
     for (const std::string &callee : this->analysis_.call_graph.at(func)) {
         // 呼び出しごとに戻り先アドレス(4バイト)が積まれる
         const int callee_bytes = 4 + this->calc_stack_bytes(callee, path, recorded, is_recursive);
-        if (callee_bytes > max_callee_bytes) max_callee_bytes = callee_bytes;
+        if (callee_bytes > max_below_frame_bytes) max_below_frame_bytes = callee_bytes;
     }
 
     path.erase(func);   // 探索し終えたので経路から外す(他の呼び出し経路と共有しないため)
-    const int bytes = this->func_frame_sizes_.at(func) + max_callee_bytes;   // funcを起点とした使用量
+    const int bytes = this->func_frame_sizes_.at(func) + max_below_frame_bytes;   // funcを起点とした使用量
     // 再帰を見つけた探索の途中で得た値は，打ち切った経路の分だけ少なくなるため記録しない
     if (!is_recursive) recorded[func] = bytes;
     return bytes;
