@@ -1,8 +1,9 @@
-// expect: compiler error: redefinition of 'LED' as struct at src_err/491.pn:3
-// 意味解析エラー: ハードウェア変数と同じ名前の構造体は定義できない (異常系)
-struct LED {
-    int x;
-};
+// expect: compiler error: redefinition of enum 'Color' as function at src_err/491.pn:4
+// 意味解析エラー: 列挙型名と同じ名前の関数は，列挙型の定義の後に定義するとエラーになる (異常系)
+enum Color { RED };
+int Color(void) {
+    return 0;
+}
 
 void main(void) {
 }

@@ -1,11 +1,7 @@
-// expect: compiler error: 'Color' is already declared as an enum at src_err/499.pn:5
-// 意味解析エラー: 列挙型名と同じ名前の引数は宣言できない(シャドーイングできない) (異常系)
+// expect: compiler error: 'RED' is already declared as an enumerator at src_err/499.pn:6
+// 意味解析エラー: 列挙子と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
 enum Color { RED };
 
-int get(int Color) {
-    return Color;
-}
-
 void main(void) {
-    get(0);
+    int RED = 0;
 }

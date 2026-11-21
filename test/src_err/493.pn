@@ -1,9 +1,8 @@
-// expect: compiler error: redefinition of 'Item' as struct at src_err/493.pn:3
-// 意味解析エラー: 構造体名と同じ名前のstaticを付けたグローバル変数は，構造体の定義の後に宣言してもエラーになる (異常系)
-struct Item {
+// expect: compiler error: redefinition of 'LED' as struct at src_err/493.pn:3
+// 意味解析エラー: ハードウェア変数と同じ名前の構造体は定義できない (異常系)
+struct LED {
     int x;
 };
-static int Item;
 
 void main(void) {
 }

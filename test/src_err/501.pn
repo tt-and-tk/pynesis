@@ -1,7 +1,11 @@
-// expect: compiler error: redefinition of 'Color' as enum at src_err/501.pn:3
-// 意味解析エラー: 列挙型名と同じ名前のstaticを付けたグローバル変数は，列挙型の定義の後に宣言してもエラーになる (異常系)
+// expect: compiler error: 'Color' is already declared as an enum at src_err/501.pn:5
+// 意味解析エラー: 列挙型名と同じ名前の引数は宣言できない(シャドーイングできない) (異常系)
 enum Color { RED };
-static int Color;
+
+int get(int Color) {
+    return Color;
+}
 
 void main(void) {
+    get(0);
 }

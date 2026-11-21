@@ -1,7 +1,9 @@
-// expect: compiler error: 'Color' is already declared as an enum at src_err/496.pn:6
-// 意味解析エラー: 列挙型名と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
-enum Color { RED };
+// expect: compiler error: redefinition of 'Item' as struct at src_err/496.pn:4
+// 意味解析エラー: 取り込んだファイルのstaticを付けたグローバル変数と同じ名前の構造体は，ファイルが異なっても定義できない (異常系)
+#include "include/496_lib.pn"
+struct Item {
+    int x;
+};
 
 void main(void) {
-    int Color = 0;
 }

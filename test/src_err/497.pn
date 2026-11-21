@@ -1,7 +1,9 @@
-// expect: compiler error: 'RED' is already declared as an enumerator at src_err/497.pn:6
-// 意味解析エラー: 列挙子と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
-enum Color { RED };
+// expect: compiler error: 'Item' is already declared as a struct at src_err/497.pn:8
+// 意味解析エラー: 構造体名と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
+struct Item {
+    int x;
+};
 
 void main(void) {
-    int RED = 0;
+    int Item = 0;
 }

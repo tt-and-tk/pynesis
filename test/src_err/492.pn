@@ -1,7 +1,6 @@
-// expect: compiler error: redefinition of enum 'Size' as variable at src_err/492.pn:4
-// 意味解析エラー: 列挙型名と同じ名前のconst変数は宣言できない (異常系)
-enum Size { SMALL };
-const int Size = 3;
+// expect: compiler error: redefinition of enum 'Color' as enumerator at src_err/492.pn:3
+// 意味解析エラー: 列挙子は，自身の列挙型名と同じ名前にできない (異常系)
+enum Color { Color };
 
 void main(void) {
 }

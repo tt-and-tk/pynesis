@@ -1,0 +1,7 @@
+// expect: compiler error: static 'RED' conflicts with enumerator at src_err/511.pn:4
+// 意味解析エラー: 取り込んだファイルのstaticを付けたグローバル変数と同じ名前の列挙子は，ファイルが異なっても宣言できない (異常系)
+#include "include/511_lib.pn"
+enum Color { RED };
+
+void main(void) {
+}

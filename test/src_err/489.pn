@@ -1,9 +1,9 @@
-// expect: compiler error: redefinition of enum 'Color' as function at src_err/489.pn:4
-// 意味解析エラー: 列挙型名と同じ名前の関数は，列挙型の定義の後に定義するとエラーになる (異常系)
-enum Color { RED };
-int Color(void) {
-    return 0;
-}
+// expect: compiler error: redefinition of 'Item' as struct at src_err/489.pn:4
+// 意味解析エラー: グローバル変数と同じ名前の構造体は，変数の宣言の後に定義するとエラーになる (異常系)
+int Item;
+struct Item {
+    int x;
+};
 
 void main(void) {
 }

@@ -1,9 +1,7 @@
-// expect: compiler error: 'Item' is already declared as a struct at src_err/507.pn:8
-// 意味解析エラー: 構造体名と同じ名前のローカル変数は，その構造体の型でも宣言できない (異常系)
-struct Item {
-    int x;
-};
+// expect: compiler error: redefinition of 'Color' as enum at src_err/507.pn:4
+// 意味解析エラー: グローバル変数と同じ名前の列挙型は，変数の宣言の後に定義するとエラーになる (異常系)
+int Color;
+enum Color { RED };
 
 void main(void) {
-    struct Item Item;
 }

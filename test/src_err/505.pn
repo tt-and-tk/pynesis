@@ -1,7 +1,6 @@
-// expect: compiler error: redefinition of 'Color' as enum at src_err/505.pn:4
-// 意味解析エラー: グローバル変数と同じ名前の列挙型は，変数の宣言の後に定義するとエラーになる (異常系)
-int Color;
-enum Color { RED };
+// expect: compiler error: redefinition of 'SP' as enum at src_err/505.pn:3
+// 意味解析エラー: ハードウェア変数と同じ名前の列挙型は定義できない (異常系)
+enum SP { TOP };
 
 void main(void) {
 }
