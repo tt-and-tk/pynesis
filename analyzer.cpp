@@ -303,7 +303,7 @@ void Analyzer::collect_static_names() {
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
         // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
-        // (構造体名・列挙型名・列挙子とstaticの宣言の重複は，それぞれの宣言を検査する際に，ファイルによらず検査する)
+        // (構造体名・列挙型名は変数・関数の宣言ではないため対象外とし，staticの宣言との重複は構造体・列挙型の定義を検査する際に，ファイルによらず検査する)
         if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL) {
             this->check_static_in_includer(child);
         }
@@ -355,8 +355,14 @@ void Analyzer::index_global_decls() {
             continue;
         }
 
-        // 変数(const変数・列挙子を含む)か関数かを，エラーメッセージに表示する宣言の種類として決める
-        const std::string kind = child->kind == ND_VAR_DECL ? "variable" : "function";
+        // エラーメッセージに表示する宣言の種類を決める
+        const std::string kind =
+            // 列挙子なら列挙子
+            child->is_enumerator ? "enumerator"
+            // 列挙子でない変数(const変数を含む)なら変数
+            : child->kind == ND_VAR_DECL ? "variable"
+            // どちらでもなければ関数
+            : "function";
         // 同じ名前の構造体が定義済みの場合
         // (staticを付けた宣言は，staticの名前を集める処理が全ファイル分を集めてあるため，構造体・列挙型の定義を検査する際に宣言順によらず検査済み)
         if (this->struct_decl_nodes_.count(child->sval)) {
