@@ -373,13 +373,8 @@ int Parser::find_typedef_name(int type_start) const {
         if (this->kind_at(index) == TK_IDENT) index++;
         // 本体の'{'がある場合
         if (this->kind_at(index) == TK_LBRACE) {
-            // 本体を閉じる'}'まで進める
-            int depth = 0;   // 本体の中の波括弧の深さ
-            for (; this->kind_at(index) != TK_EOF; index++) {
-                if (this->kind_at(index) == TK_LBRACE) depth++;
-                if (this->kind_at(index) == TK_RBRACE && --depth == 0) break;
-            }
-            return this->kind_at(index + 1) == TK_IDENT ? index + 1 : -1;
+            const int close_index = this->find_closing_brace(index);   // 本体を閉じる'}'の位置
+            return this->kind_at(close_index + 1) == TK_IDENT ? close_index + 1 : -1;
         }
     }
     const int after_type = type_start + this->count_type_tokens(type_start);   // 型の直後の位置
@@ -391,6 +386,18 @@ int Parser::find_typedef_name(int type_start) const {
         return after_type + 2;
     }
     return -1;
+}
+
+// 位置open_indexの'{'に対応する'}'の位置を返す (対応する'}'がなければトークン列の終端(EOF)の位置を返す)
+int Parser::find_closing_brace(int open_index) const {
+    int index = open_index;   // 調べている位置
+    int depth = 0;            // 調べている位置の，'{'の内側の波括弧の深さ
+    // 波括弧の深さが0に戻る'}'まで進める
+    for (; this->kind_at(index) != TK_EOF; index++) {
+        if (this->kind_at(index) == TK_LBRACE) depth++;
+        if (this->kind_at(index) == TK_RBRACE && --depth == 0) break;
+    }
+    return index;
 }
 
 // 宣言する名前(変数・引数・関数・構造体名・列挙型名・列挙子)がtypedef名と同じならエラーにする
@@ -1469,16 +1476,9 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
         if (parses_definition) {
             definitions = is_struct ? std::vector<node_t *>{this->parse_struct_body()} : this->parse_enum_body();
         }
-        // 定義の本体を読み飛ばす場合
+        // 定義の本体を読み飛ばす場合 (本体を閉じる'}'の次まで進める)
         else {
-            // 本体を閉じる'}'の次まで進める
-            this->pos_ += has_tag ? 2 : 1;
-            int depth = 0;   // 本体の中の波括弧の深さ
-            do {
-                if (this->token_kind_is(TK_LBRACE)) depth++;
-                if (this->token_kind_is(TK_RBRACE)) depth--;
-                this->get_token();
-            } while (depth > 0);
+            this->pos_ = this->find_closing_brace(this->pos_ + (has_tag ? 2 : 1)) + 1;
         }
         name = this->get_token(TK_IDENT).value;
         // 構造体の場合 (無名構造体には，typedef名から決めた内部名を付ける)

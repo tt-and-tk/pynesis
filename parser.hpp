@@ -200,6 +200,7 @@ private:
     type_t resolve_typedef(const token_t &name);
     void collect_typedef_names();                          // 構文解析の前に，グローバルスコープのtypedef名と宣言の位置を集める
     int find_typedef_name(int type_start) const;           // typedefの直後から始まる型に続く名前の位置を返す (形が合わなければ-1)
+    int find_closing_brace(int open_index) const;          // 位置open_indexの'{'に対応する'}'の位置を返す
     void check_not_typedef_name(const std::string &name, const loc_t &loc) const;  // 宣言する名前がtypedef名と同じならエラーにする
     // 関数ポインタまたはその配列の宣言子を読み，関数ポインタの型を返す
     // pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡し，宣言子の中の名前はnameに書き込む

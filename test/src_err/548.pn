@@ -1,0 +1,5 @@
+// expect: compiler error: expected identifier but got ';' at src_err/548.pn:3
+// 構文エラー: typedefには名前が必要である (異常系)
+typedef int;
+void main(void) {
+}

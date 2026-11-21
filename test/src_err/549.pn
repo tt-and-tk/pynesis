@@ -1,0 +1,8 @@
+// expect: compiler error: 'S' is already declared as a typedef at src_err/549.pn:4
+// 構文エラー: typedef名と同じ名前の構造体名は，typedefより後で定義しても付けられない (異常系)
+typedef int S;
+struct S {
+    int x;
+};
+void main(void) {
+}

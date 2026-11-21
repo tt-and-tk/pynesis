@@ -1,0 +1,52 @@
+// typedef名は，ポインタのポインタ・ポインタを返す関数・構造体へのポインタへのキャスト・switchの条件に使え，
+// 構造体の定義より前に，その構造体へのポインタの別名を宣言できる
+typedef struct Node *node_ptr_t;     // 後で定義する構造体へのポインタの別名
+struct Node {
+    int value;
+    node_ptr_t next;
+};
+typedef struct {                     // 互いのtypedef名へのポインタを持つ無名構造体
+    int id;
+    owner_t *owner;
+} item_t;
+typedef struct {
+    int id;
+    item_t *item;
+} owner_t;
+typedef enum {
+    OFF,
+    ON,
+} switch_t;
+struct Node nodes[2];
+item_t item;
+owner_t owner;
+int r1;
+int r2;
+int r3;
+
+node_ptr_t first(void) {             // 戻り値の型がポインタの別名
+    return &nodes[0];
+}
+
+void main(void) {
+    nodes[0].value = 1;
+    nodes[0].next = &nodes[1];
+    nodes[1].value = 2;
+    node_ptr_t p = first();
+    node_ptr_t *pp = &p;             // ポインタの別名のポインタ(ポインタのポインタ)
+    r1 = (*pp)->next->value;         // 2
+    item.id = 3;
+    item.owner = &owner;
+    owner.id = 4;
+    owner.item = &item;
+    r2 = ((item_t *)(int)&item)->owner->item->id;   // 3
+    switch_t s = ON;
+    switch (s) {
+        case ON:
+            r3 = 1;
+            break;
+        default:
+            r3 = 0;
+            break;
+    }
+}
