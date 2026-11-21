@@ -49,7 +49,7 @@ const std::map<std::string, token_kind_t> g_keywords = {
     {"int",      TK_INT},      {"char",     TK_CHAR},      {"short",    TK_SHORT},
     {"void",     TK_VOID},     {"signed",   TK_SIGNED},    {"unsigned", TK_UNSIGNED},
     {"struct",   TK_STRUCT},   {"enum",     TK_ENUM},
-    {"const",    TK_CONST},    {"static",   TK_STATIC},
+    {"const",    TK_CONST},    {"static",   TK_STATIC},    {"typedef",  TK_TYPEDEF},
     {"if",       TK_IF},       {"else",     TK_ELSE},      {"for",      TK_FOR},
     {"while",    TK_WHILE},    {"do",       TK_DO},
     {"switch",   TK_SWITCH},   {"case",     TK_CASE},      {"default",  TK_DEFAULT},

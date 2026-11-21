@@ -1,0 +1,5 @@
+// expect: compiler error: circular reference in typedef 'FP' at src_err/521.pn:3
+// 構文エラー: 関数ポインタの別名の引数の型に，その別名自身は書けない (異常系)
+typedef void (*FP)(FP);
+void main(void) {
+}

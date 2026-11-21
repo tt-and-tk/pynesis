@@ -1,0 +1,8 @@
+// expect: compiler error: duplicate member 'x' in 'S' at src_err/540.pn:5
+// 意味解析エラー: typedef名を付けた無名構造体は，エラーメッセージにtypedef名で表示する (異常系)
+typedef struct {
+    int x;
+    int x;
+} S;
+void main(void) {
+}

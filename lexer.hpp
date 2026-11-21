@@ -13,6 +13,8 @@ typedef enum {
     TK_CONST,
     // 宣言を参照できる範囲を宣言したファイルの中に限るキーワード
     TK_STATIC,
+    // 型に別名を付けるキーワード
+    TK_TYPEDEF,
     // 制御構文キーワード
     TK_IF, TK_ELSE, TK_FOR, TK_WHILE, TK_DO,
     TK_SWITCH, TK_CASE, TK_DEFAULT,

@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared struct 'Undefined' at src_err/522.pn:3
+// 意味解析エラー: 定義されていない構造体には，typedef名を使わなくても別名を付けられない (異常系)
+typedef struct Undefined *P;
+void main(void) {
+}

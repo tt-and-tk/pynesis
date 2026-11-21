@@ -1991,7 +1991,7 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
     for (const struct_member_t &member : this->analysis_.struct_defs.at(struct_name).members) {
         if (member.name == member_access->sval) return member.offset_words * 4;
     }
-    throw std::string("compiler error: struct '") + struct_name + "' has no member '" + member_access->sval
+    throw std::string("compiler error: '") + struct_type_name(struct_name) + "' has no member '" + member_access->sval
           + "' at " + loc_to_string(member_access->loc);
 }
 
