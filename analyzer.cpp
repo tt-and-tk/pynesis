@@ -314,19 +314,19 @@ void Analyzer::index_global_decls() {
             rename_identifiers(child, found->second);
         }
 
-        // 構造体定義の場合
+        // 構造体定義なら，構造体名がほかの名前と重複しないか検査して登録する
         if (child->kind == ND_STRUCT_DECL) {
-            // 同じ名前の構造体が定義済みの場合 (同じ名前の構造体を再定義することは禁止する)
+            // 同じ名前の構造体が定義済みなら，再定義としてエラーにする
             if (this->struct_decl_nodes_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of struct '") + child->sval
                       + "' at " + loc_to_string(child->loc);
             }
-            // 同じ名前の列挙型が定義済みの場合
+            // 同じ名前の列挙型が定義済みなら，エラーにする
             if (this->enum_names_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of enum '") + child->sval
                       + "' as struct at " + loc_to_string(child->loc);
             }
-            // 同じ名前の変数・関数・ハードウェア変数が宣言済みの場合
+            // 同じ名前の変数・関数・ハードウェア変数が宣言済みなら，エラーにする
             if (this->is_value_name_declared(child->sval)) {
                 throw std::string("compiler error: redefinition of '") + child->sval
                       + "' as struct at " + loc_to_string(child->loc);
@@ -334,19 +334,20 @@ void Analyzer::index_global_decls() {
             this->struct_decl_nodes_[child->sval] = child;
             continue;
         }
-        // 列挙型の定義の場合 (列挙子は後ろに並ぶ変数宣言として検査する)
+        // 列挙型の定義なら，列挙型名がほかの名前と重複しないか検査して登録する
+        // 列挙子はここでは検査しない．列挙子は列挙型の定義の後ろに並ぶ変数宣言として，変数と同じく検査するため
         if (child->kind == ND_ENUM_DECL) {
-            // 同じ名前の列挙型が定義済みの場合
+            // 同じ名前の列挙型が定義済みなら，再定義としてエラーにする
             if (this->enum_names_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of enum '") + child->sval
                       + "' at " + loc_to_string(child->loc);
             }
-            // 同じ名前の構造体が定義済みの場合
+            // 同じ名前の構造体が定義済みなら，エラーにする
             if (this->struct_decl_nodes_.count(child->sval)) {
                 throw std::string("compiler error: redefinition of struct '") + child->sval
                       + "' as enum at " + loc_to_string(child->loc);
             }
-            // 同じ名前の変数・関数・ハードウェア変数が宣言済みの場合
+            // 同じ名前の変数・関数・ハードウェア変数が宣言済みなら，エラーにする
             if (this->is_value_name_declared(child->sval)) {
                 throw std::string("compiler error: redefinition of '") + child->sval
                       + "' as enum at " + loc_to_string(child->loc);
@@ -363,21 +364,21 @@ void Analyzer::index_global_decls() {
             : child->kind == ND_VAR_DECL ? "variable"
             // どちらでもなければ関数
             : "function";
-        // 同じ名前の構造体が定義済みの場合
-        // staticを付けた宣言は番号付きの名前へ置き換えてあるため，構造体名・列挙型名とここでは一致しない．
-        // staticを付けた宣言と構造体名・列挙型名の重複は，構造体・列挙型の定義を検査する際に，staticの名前を集める処理が集めた元の名前で検査してある
+        // staticを付けた宣言と構造体名・列挙型名の重複は，ここでは検査しない．
+        // staticを付けた宣言は番号付きの名前へ置き換えてあり，構造体名・列挙型名と一致しないため，構造体・列挙型の定義を検査する際に元の名前で検査してある
+        // 同じ名前の構造体が定義済みなら，エラーにする
         if (this->struct_decl_nodes_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + source_name(child->sval)
                   + "' as " + kind + " at " + loc_to_string(child->loc);
         }
-        // 同じ名前の列挙型が定義済みの場合
+        // 同じ名前の列挙型が定義済みなら，エラーにする
         if (this->enum_names_.count(child->sval)) {
             throw std::string("compiler error: redefinition of enum '") + source_name(child->sval)
                   + "' as " + kind + " at " + loc_to_string(child->loc);
         }
-        // 列挙子と同じ名前のstaticの宣言が，どこかのファイルにある場合
-        // 同じファイルのstaticの宣言とは，列挙子も番号付きの名前へ置き換えてあるため，ここでは一致しない．
-        // 列挙子と同じファイルのstaticの宣言との重複は，番号付きの名前どうしが一致するため，変数・関数・ハードウェア変数との名前の重複チェックで検査する
+        // 列挙子と同じ名前のstaticの宣言が，ほかのファイルにあれば，エラーにする
+        // 同じファイルのstaticの宣言との重複は，ここでは検査しない．
+        // 列挙子も同じ番号付きの名前へ置き換えてあるため，変数・関数・ハードウェア変数との名前の重複チェックで，番号付きの名前どうしの重複として検査する
         if (child->is_enumerator && this->static_decls_.count(child->sval)) {
             throw std::string("compiler error: static '") + child->sval + "' conflicts with enumerator at "
                   + loc_to_string(child->loc);
@@ -416,17 +417,17 @@ bool Analyzer::is_value_name_declared(const std::string &name) const {
 // ローカル変数・引数の名前が，構造体名・列挙型名・列挙子と同じならエラーにする
 // 構造体・列挙型の定義で付けた名前はプログラム全体で共有するため，シャドーイングを認めない
 void Analyzer::check_not_type_def_name(const node_t *decl) const {
-    // 同じ名前の構造体が定義済みの場合
+    // 同じ名前の構造体が定義済みなら，エラーにする
     if (this->struct_decl_nodes_.count(decl->sval)) {
         throw std::string("compiler error: '") + source_name(decl->sval) + "' is already declared as a struct at "
               + loc_to_string(decl->loc);
     }
-    // 同じ名前の列挙型が定義済みの場合
+    // 同じ名前の列挙型が定義済みなら，エラーにする
     if (this->enum_names_.count(decl->sval)) {
         throw std::string("compiler error: '") + source_name(decl->sval) + "' is already declared as an enum at "
               + loc_to_string(decl->loc);
     }
-    // 同じ名前の列挙子が宣言済みの場合
+    // 同じ名前の列挙子が宣言済みなら，エラーにする
     const auto found = this->global_var_decls_.find(decl->sval);  // 同じ名前のグローバル変数の宣言
     if (// 同じ名前のグローバル変数が宣言済み
         found != this->global_var_decls_.end()
