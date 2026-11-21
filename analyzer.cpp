@@ -314,7 +314,7 @@ void Analyzer::index_global_decls() {
             rename_identifiers(child, found->second);
         }
 
-        // 構造体定義なら，構造体名がほかの名前と重複しないか検査して登録する
+        // 構造体の定義なら，構造体名がほかの名前と重複しないか検査して登録する
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みなら，再定義としてエラーにする
             if (this->struct_decl_nodes_.count(child->sval)) {
@@ -335,7 +335,7 @@ void Analyzer::index_global_decls() {
             continue;
         }
         // 列挙型の定義なら，列挙型名がほかの名前と重複しないか検査して登録する
-        // 列挙子はここでは検査しない．列挙子は列挙型の定義の後ろに並ぶ変数宣言として，変数と同じく検査するため
+        // 列挙子は，この分岐では検査しない．構文木で列挙型の定義に続く変数宣言として，変数と同じく検査するためである
         if (child->kind == ND_ENUM_DECL) {
             // 同じ名前の列挙型が定義済みなら，再定義としてエラーにする
             if (this->enum_names_.count(child->sval)) {
@@ -364,8 +364,9 @@ void Analyzer::index_global_decls() {
             : child->kind == ND_VAR_DECL ? "variable"
             // どちらでもなければ関数
             : "function";
-        // staticを付けた宣言と構造体名・列挙型名の重複は，ここでは検査しない．
-        // staticを付けた宣言は番号付きの名前へ置き換えてあり，構造体名・列挙型名と一致しないため，構造体・列挙型の定義を検査する際に元の名前で検査してある
+        // 構造体名・列挙型名との重複を調べる2つの検査では，staticを付けた宣言は見つからない．
+        // staticを付けた宣言の名前は，番号付きの名前へ置き換えてあるためである．
+        // staticを付けた宣言と構造体名・列挙型名の重複は，構造体・列挙型の定義の検査で，置き換える前の名前を使って検査してある
         // 同じ名前の構造体が定義済みなら，エラーにする
         if (this->struct_decl_nodes_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + source_name(child->sval)
@@ -377,8 +378,9 @@ void Analyzer::index_global_decls() {
                   + "' as " + kind + " at " + loc_to_string(child->loc);
         }
         // 列挙子と同じ名前のstaticの宣言が，ほかのファイルにあれば，エラーにする
-        // 同じファイルのstaticの宣言との重複は，ここでは検査しない．
-        // 列挙子も同じ番号付きの名前へ置き換えてあるため，変数・関数・ハードウェア変数との名前の重複チェックで，番号付きの名前どうしの重複として検査する
+        // 同じファイルのstaticの宣言は，この検査では見つからない．
+        // 同じファイルでは，列挙子とstaticの宣言の名前を，どちらも同じ番号付きの名前へ置き換えてあるためである．
+        // 列挙子と同じファイルのstaticの宣言の重複は，変数・関数・ハードウェア変数との名前の重複チェックで検査する
         if (child->is_enumerator && this->static_decls_.count(child->sval)) {
             throw std::string("compiler error: static '") + child->sval + "' conflicts with enumerator at "
                   + loc_to_string(child->loc);
