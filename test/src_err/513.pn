@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'a' at src_err/513.pn:4
+// 意味解析エラー: 引数と関数の本体の直下のローカル変数は同じスコープに属し，同じ名前にできない (異常系)
+int f(int a) {
+    int a = 1;
+    return a;
+}
+void main(void) {
+    f(2);
+}
