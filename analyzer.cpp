@@ -1189,7 +1189,7 @@ void Analyzer::analyze_functions() {
         // ローカル変数はこの関数のフレーム内に確保するため，関数ごとにオフセットを0から数え直す
         this->local_size_ = 0;
 
-        // 関数スコープを開く (引数と本体のローカル変数が同じスコープに入る)
+        // 関数スコープを開く (引数と本体の直下のローカル変数が同じスコープに入る)
         this->scopes_.push_back({});
 
         // 引数をスコープに登録する (シンボル自体はグローバル変数の登録と同じパスで作成済み)
@@ -1197,8 +1197,11 @@ void Analyzer::analyze_functions() {
             this->scopes_.back()[sym->name] = sym;
         }
 
-        // 関数本体ブロック(最後の子)を検査する
-        this->analyze_block(child->children.back());
+        // 関数本体ブロック(最後の子)の文を，関数スコープの中で検査する
+        // (本体のスコープを積まないことで，引数と同じ名前のローカル変数を本体の直下に宣言すると二重宣言になる)
+        for (node_t *stmt : child->children.back()->children) {
+            this->analyze_stmt(stmt);
+        }
 
         // 確定したローカル変数領域の大きさを記録する (コード生成がフレームの大きさを決めるのに使う)
         this->func_local_sizes_[child->sval] = this->local_size_;

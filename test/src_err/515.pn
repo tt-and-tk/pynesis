@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'a' at src_err/515.pn:4
+// 意味解析エラー: 2番目の引数と同じ名前の配列も，関数の本体の直下には宣言できない (異常系)
+int f(int x, int a) {
+    int a[3];
+    return x;
+}
+void main(void) {
+    f(1, 2);
+}
