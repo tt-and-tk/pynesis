@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of 'SP' as enum at src_err/505.pn:3
+// 意味解析エラー: ハードウェア変数と同じ名前の列挙型は定義できない (異常系)
+enum SP { TOP };
+
+void main(void) {
+}

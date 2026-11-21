@@ -1,0 +1,23 @@
+// 構造体のメンバ名は構造体ごとの名前空間にあり，構造体名・グローバル変数名・関数名と同じ名前にできる
+struct Item {
+    int Item;
+    int count;
+    int value;
+};
+struct Item item;
+int count;
+int r1;
+int r2;
+
+int value(void) {
+    return 7;
+}
+
+void main(void) {
+    item.Item = 1;
+    item.count = 2;
+    count = 3;
+    item.value = value();
+    r1 = item.Item + item.count;    // 3
+    r2 = item.value + count;        // 10
+}

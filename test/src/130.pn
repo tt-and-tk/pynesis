@@ -1,20 +1,18 @@
 // 列挙型と列挙子は，取り込んだファイルと取り込み元の間で互いに参照できる
-// 列挙型名は変数・関数・ハードウェア変数と別の名前空間にあり，それらと同じ名前にできる．構造体名と列挙子も同じ名前にできる
 // 列挙子の値はintの最小値まで書ける
-// 列挙子は，関数の引数でシャドーイングでき，ローカル配列の要素数に使える
+// 列挙子は，ローカル配列の要素数に使える
 #include "include/130_lib.pn"
-enum count { MAIN_FIRST = LIB_LAST + 1 };   // 3
+enum Order { MAIN_FIRST = LIB_LAST + 1 };   // 3
 int count;
-enum get { MIN = -2147483647 - 1 };
-enum SP { TOP };
-struct MAIN_FIRST { int x; };
+enum Limit { MIN = -2147483647 - 1 };
+enum Slot { TOP };
 int r1;
 int r2;
 int r3;
 int r4;
 
-int get(int MIN) {
-    return MIN;
+int get(int v) {
+    return v;
 }
 
 void main(void) {

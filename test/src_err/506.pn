@@ -1,0 +1,11 @@
+// expect: compiler error: redefinition of struct 'Item' as function at src_err/506.pn:6
+// 意味解析エラー: 構造体名と同じ名前の関数は，構造体の定義の後に定義するとエラーになる (異常系)
+struct Item {
+    int x;
+};
+int Item(void) {
+    return 0;
+}
+
+void main(void) {
+}

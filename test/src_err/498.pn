@@ -1,0 +1,7 @@
+// expect: compiler error: 'Color' is already declared as an enum at src_err/498.pn:6
+// 意味解析エラー: 列挙型名と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
+enum Color { RED };
+
+void main(void) {
+    int Color = 0;
+}

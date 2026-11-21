@@ -1212,6 +1212,7 @@ std::vector<node_t *> Parser::parse_enum_decl() {
     while (!this->token_kind_is(TK_RBRACE)) {
         node_t *enumerator = this->new_node(ND_VAR_DECL);   // 列挙子の宣言
         enumerator->type.is_const = true;                     // 列挙子はconst intとして扱う (値の埋め込み・書き換えの禁止をconst変数と共有する)
+        enumerator->is_enumerator = true;                     // 列挙子の宣言であることを示す
         enumerator->sval = this->get_token(TK_IDENT).value;   // 列挙子の名前
 
         // 列挙子の値を表す初期化子を，明示した値・先頭の列挙子・それ以外の場合に分けて作る

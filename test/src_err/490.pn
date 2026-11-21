@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'Color' as enum at src_err/490.pn:6
+// 意味解析エラー: 関数と同じ名前の列挙型は，関数の定義の後に定義するとエラーになる (異常系)
+int Color(void) {
+    return 0;
+}
+enum Color { RED };
+
+void main(void) {
+}

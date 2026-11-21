@@ -1,0 +1,7 @@
+// expect: compiler error: static 'RED' conflicts with enumerator at src_err/include/512_enum.pn:2
+// 意味解析エラー: 互いに取り込み関係のないファイルにある，staticを付けたグローバル変数と列挙子は，同じ名前にできない (異常系)
+#include "include/512_static.pn"
+#include "include/512_enum.pn"
+
+void main(void) {
+}
