@@ -1,5 +1,5 @@
-// expect: compiler error: struct variable initializer is not supported at src_err/86.pn:7
-// 構造体変数の初期化子は非対応
+// expect: compiler error: struct variable initializer is not supported for a global variable at src_err/86.pn:7
+// 意味解析エラー: 構造体のグローバル変数には初期化子を書けない(グローバル変数の初期化子は定数式に限るため) (異常系)
 struct Tag {
     int v;
 };

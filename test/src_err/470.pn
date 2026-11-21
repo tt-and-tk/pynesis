@@ -1,0 +1,10 @@
+// expect: compiler error: struct cannot be used as a value; access a member or take its address at src_err/470.pn:9
+// 意味解析エラー: 構造体の代入式の値は，関数の引数に使えない (異常系)
+struct Tag { int x; int y; };
+struct Tag a;
+struct Tag b;
+void f(int v) {
+}
+void main(void) {
+    f(b = a);
+}

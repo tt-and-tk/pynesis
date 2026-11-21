@@ -56,6 +56,8 @@ struct func_sig_t {
 bool is_pointer_value(const type_t &type);
 // 関数ポインタかどうかを返す
 bool is_func_pointer(const type_t &type);
+// 構造体そのもの(構造体の配列・構造体へのポインタでない)かどうかを返す
+bool is_struct_object(const type_t &type);
 // ポインタが指す先の型を返す (段数を1つ減らす)
 type_t pointee_type(const type_t &type);
 // 配列を値として使う際の型(先頭要素へのポインタ)を返す．配列でなければそのままの型を返す
@@ -70,7 +72,7 @@ typedef enum {
     ND_FUNC_DEF,    // 関数定義
     ND_BLOCK,       // ブロック文 { ... }
     // 宣言
-    ND_VAR_DECL,    // 変数宣言 (childrenに，配列ならサイズの式か初期化子の文字列リテラル，スカラーなら初期化式を格納)
+    ND_VAR_DECL,    // 変数宣言 (childrenに，配列ならサイズの式か初期化子の文字列リテラル，スカラー・構造体そのものなら初期化式を格納)
     ND_STRUCT_DECL, // 構造体定義 (svalに構造体名，childrenにメンバ宣言(ND_VAR_DECL)を格納)
     // 列挙型の定義 (svalに列挙型名．列挙子は，定義の後ろに並べたconst intの変数宣言(ND_VAR_DECL)で表す．
     //  無名の列挙型は，列挙型名で参照されることがないため，このノードを作らず列挙子の変数宣言だけを並べる)

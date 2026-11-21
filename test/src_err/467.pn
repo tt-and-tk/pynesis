@@ -1,0 +1,8 @@
+// expect: compiler error: cannot convert 'struct Tag[2]' to 'struct Tag' in assignment at src_err/467.pn:7
+// 意味解析エラー: 構造体の配列そのものは，構造体へ写す元にできない (異常系)
+struct Tag { int x; int y; };
+struct Tag a;
+struct Tag b[2];
+void main(void) {
+    a = b;
+}

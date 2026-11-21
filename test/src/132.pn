@@ -1,0 +1,27 @@
+// 構造体の代入の両辺には，実行時に番地が決まる構造体(構造体の配列の要素・ポインタの指す先・ポインタの添字)も書ける
+// 右辺の番地を求めてから，右辺の番地を保護して左辺の番地を求める(左辺の添字の関数呼び出しで右辺の番地を退避・復元する)
+// 連続代入でも，右辺の代入を終えてから左辺の番地を求める(右辺の代入の中の関数呼び出しは，左辺の添字より先に行う)
+// 構造体の代入はfor文の初期化部・更新部にも書ける
+// 構造体のローカル変数は，同じ型の構造体(構造体の代入式を含む)で初期化でき，for文の初期化部の宣言でも初期化できる
+struct Pair { int a; int b; };
+struct Pair table[4];
+
+int pick(void) {
+    return 2;
+}
+
+void main(void) {
+    struct Pair *p = &table[0];
+    int i = 1;
+    table[i] = *p;
+    p[i] = table[3];
+    table[pick()] = table[i];
+    p[pick()] = table[0] = table[pick()];
+    struct Pair x = table[0];
+    struct Pair y = x = table[1];
+    for (struct Pair z = y; i < 3; x = z) {
+        i++;
+    }
+    for (x = y; i < 4; i++) {
+    }
+}
