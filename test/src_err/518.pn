@@ -1,0 +1,5 @@
+// expect: compiler error: typedef cannot be const at src_err/518.pn:3
+// 構文エラー: constを含む型には別名を付けられない (異常系)
+typedef const int C;
+void main(void) {
+}

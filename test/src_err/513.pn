@@ -1,0 +1,5 @@
+// expect: compiler error: typedef is only allowed at global scope at src_err/513.pn:4
+// 構文エラー: typedefはグローバルスコープの直下にだけ書け，関数の中には書けない (異常系)
+void main(void) {
+    typedef int T;
+}

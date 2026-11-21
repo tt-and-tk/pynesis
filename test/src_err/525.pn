@@ -1,0 +1,8 @@
+// expect: compiler error: function returning function pointer is not supported at src_err/525.pn:4
+// 構文エラー: 関数ポインタの別名を戻り値型にした関数(関数ポインタを返す関数)は定義できない (異常系)
+typedef void (*FP)(void);
+FP get(void) {
+    return nullptr;
+}
+void main(void) {
+}

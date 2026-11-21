@@ -1,0 +1,5 @@
+// expect: compiler error: typedef of array is not supported at src_err/515.pn:3
+// 構文エラー: 配列には別名を付けられない (異常系)
+typedef int A[4];
+void main(void) {
+}
