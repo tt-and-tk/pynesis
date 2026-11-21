@@ -364,7 +364,8 @@ void Analyzer::index_global_decls() {
             // どちらでもなければ関数
             : "function";
         // 同じ名前の構造体が定義済みの場合
-        // staticを付けた宣言は番号付きの名前へ置き換えてあるため，ここでは一致しない．構造体・列挙型の定義の検査で，staticの名前を集める処理が集めた元の名前と宣言順によらず照合してある
+        // staticを付けた宣言は番号付きの名前へ置き換えてあるため，構造体名・列挙型名とここでは一致しない．
+        // staticを付けた宣言と構造体名・列挙型名の重複は，構造体・列挙型の定義を検査する際に，staticの名前を集める処理が集めた元の名前で検査してある
         if (this->struct_decl_nodes_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + source_name(child->sval)
                   + "' as " + kind + " at " + loc_to_string(child->loc);
@@ -375,7 +376,8 @@ void Analyzer::index_global_decls() {
                   + "' as " + kind + " at " + loc_to_string(child->loc);
         }
         // 列挙子と同じ名前のstaticの宣言が，どこかのファイルにある場合
-        // 同じファイルのstaticの宣言とは，列挙子も番号付きの名前へ置き換えてあるため，ここでは一致しない．その重複は，直後の名前の重複チェックで検査する
+        // 同じファイルのstaticの宣言とは，列挙子も番号付きの名前へ置き換えてあるため，ここでは一致しない．
+        // 列挙子と同じファイルのstaticの宣言との重複は，番号付きの名前どうしが一致するため，変数・関数・ハードウェア変数との名前の重複チェックで検査する
         if (child->is_enumerator && this->static_decls_.count(child->sval)) {
             throw std::string("compiler error: static '") + child->sval + "' conflicts with enumerator at "
                   + loc_to_string(child->loc);
@@ -399,6 +401,7 @@ void Analyzer::index_global_decls() {
 // 変数(const変数・列挙子を含む)・関数・ハードウェア変数に，その名前のものが宣言済みかを返す
 // staticを付けた宣言は，staticの名前を集める処理が集めた全ファイル分の元の名前で調べるため，宣言順とファイルによらず見つかる
 bool Analyzer::is_value_name_declared(const std::string &name) const {
+    // ハードウェア変数・変数・関数のいずれかに同じ名前のものがあるかを求める
     return
         // ハードウェア変数
         this->symbols_.count(name)
