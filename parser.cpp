@@ -400,7 +400,7 @@ int Parser::find_typedef_name(int type_start) const {
     return -1;
 }
 
-// 位置open_indexの'{'に対応する'}'の位置を返す (対応する'}'がなければトークン列の終端(EOF)の位置を返す)
+// 指定した位置の'{'に対応する'}'の位置を返す (対応する'}'がなければトークン列の終端(EOF)の位置を返す)
 int Parser::find_closing_brace(int open_index) const {
     int index = open_index;   // 調べている位置
     int depth = 0;            // 調べている位置の，'{'の内側の波括弧の深さ
@@ -932,8 +932,8 @@ node_t *Parser::parse_mode_switch() {
 
 // sizeof式を解析してND_SIZEOFを返す
 // 構文: sizeof ( 型名 ) または sizeof ( 変数名 )  TODO: 任意の式には非対応
-// 型名は整数型(符号修飾子付き・列挙型を含む)と，整数型とそのポインタのtypedef名のみ．型名の場合はnode->typeに型を格納し(children空)，
-// 変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
+// 型名に書けるのは，整数型(符号修飾子付き・列挙型を含む)と，整数型か整数型へのポインタに付けたtypedef名である．
+// 型名の場合はnode->typeに型を格納し(children空)，変数名の場合はchildren[0]にND_VARを格納する(意味解析で解決)
 node_t *Parser::parse_sizeof() {
     node_t *node = this->new_node(ND_SIZEOF);
     this->get_token(TK_SIZEOF);                      // sizeof
@@ -1502,7 +1502,13 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
         }
         // 定義の本体を読み飛ばす場合 (本体を閉じる'}'の次まで進める)
         else {
-            this->pos_ = this->find_closing_brace(this->pos_ + (has_tag ? 2 : 1)) + 1;
+            // 本体の'{'の位置を求める
+            const int open_index = this->pos_ +
+                // 構造体名・列挙型名を書いた場合は，struct・enumと名前の2トークン後
+                (has_tag ? 2
+                // 無名なら，struct・enumの1トークン後
+                : 1);
+            this->pos_ = this->find_closing_brace(open_index) + 1;
         }
         name = this->get_token(TK_IDENT).value;
         // 構造体の場合 (無名構造体には，typedef名から決めた内部名を付ける)

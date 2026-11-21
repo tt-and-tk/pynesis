@@ -161,10 +161,10 @@ struct typedef_entry_t {
 
 // トークン列を受け取り，ASTを生成するパーサ
 //
-// パーサの責務は「トークンの並びが文法に合っているか」のチェックまで．
-//   エラーにするもの: 期待したトークンが来ない (例: 閉じ括弧がない，式が来るべき場所に ; がある)
-//     typedef名の検査も行う．typedef名で型名かどうかが決まり，その誤りは構文の誤りとして現れるため
-//     (例: typedef名と同じ名前の宣言，typedef名の重複，循環した別名)
+// パーサの責務は，次の2つのチェックまで．
+//   トークンの並びが文法に合っているか: 期待したトークンが来なければエラーにする (例: 閉じ括弧がない，式が来るべき場所に ; がある)
+//   typedef名の宣言が正しいか: 識別子を型名として読むかはtypedef名で決まるため，typedef名の宣言の誤りを意味解析まで見逃すと，
+//     原因の分からない構文の誤りとして現れる (例: typedef名と同じ名前の変数の宣言)
 //   見逃すもの: 構文としては正しいが意味的に不正な式．後段の意味解析で検査する．
 //     例: 代入の左辺が変数でない (1 + 2 = x)，未宣言の変数参照，未定義関数の呼び出し
 class Parser {
@@ -200,7 +200,7 @@ private:
     type_t resolve_typedef(const token_t &name);
     void collect_typedef_names();                          // 構文解析の前に，グローバルスコープのtypedef名と宣言の位置を集める
     int find_typedef_name(int type_start) const;           // typedefの直後から始まる型に続く名前の位置を返す (形が合わなければ-1)
-    int find_closing_brace(int open_index) const;          // 位置open_indexの'{'に対応する'}'の位置を返す
+    int find_closing_brace(int open_index) const;          // 指定した位置の'{'に対応する'}'の位置を返す
     void check_not_typedef_name(const std::string &name, const loc_t &loc) const;  // 宣言する名前がtypedef名と同じならエラーにする
     // 関数ポインタまたはその配列の宣言子を読み，関数ポインタの型を返す
     // pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡し，宣言子の中の名前はnameに書き込む
