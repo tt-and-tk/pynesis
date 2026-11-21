@@ -117,6 +117,13 @@ private:
     void gen_string_init(const symbol_t *sym, const std::string &str);
     void gen_streq(const symbol_t *sym_a, const symbol_t *sym_b, int reg);  // 2つのchar配列の内容を比較しr{reg}へ0/1を格納する
     void gen_strcopy(const symbol_t *dst, const symbol_t *src, int reg);   // char配列srcの内容をヌル終端付きでdstへコピーする
+    // 構造体の代入 左辺 = 右辺 を生成し，代入式の値として左辺の構造体の番地をr{reg}に残す
+    void gen_struct_assign(node_t *expr, int reg);
+    // 構造体の式(構造体の左辺値・構造体の代入式)が表す構造体の番地をr{reg}に求める
+    void gen_struct_addr(node_t *expr, int reg);
+    // r{reg}が指す構造体の全ワードを，r{reg+1}が指す構造体へ写し，写した先の番地をr{reg}に残す
+    // (struct_nameは写す構造体の構造体名，locはレジスタが足りないエラーを報告する位置．作業用にr{reg+2}〜r{reg+5}を使う)
+    void gen_struct_copy(int reg, const std::string &struct_name, const loc_t &loc);
     void gen_compare(node_t *expr, int reg);   // 比較演算を0/1の値としてr{reg}に生成
     void gen_logical(node_t *expr, int reg);   // 論理 && / || を短絡評価しr{reg}に0/1を生成
     void gen_ternary(node_t *expr, int reg);   // 三項演算子 ?: の結果をr{reg}に生成

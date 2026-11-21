@@ -1,0 +1,32 @@
+// 構造体の代入は，同じ型の構造体の全ワード(配列のメンバを含む)を写す(グローバル変数どうし・ローカル変数どうし)
+// 連続代入では，右辺の代入で写した後の左辺の構造体を，さらに写す
+// 自己代入も同じループで写す
+// 1ワードの構造体も同じループで写し，メンバの無い構造体は写すワードが無いためループを生成しない
+// 構造体の初期化子で宣言中の変数と同じ名前を参照すると，外側のスコープの同じ名前の変数を写す
+struct Rec {
+    int id;
+    char name[3];
+    int *ref;
+};
+struct One { int v; };
+struct Empty {};
+struct Rec ga;
+struct Rec gb;
+struct One go1;
+struct One go2;
+struct Empty ge1;
+struct Empty ge2;
+
+void main(void) {
+    struct Rec la;
+    struct Rec lb;
+    struct Rec lc;
+    gb = ga;
+    lc = lb = la;
+    la = la;
+    go2 = go1;
+    ge2 = ge1;
+    {
+        struct Rec la = la;
+    }
+}

@@ -1,0 +1,8 @@
+// expect: compiler error: expected a struct variable before '.' at src_err/469.pn:7
+// 構文解析エラー: 構造体の代入式の値は，メンバの参照に使えない(メンバを参照できるのは構造体の変数・要素・ポインタの指す先だけのため) (異常系)
+struct Tag { int x; int y; };
+struct Tag a;
+struct Tag b;
+void main(void) {
+    int x = (b = a).x;
+}

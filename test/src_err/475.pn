@@ -1,0 +1,8 @@
+// expect: compiler error: incompatible struct types in initialization: expected 'struct Tag' but got 'struct Other' at src_err/475.pn:7
+// 意味解析エラー: 構造体のローカル変数を，型の異なる構造体で初期化できない (異常系)
+struct Tag { int x; int y; };
+struct Other { int x; int y; };
+struct Other b;
+void main(void) {
+    struct Tag a = b;
+}

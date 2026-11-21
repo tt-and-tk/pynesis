@@ -1,10 +1,10 @@
-// expect: compiler error: function pointer can only be compared with '==' or '!=' at src_err/472.pn:9
-// 意味解析エラー: 関数ポインタはnullptrとも大小を比較できない(一致・不一致のみ) (異常系)
-int zero(void) {
-    return 0;
+// expect: compiler error: struct cannot be used as a value; access a member or take its address at src_err/472.pn:7
+// 意味解析エラー: 構造体の代入式の値は，return文に使えない (異常系)
+struct Tag { int x; int y; };
+struct Tag a;
+struct Tag b;
+int f(void) {
+    return b = a;
 }
-int r;
 void main(void) {
-    int (*f)(void) = zero;
-    r = f <= nullptr;
 }

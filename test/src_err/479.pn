@@ -1,0 +1,9 @@
+// expect: compiler error: cannot convert 'struct Tag *' to 'struct Tag' in assignment at src_err/479.pn:8
+// 意味解析エラー: 構造体へのポインタは，構造体へ写す元にできない(指す先を写すには*を付ける) (異常系)
+struct Tag { int x; int y; };
+struct Tag a;
+struct Tag b;
+void main(void) {
+    struct Tag *p = &b;
+    a = p;
+}
