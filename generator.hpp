@@ -34,6 +34,7 @@ private:
     int param_size_ = 0;       // 生成中の関数の引数領域のバイト数
     int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号
     std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数
+    std::set<std::string> syscall_funcs_;                     // 組み込み関数syscallを呼ぶ関数の名前の集合
     int label_count_ = 0;                                     // 局所ラベル(.L0, .L1, ...)とasm文の%=の番号に使う連番カウンタ
     // break/continueの飛び先ラベルのスタック (最内が末尾)
     // continueはループのみ，breakはループとswitchの両方が積む
