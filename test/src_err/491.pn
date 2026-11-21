@@ -1,5 +1,5 @@
 // expect: compiler error: redefinition of 'LED' as struct at src_err/491.pn:3
-// ハードウェア変数と同じ名前の構造体は定義できない
+// 意味解析エラー: ハードウェア変数と同じ名前の構造体は定義できない (異常系)
 struct LED {
     int x;
 };

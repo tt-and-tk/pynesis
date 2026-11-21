@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'Item' as struct at src_err/506.pn:4
+// 意味解析エラー: 列挙子と同じ名前の構造体は，列挙子の宣言の後に定義するとエラーになる (異常系)
+enum { Item };
+struct Item {
+    int x;
+};
+
+void main(void) {
+}

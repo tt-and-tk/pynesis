@@ -1,5 +1,5 @@
 // expect: compiler error: redefinition of 'Color' as enum at src_err/488.pn:6
-// 関数と同じ名前の列挙型は，関数の定義の後に定義するとエラー
+// 意味解析エラー: 関数と同じ名前の列挙型は，関数の定義の後に定義するとエラーになる (異常系)
 int Color(void) {
     return 0;
 }

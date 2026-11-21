@@ -1,5 +1,5 @@
 // expect: compiler error: 'Color' is already declared as an enum at src_err/499.pn:5
-// 列挙型名と同じ名前の引数は宣言できない(シャドーイングできない)
+// 意味解析エラー: 列挙型名と同じ名前の引数は宣言できない(シャドーイングできない) (異常系)
 enum Color { RED };
 
 int get(int Color) {

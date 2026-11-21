@@ -1,5 +1,5 @@
 // expect: compiler error: redefinition of enum 'Color' as function at src_err/489.pn:4
-// 列挙型名と同じ名前の関数は，列挙型の定義の後に定義するとエラー
+// 意味解析エラー: 列挙型名と同じ名前の関数は，列挙型の定義の後に定義するとエラーになる (異常系)
 enum Color { RED };
 int Color(void) {
     return 0;

@@ -1,0 +1,7 @@
+// expect: compiler error: redefinition of 'Color' as enum at src_err/502.pn:4
+// 意味解析エラー: 取り込んだファイルのstaticを付けた関数と同じ名前の列挙型は，ファイルが異なっても定義できない (異常系)
+#include "include/502_lib.pn"
+enum Color { RED };
+
+void main(void) {
+}

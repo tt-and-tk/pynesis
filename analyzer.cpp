@@ -299,11 +299,11 @@ void Analyzer::collect_static_names() {
 // これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
 // 変数(const変数・列挙子を含む)・関数・ハードウェア変数・構造体名・列挙型名はすべて同じ名前空間にあり，互いに同じ名前にできない．
-// 構造体名・列挙型名はプログラム全体で共有するため，staticを付けた宣言とも，ファイルによらず同じ名前にできない
+// 構造体名・列挙型名・列挙子はプログラム全体で共有するため，staticを付けた宣言とも，ファイルによらず同じ名前にできない
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
         // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
-        // (構造体名・列挙型名とstaticの宣言の重複は，構造体・列挙型の定義を検査する際に，ファイルによらず検査する)
+        // (構造体名・列挙型名・列挙子とstaticの宣言の重複は，それぞれの宣言を検査する際に，ファイルによらず検査する)
         if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL) {
             this->check_static_in_includer(child);
         }
@@ -358,7 +358,7 @@ void Analyzer::index_global_decls() {
         // 変数(const変数・列挙子を含む)か関数かを，エラーメッセージに表示する宣言の種類として決める
         const std::string kind = child->kind == ND_VAR_DECL ? "variable" : "function";
         // 同じ名前の構造体が定義済みの場合
-        // (staticを付けた宣言は，1パス目で全ファイル分を集めてあるため，構造体・列挙型の定義を検査する際に宣言順によらず検査済み)
+        // (staticを付けた宣言は，staticの名前を集める処理が全ファイル分を集めてあるため，構造体・列挙型の定義を検査する際に宣言順によらず検査済み)
         if (this->struct_decl_nodes_.count(child->sval)) {
             throw std::string("compiler error: redefinition of struct '") + source_name(child->sval)
                   + "' as " + kind + " at " + loc_to_string(child->loc);
@@ -367,6 +367,12 @@ void Analyzer::index_global_decls() {
         if (this->enum_names_.count(child->sval)) {
             throw std::string("compiler error: redefinition of enum '") + source_name(child->sval)
                   + "' as " + kind + " at " + loc_to_string(child->loc);
+        }
+        // 列挙子と同じ名前のstaticの宣言が，どこかのファイルにある場合
+        // (同じファイルのstaticの宣言とは，番号付きの名前へ置き換えた後の名前どうしの重複として下で検査する)
+        if (child->is_enumerator && this->static_decls_.count(child->sval)) {
+            throw std::string("compiler error: static '") + child->sval + "' conflicts with enumerator at "
+                  + loc_to_string(child->loc);
         }
         // 名前の重複チェック (変数・関数・ハードウェア変数の全てと衝突しないこと)
         if (this->symbols_.count(child->sval) || this->global_var_decls_.count(child->sval)
@@ -385,7 +391,7 @@ void Analyzer::index_global_decls() {
 }
 
 // 変数(const変数・列挙子を含む)・関数・ハードウェア変数に，その名前のものが宣言済みかを返す
-// (staticを付けた宣言は，1パス目で集めた全ファイル分の元の名前で調べるため，宣言順とファイルによらない)
+// (staticを付けた宣言は，staticの名前を集める処理が集めた全ファイル分の元の名前で調べるため，宣言順とファイルによらない)
 bool Analyzer::is_value_name_declared(const std::string &name) const {
     return this->symbols_.count(name) || this->global_var_decls_.count(name) || this->func_names_.count(name)
            || this->static_decls_.count(name);
@@ -1511,7 +1517,7 @@ void Analyzer::analyze_switch(node_t *stmt) {
 
 // ローカル変数宣言を検査し，現在のスコープに登録する
 void Analyzer::analyze_local_decl(node_t *decl) {
-    // 同一スコープ内での二重宣言はエラー (外側スコープの同名はシャドーイングとして許容)
+    // 同一スコープ内での二重宣言はエラー (外側のスコープの変数・引数・グローバル変数と同じ名前は，シャドーイングとして許容する)
     if (this->scopes_.back().count(decl->sval)) {
         throw std::string("compiler error: redefinition of '") + source_name(decl->sval)
               + "' at " + loc_to_string(decl->loc);

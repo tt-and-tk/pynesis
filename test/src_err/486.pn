@@ -1,5 +1,5 @@
 // expect: compiler error: redefinition of struct 'Item' as variable at src_err/486.pn:6
-// 構造体名と同じ名前のグローバル変数は，構造体の定義の後に宣言するとエラー
+// 意味解析エラー: 構造体名と同じ名前のグローバル変数は，構造体の定義の後に宣言するとエラーになる (異常系)
 struct Item {
     int x;
 };

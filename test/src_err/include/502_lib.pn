@@ -1,0 +1,4 @@
+#pragma once
+static int Color(void) {
+    return 0;
+}

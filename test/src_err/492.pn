@@ -1,5 +1,5 @@
 // expect: compiler error: redefinition of enum 'Size' as variable at src_err/492.pn:4
-// 列挙型名と同じ名前のconst変数は宣言できない
+// 意味解析エラー: 列挙型名と同じ名前のconst変数は宣言できない (異常系)
 enum Size { SMALL };
 const int Size = 3;
 

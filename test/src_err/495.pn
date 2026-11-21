@@ -1,5 +1,5 @@
 // expect: compiler error: 'Item' is already declared as a struct at src_err/495.pn:8
-// 構造体名と同じ名前のローカル変数は宣言できない(シャドーイングできない)
+// 意味解析エラー: 構造体名と同じ名前のローカル変数は宣言できない(シャドーイングできない) (異常系)
 struct Item {
     int x;
 };
