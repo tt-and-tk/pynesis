@@ -235,7 +235,10 @@ type_t Parser::parse_type(bool allow_void) {
         type.pointer_depth++;
     }
     // 関数ポインタの別名へのポインタの場合 (関数ポインタへのポインタは非対応)
-    if (type.base == BASE_FUNC && type.pointer_depth > 1) {
+    if (// 関数ポインタの型
+        type.base == BASE_FUNC
+        // 関数ポインタ自身の段数1に，*が加わっている
+        && type.pointer_depth > 1) {
         throw std::string("compiler error: pointer to function pointer is not supported at ") + loc_to_string(loc);
     }
     // voidへのポインタの場合 (指す先の大きさが決まらず，読み書きも加減算もできないため非対応)
@@ -374,14 +377,23 @@ int Parser::find_typedef_name(int type_start) const {
         // 本体の'{'がある場合
         if (this->kind_at(index) == TK_LBRACE) {
             const int close_index = this->find_closing_brace(index);   // 本体を閉じる'}'の位置
-            return this->kind_at(close_index + 1) == TK_IDENT ? close_index + 1 : -1;
+            // 名前の位置を求める
+            return
+                // '}'の直後が識別子なら，その位置
+                this->kind_at(close_index + 1) == TK_IDENT ? close_index + 1
+                // そうでなければ，形が合わないことを表す-1
+                : -1;
         }
     }
     const int after_type = type_start + this->count_type_tokens(type_start);   // 型の直後の位置
     // 型の直後が名前の場合
     if (this->kind_at(after_type) == TK_IDENT) return after_type;
     // 関数ポインタの宣言子の場合 ('(' '*'の直後が名前)
-    if (this->kind_at(after_type) == TK_LPAREN && this->kind_at(after_type + 1) == TK_STAR
+    if (// 型の直後が'('
+        this->kind_at(after_type) == TK_LPAREN
+        // その直後が'*'
+        && this->kind_at(after_type + 1) == TK_STAR
+        // その直後が識別子
         && this->kind_at(after_type + 2) == TK_IDENT) {
         return after_type + 2;
     }
@@ -522,6 +534,7 @@ node_t *Parser::parse_func_def() {
 
     // 関数名
     node->sval = this->get_token(TK_IDENT).value; // 関数名
+    // 関数名がtypedef名と同じならエラーにする
     this->check_not_typedef_name(node->sval, node->loc);
     this->get_token(TK_LPAREN);                   // 開きカッコ
 
@@ -936,7 +949,10 @@ node_t *Parser::parse_sizeof() {
         const loc_t type_loc = this->peek_token().loc;   // 型名の位置 (エラー報告用)
         node->type = this->parse_type(false);
         // 構造体・関数ポインタの別名の場合 (型名で書けるのは，整数型キーワードで書ける整数型とそのポインタだけのため)
-        if (node->type.base == BASE_STRUCT || node->type.base == BASE_FUNC) {
+        if (// 構造体または構造体へのポインタの別名
+            node->type.base == BASE_STRUCT
+            // 関数ポインタの別名
+            || node->type.base == BASE_FUNC) {
             throw std::string("compiler error: sizeof of type '") + type_to_string(node->type)
                   + "' is not supported at " + loc_to_string(type_loc);
         }
@@ -981,6 +997,7 @@ node_t *Parser::parse_param() {
         // 型の直後の識別子を引数名として読む
         node->sval = this->get_token(TK_IDENT).value;
     }
+    // 引数名がtypedef名と同じならエラーにする
     this->check_not_typedef_name(node->sval, node->loc);
     // void型の引数の場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
@@ -1138,6 +1155,7 @@ node_t *Parser::parse_var_decl() {
         // 型の直後の識別子を変数名として読む
         node->sval = this->get_token(TK_IDENT).value;
     }
+    // 変数名がtypedef名と同じならエラーにする
     this->check_not_typedef_name(node->sval, node->loc);
     // void型の変数の場合 (値を持たない型のため，関数ポインタの戻り値型以外には使えない)
     if (node->type.base == BASE_VOID) {
@@ -1320,6 +1338,7 @@ std::vector<node_t *> Parser::parse_struct_decl() {
         var->type = {BASE_STRUCT, true};             // 型は今定義した構造体
         var->type.struct_name = decl->sval;          // 構造体名を結びつける
         var->sval = this->get_token().value;         // 変数名を読む
+        // 変数名がtypedef名と同じならエラーにする
         this->check_not_typedef_name(var->sval, var->loc);
         // 変数名の後に[があれば配列宣言 (無ければ単一変数)
         if (this->token_kind_is(TK_LBRACKET)) {
@@ -1348,6 +1367,7 @@ node_t *Parser::parse_struct_body() {
     // 構造体名を書いた場合はそれを，省略した場合は内部名を，構造体定義の名前にする
     if (this->token_kind_is(TK_IDENT)) {
         decl->sval = this->get_token().value;
+        // 構造体名がtypedef名と同じならエラーにする
         this->check_not_typedef_name(decl->sval, decl->loc);
     } else {
         decl->sval = "$" + std::to_string(this->anon_struct_count_++);
@@ -1381,6 +1401,7 @@ std::vector<node_t *> Parser::parse_enum_body() {
     // 列挙型名がある場合 (無名の列挙型は列挙型名で参照されないため，定義のノードを返さない)
     if (this->token_kind_is(TK_IDENT)) {
         decl->sval = this->get_token().value;
+        // 列挙型名がtypedef名と同じならエラーにする
         this->check_not_typedef_name(decl->sval, decl->loc);
         result.push_back(decl);
     }
@@ -1398,6 +1419,7 @@ std::vector<node_t *> Parser::parse_enum_body() {
         enumerator->type.is_const = true;                     // 列挙子はconst intとして扱う (値の埋め込み・書き換えの禁止をconst変数と共有する)
         enumerator->is_enumerator = true;                     // 列挙子の宣言であることを示す
         enumerator->sval = this->get_token(TK_IDENT).value;   // 列挙子の名前
+        // 列挙子の名前がtypedef名と同じならエラーにする
         this->check_not_typedef_name(enumerator->sval, enumerator->loc);
 
         // 列挙子の値を表す初期化子を，明示した値・先頭の列挙子・それ以外の場合に分けて作る
@@ -1472,9 +1494,11 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
     if (is_definition) {
         const bool is_struct = this->token_kind_is(TK_STRUCT);                           // 構造体の定義か
         const std::string tag = has_tag ? this->tokens_[this->pos_ + 1].value : "";     // 構造体名・列挙型名 (無名なら空)
-        // 定義を読む場合
-        if (parses_definition) {
-            definitions = is_struct ? std::vector<node_t *>{this->parse_struct_body()} : this->parse_enum_body();
+        // 定義を読む場合 (構造体なら構造体定義を，列挙型なら列挙型の定義と列挙子の宣言を加える)
+        if (parses_definition && is_struct) {
+            definitions = {this->parse_struct_body()};
+        } else if (parses_definition) {
+            definitions = this->parse_enum_body();
         }
         // 定義の本体を読み飛ばす場合 (本体を閉じる'}'の次まで進める)
         else {
@@ -1484,7 +1508,13 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
         // 構造体の場合 (無名構造体には，typedef名から決めた内部名を付ける)
         if (is_struct) {
             type.base = BASE_STRUCT;
-            type.struct_name = has_tag ? tag : "$" + name;
+            // 構造体名を求める
+            type.struct_name =
+                // 構造体名を書いた場合は，その構造体名
+                has_tag ? tag
+                // 無名構造体なら，$にtypedef名を続けた内部名
+                : "$" + name;
+            // 定義を読んだ場合は，構造体定義の名前を求めた構造体名に揃える
             if (parses_definition) definitions[0]->sval = type.struct_name;
         }
         // 列挙型の場合 (無名の列挙型は列挙型の定義のノードを持たないため，列挙型名を持たないintにする)

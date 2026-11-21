@@ -156,7 +156,7 @@ struct typedef_entry_t {
     int decl_pos;               // typedefの宣言の先頭(typedefのトークン)の位置
     bool is_resolving = false;  // 別名の型を求めている途中か (循環した別名の検出用)
     bool is_resolved = false;   // 別名の型を求め終えたか
-    type_t type;                // 別名の型 (is_resolvedのとき有効)
+    type_t type;                // 別名の型 (別名の型を求め終えたときに有効)
 };
 
 // トークン列を受け取り，ASTを生成するパーサ
