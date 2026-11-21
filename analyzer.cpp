@@ -1582,7 +1582,7 @@ void Analyzer::analyze_value(node_t *expr) {
 // それ以外なら中身の代わりに先頭要素の番地を読むよう，先頭要素へのポインタとして型を書き込む
 void Analyzer::analyze_discarded(node_t *expr) {
     this->analyze_expr(expr);
-    // 構造体の代入式以外の，構造体そのものはエラーにする (全メンバの値を1つのレジスタへ読み込めないため．構造体の配列はこの後で先頭要素へのポインタにする)
+    // 構造体そのものは，構造体の代入式を除きエラーにする (全メンバの値を1つのレジスタへ読み込めないため)
     if (is_struct_object(expr->type) && expr->kind != ND_ASSIGN) {
         throw std::string("compiler error: struct cannot be used as a value; access a member or take its address at ")
               + loc_to_string(expr->loc);
@@ -1606,7 +1606,7 @@ void Analyzer::analyze_discarded(node_t *expr) {
 // (三項演算子の各分岐は値として検査され，キャストの結果と関数の戻り値は構造体にならないため)
 void Analyzer::analyze_struct_source(node_t *src, const type_t &dst, const std::string &context) {
     this->analyze_expr(src);
-    // 構造体そのものでない式(整数・ポインタ・構造体の配列等)はエラーにする
+    // 構造体そのものでない式はエラーにする
     if (!is_struct_object(src->type)) {
         throw std::string("compiler error: cannot convert '") + type_to_string(src->type) + "' to '"
               + type_to_string(dst) + "' in " + context + " at " + loc_to_string(src->loc);

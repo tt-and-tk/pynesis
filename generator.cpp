@@ -465,7 +465,7 @@ void Generator::gen_var_decl(node_t *decl) {
     // 初期化子がなければ何も出力しない (番地は確保済み，未初期化ローカルは不定値)
     if (decl->children.empty()) return;
 
-    // 構造体変数は，初期化子が表す構造体の番地をr0に，変数の番地をr1に求め，全ワードを写す
+    // 構造体変数は，初期化子が表す構造体から全ワードを写す (写す元の番地はr0，写す先の変数の番地はr1)
     if (is_struct_object(decl->type)) {
         this->gen_struct_addr(decl->children[0], 0);
         this->gen_var_addr(1, decl->sym);
