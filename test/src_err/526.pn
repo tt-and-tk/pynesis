@@ -1,6 +1,5 @@
-// expect: compiler error: function returning function pointer is not supported at src_err/526.pn:4
-// 構文エラー: 関数ポインタの別名を戻り値型にした関数ポインタは宣言できない (異常系)
-typedef void (*FP)(void);
-FP (*g)(void);
+// expect: compiler error: use of undeclared enum 'Undefined' at src_err/526.pn:3
+// 意味解析エラー: 定義されていない列挙型には，typedef名を使わなくても別名を付けられない (異常系)
+typedef enum Undefined E;
 void main(void) {
 }

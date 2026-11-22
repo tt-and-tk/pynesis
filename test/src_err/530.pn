@@ -1,7 +1,6 @@
-// expect: compiler error: 'Node' is already declared as a typedef at src_err/530.pn:3
-// 構文エラー: typedef名と構造体名は同じ名前空間にあり，同じ名前にできない (C言語と異なる) (異常系)
-typedef struct Node {
-    int value;
-} Node;
+// expect: compiler error: redefinition of typedef 'T' at src_err/530.pn:4
+// 構文エラー: 同じ名前のtypedefを2回宣言できない (別名の型が同じでも) (異常系)
+typedef int T;
+typedef int T;
 void main(void) {
 }

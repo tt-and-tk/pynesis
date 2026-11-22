@@ -1,7 +1,6 @@
-// expect: compiler error: 'T' is already declared as a typedef at src_err/529.pn:4
-// 構文エラー: typedef名と同じ名前の関数は定義できない (異常系)
-typedef int T;
-void T(void) {
-}
+// expect: compiler error: function returning function pointer is not supported at src_err/529.pn:4
+// 構文エラー: 関数ポインタの別名を戻り値型にした関数ポインタは宣言できない (異常系)
+typedef void (*FP)(void);
+FP (*g)(void);
 void main(void) {
 }

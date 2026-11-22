@@ -1,9 +1,8 @@
-// expect: compiler error: incompatible pointer types in initialization: expected 'int *' but got 'S *' at src_err/541.pn:8
-// 意味解析エラー: typedef名を付けた無名構造体の型を，エラーメッセージの型名にtypedef名で表示する (異常系)
+// expect: compiler error: sizeof of type 'S' is not supported at src_err/541.pn:6
+// 構文エラー: 構造体の別名は，sizeof(struct 構造体名)と同じくsizeofの型名に書けない (異常系)
 typedef struct {
     int x;
 } S;
-S s;
+int n = sizeof(S);
 void main(void) {
-    int *p = &s;
 }

@@ -1,0 +1,7 @@
+// expect: compiler error: pointer cannot be const at src_err/554.pn:5
+// 構文エラー: ポインタの別名にconstを付けても，const変数にできない (異常系)
+typedef int *P;
+int x;
+const P p = &x;
+void main(void) {
+}

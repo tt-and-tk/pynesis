@@ -1,20 +1,36 @@
-// typedefで列挙型に別名を付ける (列挙型名を書いた定義・無名の列挙型の定義・定義済みの列挙型)
-typedef enum Color {
-    RED,
-    GREEN,
-    BLUE,
-} color_t;
-typedef enum {
-    IDLE = 5,
-    BUSY,
-} state_t;
-typedef enum Color paint_t;      // 定義済みの列挙型に別名を付ける
-color_t c = GREEN;
-state_t s = BUSY;
+// typedefで構造体に別名を付ける (構造体名を書いた定義・無名構造体の定義・定義済みの構造体)
+// 無名構造体のメンバに，自身のtypedef名へのポインタを書ける
+typedef struct Pair {
+    int first;
+    int second;
+} pair_t;
+typedef struct {
+    int value;
+    node_t *next;                // 自身のtypedef名へのポインタ
+} node_t;
+typedef struct Pair pair_alias_t;   // 定義済みの構造体に別名を付ける
+pair_t a;
+struct Pair b;
+node_t nodes[2];
 int r1;
+int r2;
+
+void swap(pair_alias_t *p) {
+    int t = p->first;
+    p->first = p->second;
+    p->second = t;
+}
 
 void main(void) {
-    paint_t p = BLUE;
-    enum Color e = c;            // 別名の列挙型と元の列挙型はどちらもintと同じ型
-    r1 = p * 100 + e * 10 + s;   // 200 + 10 + 6 = 216
+    a.first = 1;
+    a.second = 2;
+    b = a;                       // 別名の構造体と元の構造体の間で代入できる
+    swap(&b);
+    nodes[0].value = 10;
+    nodes[0].next = &nodes[1];
+    nodes[1].value = 20;
+    nodes[1].next = nullptr;
+    node_t n = nodes[0];         // 無名構造体の別名で初期化する
+    r1 = b.first * 10 + b.second;    // 21
+    r2 = n.next->value;              // 20
 }

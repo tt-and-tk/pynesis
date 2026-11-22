@@ -1,6 +1,5 @@
-// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/519.pn:4
-// 構文エラー: typedef名には符号修飾子を付けられない (異常系)
-typedef int T;
-unsigned T x;
+// expect: compiler error: typedef of array is not supported at src_err/519.pn:3
+// 構文エラー: 関数ポインタの配列にも別名を付けられない (異常系)
+typedef int (*A[4])(void);
 void main(void) {
 }

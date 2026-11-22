@@ -1,6 +1,6 @@
-// expect: compiler error: 'Color' is already declared as a typedef at src_err/531.pn:4
-// 構文エラー: typedef名と列挙型名は同じ名前にできない (異常系)
-typedef int Color;
-enum Color { RED };
+// expect: compiler error: 'T' is already declared as a typedef at src_err/531.pn:3
+// 構文エラー: typedef名と同じ名前のグローバル変数は，typedefより前で宣言しても宣言できない (異常系)
+int T;
+typedef int T;
 void main(void) {
 }

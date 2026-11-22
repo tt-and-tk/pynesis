@@ -1,7 +1,6 @@
-// expect: compiler error: array parameter is not supported at src_err/539.pn:4
-// 構文エラー: 関数ポインタの別名を型にした引数も，配列にできない (異常系)
-typedef void (*FP)(void);
-void f(FP handlers[4]) {
-}
+// expect: compiler error: 'T' is already declared as a typedef at src_err/539.pn:4
+// 構文エラー: typedef名と同じ名前のstaticを付けたグローバル変数は宣言できない (異常系)
+typedef int T;
+static int T;
 void main(void) {
 }

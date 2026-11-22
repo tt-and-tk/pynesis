@@ -1,7 +1,5 @@
-// expect: compiler error: 'T' is already declared as a typedef at src_err/include/547_static.pn:2
-// 構文エラー: typedef名はプログラム全体で共有するため，取り込み関係のないファイルにあるstaticを付けたグローバル変数とも同じ名前にできない (異常系)
-#include "include/547_types.pn"
-#include "include/547_static.pn"
-
+// expect: compiler error: expected ';' but got ',' at src_err/547.pn:3
+// 構文エラー: 1つのtypedefで複数の名前は付けられない (異常系)
+typedef int A, *B;
 void main(void) {
 }

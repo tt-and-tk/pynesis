@@ -1,5 +1,7 @@
-// expect: compiler error: expected type at src_err/542.pn:3
-// 構文エラー: typedefの型に，宣言されていない名前は書けない (異常系)
-typedef Unknown T;
+// expect: compiler error: array parameter is not supported at src_err/542.pn:4
+// 構文エラー: 関数ポインタの別名を型にした引数も，配列にできない (異常系)
+typedef void (*FP)(void);
+void f(FP handlers[4]) {
+}
 void main(void) {
 }

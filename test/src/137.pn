@@ -1,36 +1,31 @@
-// typedefで構造体に別名を付ける (構造体名を書いた定義・無名構造体の定義・定義済みの構造体)
-// 無名構造体のメンバに，自身のtypedef名へのポインタを書ける
-typedef struct Pair {
-    int first;
-    int second;
-} pair_t;
-typedef struct {
-    int value;
-    node_t *next;                // 自身のtypedef名へのポインタ
-} node_t;
-typedef struct Pair pair_alias_t;   // 定義済みの構造体に別名を付ける
-pair_t a;
-struct Pair b;
-node_t nodes[2];
+// typedefで整数型・ポインタ・別のtypedef名に別名を付け，元の型と同じ型として使える
+// typedef名は宣言の順序によらず使え，constを前に付けられ，キャスト・sizeofにも書ける
+Count total;                     // 後で宣言したtypedef名を使う
+typedef unsigned char Byte;
+typedef Byte *BytePtr;           // 別のtypedef名のポインタに別名を付ける
+typedef int Count;
+typedef Count Number;            // 別のtypedef名に別名を付ける
+const Number LIMIT = 3;          // constを前に付ける
+Byte buf[4];
 int r1;
 int r2;
+int r3;
+int r4;
 
-void swap(pair_alias_t *p) {
-    int t = p->first;
-    p->first = p->second;
-    p->second = t;
+Number add(Number a, Count b) {
+    return a + b;
 }
 
 void main(void) {
-    a.first = 1;
-    a.second = 2;
-    b = a;                       // 別名の構造体と元の構造体の間で代入できる
-    swap(&b);
-    nodes[0].value = 10;
-    nodes[0].next = &nodes[1];
-    nodes[1].value = 20;
-    nodes[1].next = nullptr;
-    node_t n = nodes[0];         // 無名構造体の別名で初期化する
-    r1 = b.first * 10 + b.second;    // 21
-    r2 = n.next->value;              // 20
+    BytePtr p = buf;
+    Byte *q = p + 1;             // typedef名のポインタは，元の型のポインタと同じ型
+    *p = 300;                    // unsigned charへ格納するため44になる
+    *q = (Byte)-1;               // 255
+    for (Count i = 0; i < LIMIT; i++) {
+        total = add(total, i);   // 0 + 1 + 2 = 3
+    }
+    r1 = buf[0];                 // 44
+    r2 = buf[1];                 // 255
+    r3 = sizeof(Byte) + sizeof(BytePtr);   // 1 + 4 = 5
+    r4 = total;                  // 3
 }

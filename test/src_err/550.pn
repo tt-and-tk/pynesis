@@ -1,7 +1,7 @@
-// expect: compiler error: 'T' is already declared as a typedef at src_err/550.pn:5
-// 構文エラー: for文の初期化部でも，typedef名と同じ名前の変数は宣言できない (異常系)
-typedef int T;
+// expect: compiler error: 'T' is already declared as a typedef at src_err/include/550_static.pn:2
+// 構文エラー: typedef名はプログラム全体で共有するため，取り込み関係のないファイルにあるstaticを付けたグローバル変数とも同じ名前にできない (異常系)
+#include "include/550_types.pn"
+#include "include/550_static.pn"
+
 void main(void) {
-    for (int T = 0; T < 1; T++) {
-    }
 }

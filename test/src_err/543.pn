@@ -1,8 +1,8 @@
-// expect: compiler error: circular reference in declaration of 'S' at src_err/543.pn:3
-// 意味解析エラー: typedef名を付けた無名構造体の循環参照は，エラーメッセージにtypedef名で表示する (異常系)
+// expect: compiler error: duplicate member 'x' in 'S' at src_err/543.pn:5
+// 意味解析エラー: typedef名を付けた無名構造体は，エラーメッセージにtypedef名で表示する (異常系)
 typedef struct {
-    int a[sizeof(v)];
+    int x;
+    int x;
 } S;
-S v;
 void main(void) {
 }

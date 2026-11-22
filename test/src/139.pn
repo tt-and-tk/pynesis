@@ -1,35 +1,20 @@
-// typedefで関数ポインタに別名を付け，変数・配列・構造体のメンバ・引数・キャストに使える
-typedef int (*binop_t)(int, int);
-typedef void (*handler_t)(void);
-struct Table {
-    binop_t ops[2];              // 関数ポインタの配列のメンバ
-};
-binop_t table[2];                // 関数ポインタの配列
-struct Table t;
-handler_t on_done;
+// typedefで列挙型に別名を付ける (列挙型名を書いた定義・無名の列挙型の定義・定義済みの列挙型)
+typedef enum Color {
+    RED,
+    GREEN,
+    BLUE,
+} color_t;
+typedef enum {
+    IDLE = 5,
+    BUSY,
+} state_t;
+typedef enum Color paint_t;      // 定義済みの列挙型に別名を付ける
+color_t c = GREEN;
+state_t s = BUSY;
 int r1;
-int r2;
-int r3;
-
-int add(int a, int b) {
-    return a + b;
-}
-int sub(int a, int b) {
-    return a - b;
-}
-void done(void) {
-    r3 = 1;
-}
-int apply(binop_t op, int a, int b) {
-    return op(a, b);
-}
 
 void main(void) {
-    table[0] = add;
-    table[1] = sub;
-    t.ops[0] = table[1];
-    on_done = (handler_t)(int)done;
-    r1 = apply(table[0], 3, 4);  // 7
-    r2 = t.ops[0](9, 2);         // 7
-    on_done();
+    paint_t p = BLUE;
+    enum Color e = c;            // 別名の列挙型と元の列挙型はどちらもintと同じ型
+    r1 = p * 100 + e * 10 + s;   // 200 + 10 + 6 = 216
 }

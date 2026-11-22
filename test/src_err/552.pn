@@ -1,9 +1,8 @@
-// expect: compiler error: 'S' has no member 'y' at src_err/552.pn:8
-// 意味解析エラー: typedef名を付けた無名構造体にないメンバを読むと，エラーメッセージにtypedef名で表示する (異常系)
-typedef struct {
+// expect: compiler error: 'S' is already declared as a typedef at src_err/552.pn:4
+// 構文エラー: typedef名と同じ名前の構造体名は，typedefより後で定義しても付けられない (異常系)
+typedef int S;
+struct S {
     int x;
-} S;
-S s;
+};
 void main(void) {
-    s.y = 1;
 }

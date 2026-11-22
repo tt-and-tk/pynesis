@@ -1,6 +1,5 @@
-// expect: compiler error: pointer to function pointer is not supported at src_err/524.pn:4
-// 構文エラー: 関数ポインタの別名のポインタ(関数ポインタへのポインタ)は宣言できない (異常系)
-typedef void (*FP)(void);
-FP *p;
+// expect: compiler error: circular reference in typedef 'FP' at src_err/524.pn:3
+// 構文エラー: 関数ポインタの別名の引数の型に，その別名自身は書けない (異常系)
+typedef void (*FP)(FP);
 void main(void) {
 }

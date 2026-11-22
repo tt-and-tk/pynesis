@@ -1,6 +1,6 @@
-// expect: compiler error: redefinition of typedef 'T' at src_err/527.pn:4
-// 構文エラー: 同じ名前のtypedefを2回宣言できない (別名の型が同じでも) (異常系)
-typedef int T;
-typedef int T;
+// expect: compiler error: pointer to function pointer is not supported at src_err/527.pn:4
+// 構文エラー: 関数ポインタの別名のポインタ(関数ポインタへのポインタ)は宣言できない (異常系)
+typedef void (*FP)(void);
+FP *p;
 void main(void) {
 }

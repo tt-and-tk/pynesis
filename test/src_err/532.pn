@@ -1,6 +1,7 @@
-// expect: compiler error: 'RED' is already declared as a typedef at src_err/532.pn:4
-// 構文エラー: typedef名と列挙子は同じ名前にできない (異常系)
-typedef int RED;
-enum Color { RED };
+// expect: compiler error: 'T' is already declared as a typedef at src_err/532.pn:4
+// 構文エラー: typedef名と同じ名前の関数は定義できない (異常系)
+typedef int T;
+void T(void) {
+}
 void main(void) {
 }

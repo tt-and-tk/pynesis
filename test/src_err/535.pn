@@ -1,5 +1,6 @@
-// expect: compiler error: redefinition of 'LED' as typedef at src_err/535.pn:3
-// 意味解析エラー: typedef名とハードウェア変数は同じ名前にできない (異常系)
-typedef int LED;
+// expect: compiler error: 'RED' is already declared as a typedef at src_err/535.pn:4
+// 構文エラー: typedef名と列挙子は同じ名前にできない (異常系)
+typedef int RED;
+enum Color { RED };
 void main(void) {
 }

@@ -1,23 +1,11 @@
-// typedef名は構造体のメンバ名と同じ名前にでき，関数ポインタの引数・戻り値の型にも書ける
-typedef int count_t;
-struct Stat {
-    count_t count_t;             // typedef名と同じ名前のメンバ
-};
-struct Stat stat;
-count_t (*getter)(void);         // 戻り値の型がtypedef名の関数ポインタ
-void (*setter)(count_t);         // 引数の型がtypedef名の関数ポインタ
+// 取り込んだファイルで宣言したtypedef名を，取り込み元のファイルで使える
+#include "include/141_types.pn"
+stat_t stat;
 int r1;
 
-count_t get(void) {
-    return stat.count_t;
-}
-void set(count_t n) {
-    stat.count_t = n;
-}
-
 void main(void) {
-    getter = get;
-    setter = set;
-    setter(5);
-    r1 = getter();               // 5
+    stat.hits = 3;
+    stat.misses = 1;
+    count_t total = stat.hits + stat.misses;
+    r1 = total;                  // 4
 }

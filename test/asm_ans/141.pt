@@ -1,31 +1,18 @@
-.global get, set, main
+.global main
 
 main:
-    mov fh r0 r0 get
-    wm fh r0 r0 4
-    mov fh r0 r0 set
-    wm fh r0 r0 8
-    rm fh r0 r0 8
-    mov fh r0 r1 5
-    wmr fh r16 r1 -8
-    call r0
-    rm fh r0 r0 4
-    call r0
-    mov fh r30 r0
-    wm fh r0 r0 12
-    ret
-
-get:
-    rm fh r0 r0 0
-    mov fh r0 r30
-    ret
-    ret
-
-set:
     mov fh r0 r0 4
     sub r16 r0 r16
-    rmr fh r16 r0 0
+    mov fh r0 r0 3
     wm fh r0 r0 0
+    mov fh r0 r0 1
+    wm fh r0 r0 4
+    rm fh r0 r0 0
+    rm fh r0 r1 4
+    add r0 r1 r0
+    wmr fh r16 r0 0
+    rmr fh r16 r0 0
+    wm fh r0 r0 8
     mov fh r0 r0 4
     add r16 r0 r16
     ret

@@ -1,11 +1,35 @@
-// 取り込んだファイルで宣言したtypedef名を，取り込み元のファイルで使える
-#include "include/140_types.pn"
-stat_t stat;
+// typedefで関数ポインタに別名を付け，変数・配列・構造体のメンバ・引数・キャストに使える
+typedef int (*binop_t)(int, int);
+typedef void (*handler_t)(void);
+struct Table {
+    binop_t ops[2];              // 関数ポインタの配列のメンバ
+};
+binop_t table[2];                // 関数ポインタの配列
+struct Table t;
+handler_t on_done;
 int r1;
+int r2;
+int r3;
+
+int add(int a, int b) {
+    return a + b;
+}
+int sub(int a, int b) {
+    return a - b;
+}
+void done(void) {
+    r3 = 1;
+}
+int apply(binop_t op, int a, int b) {
+    return op(a, b);
+}
 
 void main(void) {
-    stat.hits = 3;
-    stat.misses = 1;
-    count_t total = stat.hits + stat.misses;
-    r1 = total;                  // 4
+    table[0] = add;
+    table[1] = sub;
+    t.ops[0] = table[1];
+    on_done = (handler_t)(int)done;
+    r1 = apply(table[0], 3, 4);  // 7
+    r2 = t.ops[0](9, 2);         // 7
+    on_done();
 }

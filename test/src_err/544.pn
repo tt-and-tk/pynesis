@@ -1,5 +1,9 @@
-// expect: compiler error: expected ';' but got ',' at src_err/544.pn:3
-// 構文エラー: 1つのtypedefで複数の名前は付けられない (異常系)
-typedef int A, *B;
+// expect: compiler error: incompatible pointer types in initialization: expected 'int *' but got 'S *' at src_err/544.pn:8
+// 意味解析エラー: typedef名を付けた無名構造体の型を，エラーメッセージの型名にtypedef名で表示する (異常系)
+typedef struct {
+    int x;
+} S;
+S s;
 void main(void) {
+    int *p = &s;
 }

@@ -1,7 +1,7 @@
-// expect: compiler error: expected identifier but got '*' at src_err/537.pn:5
-// 構文エラー: 構造体の定義を伴うtypedefでは，閉じ波括弧の後ろに名前だけを書く (異常系)
-typedef struct {
-    int x;
-} *P;
+// expect: compiler error: 'T' is already declared as a typedef at src_err/537.pn:4
+// 構文エラー: typedef名と同じ名前の引数は宣言できない (異常系)
+typedef int T;
+void f(int T) {
+}
 void main(void) {
 }
