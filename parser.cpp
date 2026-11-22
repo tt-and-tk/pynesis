@@ -1370,7 +1370,8 @@ std::vector<node_t *> Parser::parse_struct_decl() {
 }
 
 // 構造体定義のうち，struct [構造体名] { メンバ宣言... } を解析してND_STRUCT_DECLを返す
-// 構造体名を省略した場合(無名構造体)は，$に連番を続けた内部名を割り当てる
+// 構造体名を省略した場合(無名構造体)は，$に連番を続けた内部名を割り当てる (typedef名を付けた無名構造体は，typedefの宣言を読む処理が，
+//  $にtypedef名を続けた内部名へ付け直す)
 // 識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上の構造体名と衝突しない
 node_t *Parser::parse_struct_body() {
     node_t *decl = this->new_node(ND_STRUCT_DECL);   // 構造体定義
