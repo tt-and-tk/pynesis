@@ -306,8 +306,8 @@ void Analyzer::collect_static_names() {
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
         // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
-        // 構造体・列挙型の定義はここでは検査しない．staticの宣言との重複は，構造体・列挙型の定義の検査でファイルによらず検査するため
-        // typedefの宣言も検査しない．staticの宣言とtypedef名の重複は，構文解析が検査するため
+        // 構造体・列挙型の定義とtypedefの宣言はここでは検査しない．staticの宣言との重複は，構造体・列挙型の定義の検査と構文解析が，
+        // ファイルによらず検査するため
         if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL && child->kind != ND_TYPEDEF) {
             this->check_static_in_includer(child);
         }

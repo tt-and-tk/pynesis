@@ -15,7 +15,7 @@ typedef enum {
     BASE_SHORT,     // short
     BASE_INT,       // int
     BASE_VOID,      // void (関数の戻り値型にのみ使う)
-    BASE_STRUCT,    // 構造体 (構造体名はtype_tのstruct_nameが持つ．無名構造体は内部名を持つ(struct_type_nameを参照))
+    BASE_STRUCT,    // 構造体 (構造体名は型情報が持つ)
     BASE_FUNC,      // 関数 (関数ポインタが指す先．シグネチャはtype_tのfunc_sigが持つ)
     BASE_NULLPTR,   // 組み込み定数nullptrの型 (どのポインタ型とも比較・代入できる)
 } base_type_t;
@@ -29,7 +29,7 @@ typedef struct type_t {
     bool is_signed = true;        // signed(true)/unsigned(false)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
-    // 構造体名 (base==BASE_STRUCTのときのみ有効)
+    // 構造体名 (構造体の型のときのみ有効．無名構造体は，ソースに識別子として書けない$で始まる内部名を持つ)
     // base==BASE_STRUCT かつ is_array==true は，変数宣言で構造体自体を複数並べた配列
     // (struct Tag arr[N];)を表す．一方，構造体のメンバはスカラーまたは固定長配列のみで
     // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
@@ -66,9 +66,7 @@ type_t decayed_type(const type_t &type);
 // 型を，エラーメッセージに書く表記(`int *`等)に変換する
 std::string type_to_string(const type_t &type);
 // 構造体名を，エラーメッセージに書く型名に変換する
-// 無名構造体の内部名は，ソースに識別子として書けない$で始まる．typedef名を付けた無名構造体は$にtypedef名を続け，
-// それ以外の無名構造体は$に連番を続ける．名前を付けた構造体は「struct 構造体名」，typedef名を付けた無名構造体はtypedef名，
-// それ以外の無名構造体は「anonymous struct」にする
+// 名前を付けた構造体は「struct 構造体名」，typedef名を付けた無名構造体はtypedef名，それ以外の無名構造体は「anonymous struct」にする
 std::string struct_type_name(const std::string &struct_name);
 
 // ASTノード種別

@@ -93,12 +93,13 @@ std::string type_to_string(const type_t &type) {
 }
 
 // 構造体名を，エラーメッセージに書く型名に変換する
+// 無名構造体の内部名は，typedef名を付けた場合は$にtypedef名を続けた形，それ以外は$に連番を続けた形である
 std::string struct_type_name(const std::string &struct_name) {
     // 名前を付けた構造体の場合
     if (struct_name[0] != '$') return "struct " + struct_name;
-    // typedef名を付けていない無名構造体の場合 (内部名は$に連番を続けた形)
+    // typedef名を付けていない無名構造体の場合
     if (std::isdigit(static_cast<unsigned char>(struct_name[1]))) return "anonymous struct";
-    // typedef名を付けた無名構造体の場合 (内部名は$にtypedef名を続けた形)
+    // typedef名を付けた無名構造体の場合
     return struct_name.substr(1);
 }
 
@@ -171,6 +172,7 @@ bool Parser::is_type_start(int offset) const {
     if (kind == TK_IDENT) {
         return this->typedefs_.count(this->tokens_[this->pos_ + offset].value) > 0;
     }
+    // 型キーワード・修飾子の場合
     return kind == TK_INT || kind == TK_CHAR || kind == TK_SHORT || kind == TK_VOID
         || kind == TK_SIGNED || kind == TK_UNSIGNED || kind == TK_STRUCT || kind == TK_ENUM || kind == TK_CONST;
 }
@@ -289,7 +291,9 @@ type_t Parser::parse_base_type(bool allow_void) {
 
     // typedef名: 別名の型にconst修飾子を加える (符号修飾子は整数型キーワードの直前にだけ書けるため，ここには来ない)
     if (this->token_kind_is(TK_IDENT) && this->typedefs_.count(this->peek_token().value)) {
+        // typedef名を読み，別名の型を求める
         type = this->resolve_typedef(this->get_token());
+        // 型名より前に書いたconst修飾子を加える
         type.is_const = is_const;
         return type;
     }
@@ -330,15 +334,18 @@ type_t Parser::resolve_typedef(const token_t &name) {
     if (entry.is_resolving) {
         throw std::string("compiler error: circular reference in typedef '") + name.value + "' at " + loc_to_string(name.loc);
     }
-    // 読み取り位置をtypedefの型の先頭へ移して型を読み，元の位置へ戻す
-    // (構造体・列挙型の定義の本体は読まない．メンバが自身のtypedef名を使っても循環にしないため)
+    // 別名の型を求めている途中であることを記録する
     entry.is_resolving = true;
     const int saved_pos = this->pos_;            // 型名として読んだtypedef名の次の位置
     std::vector<node_t *> unused_definitions;    // 定義を読まないため使わない
     std::string unused_name;                     // 先読みで集めた名前と同じため使わない
+    // 読み取り位置を，typedefの宣言のtypedefの次(別名の型の先頭)へ移す
     this->pos_ = entry.decl_pos + 1;
+    // 別名の型を読む (構造体・列挙型の定義の本体は読まない．メンバが自身のtypedef名を使っても循環にしないため)
     entry.type = this->parse_typedef_type(false, unused_definitions, unused_name);
+    // 読み取り位置を，型名として読んだtypedef名の次へ戻す
     this->pos_ = saved_pos;
+    // 別名の型を求め終えたことを記録する
     entry.is_resolving = false;
     entry.is_resolved = true;
     return entry.type;
@@ -352,6 +359,7 @@ void Parser::collect_typedef_names() {
     // トークンを先頭から順に調べる
     for (int i = 0; i < static_cast<int>(this->tokens_.size()); i++) {
         const token_kind_t kind = this->tokens_[i].kind;   // 調べるトークンの種別
+        // 波括弧なら，深さを更新する
         if (kind == TK_LBRACE) brace_depth++;
         if (kind == TK_RBRACE) brace_depth--;
         // グローバルスコープのtypedefでなければ飛ばす (ブロックスコープのtypedefは構文解析でエラーにする)
@@ -373,6 +381,7 @@ int Parser::find_typedef_name(int type_start) const {
     // 構造体・列挙型の定義を伴う場合 (本体を閉じる'}'の直後が名前)
     if (first_kind == TK_STRUCT || first_kind == TK_ENUM) {
         int index = type_start + 1;   // 構造体名・列挙型名がありうる位置
+        // 構造体名・列挙型名がある場合は，その次へ進める
         if (this->kind_at(index) == TK_IDENT) index++;
         // 本体の'{'がある場合
         if (this->kind_at(index) == TK_LBRACE) {
@@ -406,6 +415,7 @@ int Parser::find_closing_brace(int open_index) const {
     int depth = 0;            // 調べている位置の，'{'の内側の波括弧の深さ
     // 波括弧の深さが0に戻る'}'まで進める
     for (; this->kind_at(index) != TK_EOF; index++) {
+        // 波括弧なら深さを更新し，'{'に対応する'}'に達したら止める
         if (this->kind_at(index) == TK_LBRACE) depth++;
         if (this->kind_at(index) == TK_RBRACE && --depth == 0) break;
     }
@@ -415,6 +425,7 @@ int Parser::find_closing_brace(int open_index) const {
 // 宣言する名前(変数・引数・関数・構造体名・列挙型名・列挙子)がtypedef名と同じならエラーにする
 // typedef名は型名として読むため，同じ名前を使う文の構文解析を誤る．その誤りより先に報告するよう，名前を読んだ時点で検査する
 void Parser::check_not_typedef_name(const std::string &name, const loc_t &loc) const {
+    // typedef名と同じ名前の場合
     if (this->typedefs_.count(name)) {
         throw std::string("compiler error: '") + name + "' is already declared as a typedef at " + loc_to_string(loc);
     }
@@ -947,6 +958,7 @@ node_t *Parser::parse_sizeof() {
     // typedef名なら型名として読む
     else if (kind == TK_IDENT && this->typedefs_.count(this->peek_token().value)) {
         const loc_t type_loc = this->peek_token().loc;   // 型名の位置 (エラー報告用)
+        // 別名の型を読む
         node->type = this->parse_type(false);
         // 構造体・関数ポインタの別名の場合 (型名で書けるのは，整数型キーワードで書ける整数型とそのポインタだけのため)
         if (// 構造体または構造体へのポインタの別名
@@ -1358,11 +1370,11 @@ std::vector<node_t *> Parser::parse_struct_decl() {
 }
 
 // 構造体定義のうち，struct [構造体名] { メンバ宣言... } を解析してND_STRUCT_DECLを返す
-// 構造体名を省略した場合(無名構造体)は，$に連番を続けた内部名を割り当てる(struct_type_nameを参照)
+// 構造体名を省略した場合(無名構造体)は，$に連番を続けた内部名を割り当てる
 // 識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上の構造体名と衝突しない
 node_t *Parser::parse_struct_body() {
-    node_t *decl = this->new_node(ND_STRUCT_DECL);
-    this->get_token(TK_STRUCT);
+    node_t *decl = this->new_node(ND_STRUCT_DECL);   // 構造体定義
+    this->get_token(TK_STRUCT);                       // structキーワード
 
     // 構造体名を書いた場合はそれを，省略した場合は内部名を，構造体定義の名前にする
     if (this->token_kind_is(TK_IDENT)) {
@@ -1386,7 +1398,7 @@ node_t *Parser::parse_struct_body() {
 // 戻り値: 列挙型名があれば[0]に列挙型の定義(ND_ENUM_DECL)を置き，続けて列挙子ごとの変数宣言(ND_VAR_DECL)を並べる
 std::vector<node_t *> Parser::parse_enum_decl() {
     std::vector<node_t *> result = this->parse_enum_body();   // 列挙型の定義と列挙子の宣言
-    this->get_token(TK_SEMICOLON);
+    this->get_token(TK_SEMICOLON);                             // 末尾の;
     return result;
 }
 
@@ -1463,15 +1475,17 @@ std::vector<node_t *> Parser::parse_enum_body() {
 std::vector<node_t *> Parser::parse_typedef_decl() {
     const int decl_pos = this->pos_;                  // typedefの宣言の先頭の位置
     node_t *node = this->new_node(ND_TYPEDEF);       // typedefの宣言
-    this->get_token(TK_TYPEDEF);
+    this->get_token(TK_TYPEDEF);                      // typedefキーワード
     std::vector<node_t *> result;                     // 返す宣言の並び (定義を伴う場合は，その定義から並べる)
+    // 別名の型と名前を読み，定義を伴う場合はその定義を返す宣言の並びへ加える
     node->type = this->parse_typedef_type(true, result, node->sval);
     // 先読みで集めた同じ名前のtypedefが，この宣言でない場合 (同じ名前のtypedefが前方にもある)
     const auto found = this->typedefs_.find(node->sval);   // 先読みで集めた同じ名前のtypedef
     if (found != this->typedefs_.end() && found->second.decl_pos != decl_pos) {
         throw std::string("compiler error: redefinition of typedef '") + node->sval + "' at " + loc_to_string(node->loc);
     }
-    this->get_token(TK_SEMICOLON);
+    this->get_token(TK_SEMICOLON);   // 末尾の;
+    // typedefの宣言を，定義の後ろに加える
     result.push_back(node);
     return result;
 }
@@ -1494,10 +1508,12 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
     if (is_definition) {
         const bool is_struct = this->token_kind_is(TK_STRUCT);                           // 構造体の定義か
         const std::string tag = has_tag ? this->tokens_[this->pos_ + 1].value : "";     // 構造体名・列挙型名 (無名なら空)
-        // 定義を読む場合 (構造体なら構造体定義を，列挙型なら列挙型の定義と列挙子の宣言を加える)
+        // 構造体の定義を読む場合
         if (parses_definition && is_struct) {
             definitions = {this->parse_struct_body()};
-        } else if (parses_definition) {
+        }
+        // 列挙型の定義を読む場合 (列挙型の定義と列挙子の宣言を加える)
+        else if (parses_definition) {
             definitions = this->parse_enum_body();
         }
         // 定義の本体を読み飛ばす場合 (本体を閉じる'}'の次まで進める)
@@ -1510,10 +1526,11 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
                 : 1);
             this->pos_ = this->find_closing_brace(open_index) + 1;
         }
+        // 閉じ波括弧の後ろの名前を読む
         name = this->get_token(TK_IDENT).value;
         // 構造体の場合 (無名構造体には，typedef名から決めた内部名を付ける)
         if (is_struct) {
-            type.base = BASE_STRUCT;
+            type.base = BASE_STRUCT;   // 構造体の型
             // 構造体名を求める
             type.struct_name =
                 // 構造体名を書いた場合は，その構造体名
@@ -1525,22 +1542,27 @@ type_t Parser::parse_typedef_type(bool parses_definition, std::vector<node_t *> 
         }
         // 列挙型の場合 (無名の列挙型は列挙型の定義のノードを持たないため，列挙型名を持たないintにする)
         else {
-            type.base = BASE_INT;
-            type.enum_name = tag;
+            type.base = BASE_INT;      // intと同じ型
+            type.enum_name = tag;      // 列挙型名 (無名なら空)
         }
     }
     // 定義を伴わない場合
     else {
+        // 型名を読む (voidは，関数ポインタの戻り値型になりうるため読み，後で検査する)
         type = this->parse_type(true);
         // 関数ポインタの宣言子の場合
         if (this->token_kind_is(TK_LPAREN)) {
             bool is_func_pointer_array;        // 関数ポインタの配列の宣言子か (配列の別名は付けられないため，そうならエラーにする)
             node_t *func_pointer_array_size;   // 関数ポインタの配列の要素数の式 (エラーにするため使わない)
+            // 関数ポインタの宣言子を読み，名前と関数ポインタの型を求める
             type = this->parse_func_pointer_declarator(type, true, name, is_func_pointer_array, func_pointer_array_size);
+            // 関数ポインタの配列の宣言子の場合
             if (is_func_pointer_array) {
                 throw std::string("compiler error: typedef of array is not supported at ") + loc_to_string(loc);
             }
-        } else {
+        }
+        // 関数ポインタの宣言子でなければ，型名の後ろの名前を読む
+        else {
             name = this->get_token(TK_IDENT).value;
         }
         // voidの場合 (値を持たない型のため，別名を付けて使える場所がない)
