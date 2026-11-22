@@ -1,4 +1,6 @@
 .global id, main
+.reserve 4
+.stack 40
 
 main:
     mov fh r0 r0 16

@@ -1,0 +1,6 @@
+// expect: compiler error: '.reserve' cannot be written in asm template at src_err/556.pn:5
+// 生成エラー: asm文の雛形に.reserveを書いた (異常系)
+// 大きさの宣言はプログラムの先頭にだけ書けるため
+void main(void) {
+    asm(".reserve 4");
+}

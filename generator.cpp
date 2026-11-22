@@ -102,23 +102,19 @@ Generator::Generator(node_t *root, const analysis_result_t &analysis, std::ostre
 // コード生成を実行してアセンブリを出力先へ書き出す
 void Generator::operator()() {
     this->gen_program();
-    // 全関数のフレームの大きさが確定したので，グローバル変数と合わせてメモリの前半に収まるか検査する
-    this->check_memory_usage();
 }
 
 // プログラム全体を生成する
-// .global宣言で全関数名を列挙し，main関数を先頭に各関数を出力する
+// 出力は次の順に並べる
+//   1. 全関数名の.global宣言
+//   2. 大きさの宣言(実行ファイル用のみ．.reserveと，見積もれた場合の.stack)
+//   3. 各関数(main関数が先頭)
+// 各関数は宣言より先に別の出力先へ生成し，最後に宣言の後ろへ書き出す
+// (実行ファイル用の.stackの値は，全関数のフレームの大きさが確定するまで決まらないため．
+//  スタックの量の見積もりとROM用のメモリの検査も，同じ理由で全関数を生成した後に行う)
 void Generator::gen_program() {
-    // .global宣言: 子を走査して全関数名を集める (アセンブリは定義前に全関数の宣言が必要)
-    bool first = true;
-    (*this->out_) << ".global ";
-    for (node_t *child : this->root_->children) {
-        if (child->kind != ND_FUNC_DEF) continue;   // 関数定義のみ対象 (グローバル変数は除く)
-        if (!first) (*this->out_) << ", ";
-        (*this->out_) << child->sval;
-        first = false;
-    }
-    (*this->out_) << "\n";
+    std::ostringstream funcs_out;   // 生成した各関数の出力先
+    this->out_ = &funcs_out;
 
     // main関数を先頭に出力する (アセンブリはmainを一番最初に書く必要がある)
     for (node_t *child : this->root_->children) {
@@ -136,6 +132,32 @@ void Generator::gen_program() {
             this->gen_func(child);
         }
     }
+    this->out_ = &this->asm_out_;
+
+    // 全関数のフレームの大きさが確定したので，スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
+    this->stack_bytes_ = this->estimate_stack_bytes();
+    this->check_memory_usage();
+
+    // .global宣言: 子を走査して全関数名を集める (アセンブリは定義前に全関数の宣言が必要)
+    bool first = true;
+    (*this->out_) << ".global ";
+    for (node_t *child : this->root_->children) {
+        if (child->kind != ND_FUNC_DEF) continue;   // 関数定義のみ対象 (グローバル変数は除く)
+        if (!first) (*this->out_) << ", ";
+        (*this->out_) << child->sval;
+        first = false;
+    }
+    (*this->out_) << "\n";
+
+    // 実行ファイル用の場合，領域に必要な大きさを宣言する
+    // (グローバル変数・文字列リテラルは命令列の直後に置くため，その大きさを命令列の直後に確保する範囲とする．
+    //  スタックの量を見積もれない場合は.stackを書かず，量を未定にする)
+    if (this->analysis_.is_bin_mode) {
+        (*this->out_) << ".reserve " << this->analysis_.global_size << "\n";
+        if (this->stack_bytes_) (*this->out_) << ".stack " << *this->stack_bytes_ << "\n";
+    }
+
+    (*this->out_) << funcs_out.str();
 }
 
 // グローバル変数の初期化コードを生成する
@@ -217,6 +239,7 @@ int Generator::calc_frame_size() const {
 int Generator::calc_spill_size(node_t *func) {
     const int label_count_before = this->label_count_;   // 生成を始める前のラベルの連番
     const int spill_size_before = this->spill_size_;     // 生成を始める前の退避領域の大きさ
+    std::ostream *out_before = this->out_;               // 生成を始める前の出力先
     std::ostringstream discarded;                        // 出力を捨てる先
 
     // 出力先を捨てる先へ向け，退避領域の大きさに最大値を置いて本体を生成する
@@ -227,7 +250,7 @@ int Generator::calc_spill_size(node_t *func) {
     const int spill_size = (this->max_spill_reg_ + 1) * 4;   // 退避したレジスタの本数から求めた大きさ
 
     // 出力先と，生成に伴って変わった状態を元へ戻す
-    this->out_ = &this->asm_out_;
+    this->out_ = out_before;
     this->label_count_ = label_count_before;
     this->spill_size_ = spill_size_before;
     return spill_size;
@@ -925,6 +948,9 @@ void Generator::gen_unary(node_t *expr, int reg) {
 // 8/16ビットの整数型へは下位ビットへ切り詰めてから型の規則で拡張し，32ビットの整数型・ポインタへはビット列をそのまま使う
 void Generator::gen_cast(node_t *expr, int reg) {
     const type_t &type = expr->type;   // キャストした型
+    // 整数を関数ポインタへキャストする場合は，スタックの量を見積もれないプログラムとして記録する
+    // (呼び出し先がプログラムの外の番地や型の異なる関数になりえ，見積もりの呼び出しの経路に含められないため)
+    if (is_func_pointer(type) && !is_func_pointer(expr->children[0]->type)) this->has_int_to_func_cast_ = true;
     // 変換する式をr{reg}に評価する
     this->gen_expr(expr->children[0], reg);
     // ポインタ・32ビットの整数型の場合 (ビット列は変わらないため，これ以上何もしない)
@@ -1111,6 +1137,9 @@ static bool has_compiler_label_name(const std::string &code) {
 // 雛形を1行ずつ書き方を確かめながら置き換え，命令の行は字下げし，局所ラベルの行は行頭に置いて出力する
 // (行の種類は，アセンブラと同じくコメントより前に:を含むかで見分ける)
 void Generator::gen_asm(const node_t *stmt) {
+    // スタックの量を見積もれないプログラムとして記録する
+    // (コンパイラは雛形の命令を調べないため，雛形の中の呼び出しやSPの操作が積む量を見積もりに含められない)
+    this->has_asm_ = true;
     const std::string at = " at " + loc_to_string(stmt->loc);   // エラーメッセージの末尾
     std::string unique_number;                                  // %=を置き換える番号 (最初の%=で決まる)
     std::istringstream lines(stmt->sval);                       // 雛形を行に分けて読む
@@ -1155,9 +1184,11 @@ void Generator::gen_asm(const node_t *stmt) {
             continue;
         }
 
-        // .global宣言の場合 (プログラムの先頭にだけ書けるため)
-        if (code.compare(0, 7, ".global") == 0) {
-            throw std::string("compiler error: '.global' cannot be written in asm template") + at;
+        // .global宣言・大きさの宣言(.reserve・.stack)の場合 (プログラムの先頭にだけ書けるため)
+        for (const std::string directive : {".global", ".reserve", ".stack"}) {
+            if (code.compare(0, directive.size(), directive) == 0) {
+                throw "compiler error: '" + directive + "' cannot be written in asm template" + at;
+            }
         }
 
         // 命令の行とコメントだけの行は，字下げして出力する
@@ -1995,26 +2026,41 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
           + "' at " + loc_to_string(member_access->loc);
 }
 
-// ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
-// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
-// 互いの値を壊す(ハードウェアは検出しない)
-void Generator::check_memory_usage() {
-    // 実行ファイル用の場合 (スタックの空きは，シェルが領域の末尾に置くコマンド名と引数の文字列の長さで決まり
-    //  コンパイル時に分からないため，検査しない)
-    if (this->analysis_.is_bin_mode) return;
-
+// プログラムが使うスタックの量(バイト)を，mainを起点に呼び出しの経路をたどって見積もる
+// 次の場合は見積もれないため，値を持たない結果を返す
+//   - 再帰呼び出しがある(深さが実行時にしか決まらない)
+//   - 実行ファイル用で，asm文か整数から関数ポインタへのキャストを含む(積む量を見積もりに含められない)
+// ROM用では，asm文などを含んでも見積もった量を返す
+// 実行ファイル用では，mainの終了のシステムコールがフレームを解放した後にSPから値を並べるため，見積もりをその量以上にする
+std::optional<int> Generator::estimate_stack_bytes() {
     std::set<std::string> path;                // 現在の探索経路(再帰の検出用)
     std::map<std::string, int> recorded;       // 関数ごとに求めたスタック使用量
     bool is_recursive = false;                 // 探索中に再帰を見つけたか
     // mainを起点に，呼び出しの経路をたどってスタック使用量を求める
     const int stack_bytes = this->calc_stack_bytes("main", path, recorded, is_recursive);
-    // 再帰がある場合 (深さが実行時にしか決まらず使用量を見積もれないため，検査しない)
-    if (is_recursive) return;
+    if (is_recursive) return std::nullopt;
 
-    if (this->analysis_.global_size + stack_bytes > RAM_HALF_SIZE) {
+    // ROM用の場合 (asm文などを含んでも，求めた量で検査する)
+    if (!this->analysis_.is_bin_mode) return stack_bytes;
+    // 実行ファイル用の場合
+    if (this->has_asm_ || this->has_int_to_func_cast_) return std::nullopt;
+    return std::max(stack_bytes, SYSCALL_ARGS_BYTES);
+}
+
+// ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
+// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
+// 互いの値を壊す(ハードウェアは検出しない)
+// 実行ファイル用の場合と，スタックの量を見積もれなかった場合は検査しない
+void Generator::check_memory_usage() {
+    // 実行ファイル用の場合 (命令列の大きさと合わせて，コード生成の後に検査する)
+    if (this->analysis_.is_bin_mode) return;
+    // スタックの量を見積もれなかった場合 (再帰があるため，検査しない)
+    if (!this->stack_bytes_) return;
+
+    if (this->analysis_.global_size + *this->stack_bytes_ > RAM_HALF_SIZE) {
         throw std::string("compiler error: global variables (")
               + std::to_string(this->analysis_.global_size) + " bytes) and stack ("
-              + std::to_string(stack_bytes) + " bytes) exceed first half of memory ("
+              + std::to_string(*this->stack_bytes_) + " bytes) exceed first half of memory ("
               + std::to_string(RAM_HALF_SIZE) + " bytes)";
     }
 }

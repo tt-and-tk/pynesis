@@ -1,4 +1,5 @@
 .global main
+.reserve 8
 
 main:
     wm fh r0 r1 88

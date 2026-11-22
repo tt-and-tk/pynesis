@@ -1,6 +1,7 @@
 #pragma once
 #include <ostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -22,6 +23,8 @@ class Generator {
 public:
     Generator(node_t *root, const analysis_result_t &analysis, std::ostream &asm_out);
     void operator()();   // コード生成を実行してアセンブリを出力先へ書き出す
+    // 見積もったスタックの量(バイト)を返す．見積もれなかった場合は値を持たない (コード生成の後に呼ぶ)
+    std::optional<int> stack_bytes() const { return this->stack_bytes_; }
 
 private:
     node_t *root_;                                            // 注釈付きAST
@@ -35,6 +38,9 @@ private:
     int max_spill_reg_ = -1;   // 生成中の関数が退避する最大のレジスタ番号
     std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数
     std::set<std::string> syscall_funcs_;                     // 組み込み関数syscallを呼ぶ関数の名前の集合
+    bool has_asm_ = false;                                    // asm文を生成したか
+    bool has_int_to_func_cast_ = false;                       // 整数を関数ポインタへキャストする式を生成したか
+    std::optional<int> stack_bytes_;                          // 見積もったスタックの量(バイト)．見積もれなかった場合は値を持たない
     int label_count_ = 0;                                     // 局所ラベル(.L0, .L1, ...)とasm文の%=の番号に使う連番カウンタ
     // break/continueの飛び先ラベルのスタック (最内が末尾)
     // continueはループのみ，breakはループとswitchの両方が積む
@@ -42,7 +48,7 @@ private:
     std::vector<std::string> continue_labels_;
 
     // 生成メソッド (gen_で始まる)
-    void gen_program();              // プログラム全体 (.global宣言 + main優先で各関数を出力)
+    void gen_program();              // プログラム全体 (.global宣言 + 実行ファイル用は大きさの宣言 + main優先で各関数を出力)
     void gen_global_inits();         // グローバル変数の初期化 (mainの先頭に出力)
     void gen_func(node_t *func);     // 関数定義 (ラベル + フレームの確保 + 本体)
     void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰
@@ -149,6 +155,7 @@ private:
     int calc_spill_size(node_t *func);      // 関数が必要とするレジスタ退避領域のバイト数を求める
     // node以下にSPのハードウェア変数へ書き込む式があればエラーにする (フレームを持つ関数の本体に対して使う)
     static void check_no_sp_write(const node_t *node);
+    std::optional<int> estimate_stack_bytes();   // プログラムが使うスタックの量(バイト)を見積もる．見積もれない場合は値を持たない
     void check_memory_usage();   // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
     // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
     // path: 現在の探索経路(再帰の検出用)．recorded: 関数ごとに求めた使用量(再訪時に使い回す)

@@ -1,4 +1,6 @@
 .global zero, main
+.reserve 68
+.stack 24
 
 main:
     mov fh r0 r0 80000000h

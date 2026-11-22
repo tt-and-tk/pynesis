@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <sstream>
 
 #include "pn2asm.hpp"
@@ -19,7 +20,7 @@ typedef struct {
 // 前宣言
 static void get_args(int argc, char **argv, args_t &args);     // コマンドライン引数を取得する
 // Pynesisソースをアセンブリに変換して返す(グローバル変数・文字列リテラルを指定した番地から置き，それらが占めるバイト数を3つ目の引数へ返す)
-static std::string compile_to_asm(const args_t &args, int global_base, int &global_size);
+static std::string compile_to_asm(const args_t &args, int global_base, int &global_size, std::optional<int> &stack_bytes);
 static int count_instructions(const std::string &asm_text);    // アセンブリの命令数を数える
 
 // メイン関数: compile_pn_to_asmをそのまま呼ぶだけ
@@ -44,31 +45,34 @@ int compile_pn_to_asm(int argc, char **argv) {
     std::ofstream asm_file;                     // 出力アセンブリファイル
 
     try {
-        std::string asm_text;  // 生成したアセンブリ
-        int global_size;       // グローバル変数・文字列リテラルが占めるバイト数
+        std::string asm_text;              // 生成したアセンブリ
+        int global_size;                   // グローバル変数・文字列リテラルが占めるバイト数
+        std::optional<int> stack_bytes;    // 見積もったスタックの量(バイト)．見積もれなかった場合は値を持たない
 
         // グローバル変数を0番地から置いて生成し，命令数を数える(ROM用は，この生成結果をそのまま出力する)
-        asm_text = compile_to_asm(args, 0, global_size);
+        asm_text = compile_to_asm(args, 0, global_size, stack_bytes);
         int instruction_count = count_instructions(asm_text);  // 生成した命令数
         // 実行ファイル用なら，グローバル変数を命令列の直後から置いて生成し直す
         // (命令数はコード生成を終えるまで分からないため，数えてから生成し直す．
         //  番地は常に32ビットの即値として埋め込むため，置き始める番地を変えても命令数は変わらない)
         if (args.is_bin_mode) {
-            asm_text = compile_to_asm(args, instruction_count * INSTRUCTION_BYTES, global_size);
+            asm_text = compile_to_asm(args, instruction_count * INSTRUCTION_BYTES, global_size, stack_bytes);
             // 置き始める番地を変えて命令数が変わった場合は，番地が命令列と重なるため内部エラーにする
             if (count_instructions(asm_text) != instruction_count) {
                 throw std::string("compiler error: instruction count changed by placing global variables");
             }
         }
 
-        // 実行ファイル用の場合 (命令列とグローバル変数は，シェルが割り振る領域の先頭から順に置くため，
-        //  両者の合計が，実行ファイル用の範囲に収まる必要がある)
+        // 実行ファイル用の場合 (命令列・グローバル変数・スタックは，シェルが割り振る領域の先頭から順に置くため，
+        //  それらの合計が，実行ファイル用の範囲に収まる必要がある．スタックの量を見積もれなかった場合は，シェルが割り振る既定の量で検査する)
         if (args.is_bin_mode) {
-            const int code_bytes = instruction_count * INSTRUCTION_BYTES;    // 命令列が占めるバイト数
-            if (code_bytes + global_size > EXEC_AREA_SIZE) {
+            const int code_bytes = instruction_count * INSTRUCTION_BYTES;                  // 命令列が占めるバイト数
+            const int checked_stack_bytes = stack_bytes.value_or(EXEC_DEFAULT_STACK_SIZE);  // 検査に使うスタックの量
+            if (code_bytes + global_size + checked_stack_bytes > EXEC_AREA_SIZE) {
                 throw std::string("compiler error: instructions (")
-                      + std::to_string(code_bytes) + " bytes) and global variables ("
-                      + std::to_string(global_size) + " bytes) exceed area for executable ("
+                      + std::to_string(code_bytes) + " bytes), global variables ("
+                      + std::to_string(global_size) + " bytes) and stack ("
+                      + std::to_string(checked_stack_bytes) + " bytes) exceed area for executable ("
                       + std::to_string(EXEC_AREA_SIZE) + " bytes)";
             }
         }
@@ -103,7 +107,8 @@ int compile_pn_to_asm(int argc, char **argv) {
 
 // Pynesisソースをアセンブリに変換して返す
 // グローバル変数・文字列リテラルは2つ目の引数の番地から上へ置き，それらが占めるバイト数を3つ目の引数へ返す
-std::string compile_to_asm(const args_t &args, int global_base, int &global_size) {
+// 見積もったスタックの量を4つ目の引数へ返す(見積もれなかった場合は値を持たない)
+std::string compile_to_asm(const args_t &args, int global_base, int &global_size, std::optional<int> &stack_bytes) {
     std::vector<token_t> tokens;    // トークン列 (字句解析結果)
     include_graph_t include_graph;  // ファイルごとの取り込み先 (字句解析結果)
     std::ostringstream asm_out;     // 生成したアセンブリの出力先
@@ -124,6 +129,7 @@ std::string compile_to_asm(const args_t &args, int global_base, int &global_size
     generator();
 
     global_size = analyzer.result().global_size;
+    stack_bytes = generator.stack_bytes();
     return asm_out.str();
 }
 
