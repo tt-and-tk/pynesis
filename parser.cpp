@@ -1374,7 +1374,7 @@ std::vector<node_t *> Parser::parse_struct_decl() {
 // 識別子は英字/_で始まるトークンのみのため，$で始まる名前はソース上の構造体名と衝突しない
 node_t *Parser::parse_struct_body() {
     node_t *decl = this->new_node(ND_STRUCT_DECL);   // 構造体定義
-    this->get_token(TK_STRUCT);                       // structキーワード
+    this->get_token(TK_STRUCT);                      // structキーワード
 
     // 構造体名を書いた場合はそれを，省略した場合は内部名を，構造体定義の名前にする
     if (this->token_kind_is(TK_IDENT)) {
@@ -1398,7 +1398,7 @@ node_t *Parser::parse_struct_body() {
 // 戻り値: 列挙型名があれば[0]に列挙型の定義(ND_ENUM_DECL)を置き，続けて列挙子ごとの変数宣言(ND_VAR_DECL)を並べる
 std::vector<node_t *> Parser::parse_enum_decl() {
     std::vector<node_t *> result = this->parse_enum_body();   // 列挙型の定義と列挙子の宣言
-    this->get_token(TK_SEMICOLON);                             // 末尾の;
+    this->get_token(TK_SEMICOLON);                            // 末尾の;
     return result;
 }
 
@@ -1474,7 +1474,7 @@ std::vector<node_t *> Parser::parse_enum_body() {
 // 戻り値: 構造体・列挙型の定義を伴う場合はその定義を先に並べ，最後にtypedefの宣言(ND_TYPEDEF)を置く
 std::vector<node_t *> Parser::parse_typedef_decl() {
     const int decl_pos = this->pos_;                  // typedefの宣言の先頭の位置
-    node_t *node = this->new_node(ND_TYPEDEF);       // typedefの宣言
+    node_t *node = this->new_node(ND_TYPEDEF);        // typedefの宣言
     this->get_token(TK_TYPEDEF);                      // typedefキーワード
     std::vector<node_t *> result;                     // 返す宣言の並び (定義を伴う場合は，その定義から並べる)
     // 別名の型と名前を読み，定義を伴う場合はその定義を返す宣言の並びへ加える
