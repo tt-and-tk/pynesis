@@ -1,0 +1,9 @@
+// expect: compiler error: redefinition of 'p' at src_err/514.pn:4
+// 意味解析エラー: ポインタ型の引数と同じ名前のconst変数も，関数の本体の直下には宣言できない (異常系)
+int f(int *p) {
+    const int p = 1;
+    return p;
+}
+void main(void) {
+    f(nullptr);
+}
