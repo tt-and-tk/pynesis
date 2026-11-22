@@ -149,7 +149,8 @@ private:
     void collect_static_names();                            // 1パス目: staticを付けた宣言の名前を集め，ファイルごとに一意な名前を決める
     void index_global_decls();                              // 2パス目: staticの名前の置き換え，グローバル宣言の索引作成と名前の重複検査
     bool is_value_name_declared(const std::string &name) const;  // 変数(const変数・列挙子を含む)・関数・ハードウェア変数に，その名前のものが宣言済みかを返す
-    void check_not_type_def_name(const node_t *decl) const;     // ローカル変数・引数の名前が，構造体名・列挙型名・列挙子と同じならエラーにする
+    // ローカル変数・引数の名前が，構造体名・列挙型名・列挙子と同じならエラーにする (typedef名と同じ名前は構文解析がエラーにする)
+    void check_not_struct_enum_name(const node_t *decl) const;
     void check_static_in_includer(const node_t *decl) const;  // staticでない宣言と同じ名前のstaticが，その宣言のファイルを取り込んだファイルにあればエラーにする
     // 3パス目: 部分木の中で，構文解析が型を持たせたノード(宣言・キャスト・sizeof)の型に現れる列挙型名が定義済みであることを確かめる
     // (列挙型はintと同じに扱い，以降の検査で型を区別しないため，型を参照する経路によらずここでまとめて確かめる)

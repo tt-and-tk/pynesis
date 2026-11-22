@@ -1,0 +1,6 @@
+// expect: compiler error: 'T' is already declared as a typedef at src_err/531.pn:3
+// 構文エラー: typedef名と同じ名前のグローバル変数は，typedefより前で宣言しても宣言できない (異常系)
+int T;
+typedef int T;
+void main(void) {
+}

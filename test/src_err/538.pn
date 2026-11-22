@@ -1,0 +1,5 @@
+// expect: compiler error: redefinition of 'LED' as typedef at src_err/538.pn:3
+// 意味解析エラー: typedef名とハードウェア変数は同じ名前にできない (異常系)
+typedef int LED;
+void main(void) {
+}

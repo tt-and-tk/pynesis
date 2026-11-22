@@ -1,0 +1,6 @@
+// expect: compiler error: redefinition of typedef 'T' at src_err/530.pn:4
+// 構文エラー: 同じ名前のtypedefを2回宣言できない (別名の型が同じでも) (異常系)
+typedef int T;
+typedef int T;
+void main(void) {
+}

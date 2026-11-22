@@ -1,0 +1,5 @@
+// expect: compiler error: expected ';' but got ',' at src_err/547.pn:3
+// 構文エラー: 1つのtypedefで複数の名前は付けられない (異常系)
+typedef int A, *B;
+void main(void) {
+}

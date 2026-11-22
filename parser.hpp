@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@ typedef enum {
     BASE_SHORT,     // short
     BASE_INT,       // int
     BASE_VOID,      // void (関数の戻り値型にのみ使う)
-    BASE_STRUCT,    // 構造体 (構造体名はtype_tのstruct_nameが持つ)
+    BASE_STRUCT,    // 構造体 (構造体名は型情報が持つ)
     BASE_FUNC,      // 関数 (関数ポインタが指す先．シグネチャはtype_tのfunc_sigが持つ)
     BASE_NULLPTR,   // 組み込み定数nullptrの型 (どのポインタ型とも比較・代入できる)
 } base_type_t;
@@ -28,11 +29,9 @@ typedef struct type_t {
     bool is_signed = true;        // signed(true)/unsigned(false)
     bool is_array = false;        // 配列かどうか
     int array_size = 0;           // 配列の要素数 (is_array==trueのとき有効)
-    // 構造体名 (base==BASE_STRUCTのときのみ有効)
-    // base==BASE_STRUCT かつ is_array==true は，変数宣言で構造体自体を複数並べた配列
-    // (struct Tag arr[N];)を表す．一方，構造体のメンバはスカラーまたは固定長配列のみで
-    // 構成し，メンバ自身がstruct型になること(ネスト構造体)自体が非対応のため，
-    // メンバの型としてbase==BASE_STRUCTが現れることはそもそもない
+    // 構造体名 (構造体の型のときのみ有効．無名構造体は，ソースに識別子として書けない$で始まる内部名を持つ)
+    // 構造体の型の配列は，変数宣言で構造体自体を複数並べた配列(struct Tag arr[N];)を表す
+    // 構造体のメンバはスカラーか固定長配列に限り，構造体を入れ子にできないため，メンバの型が構造体の型になることはない
     std::string struct_name;
     // 列挙型名 (enum 列挙型名と書いた型のときのみ空でない．型としてはintと同じに扱い，列挙型の定義の有無の検査にだけ使う)
     std::string enum_name;
@@ -64,6 +63,9 @@ type_t pointee_type(const type_t &type);
 type_t decayed_type(const type_t &type);
 // 型を，エラーメッセージに書く表記(`int *`等)に変換する
 std::string type_to_string(const type_t &type);
+// 構造体名を，エラーメッセージに書く型名に変換する
+// 名前を付けた構造体は「struct 構造体名」，typedef名を付けた無名構造体はtypedef名，それ以外の無名構造体は「anonymous struct」にする
+std::string struct_type_name(const std::string &struct_name);
 
 // ASTノード種別
 typedef enum {
@@ -77,6 +79,7 @@ typedef enum {
     // 列挙型の定義 (svalに列挙型名．列挙子は，定義の後ろに並べたconst intの変数宣言(ND_VAR_DECL)で表す．
     //  無名の列挙型は，列挙型名で参照されることがないため，このノードを作らず列挙子の変数宣言だけを並べる)
     ND_ENUM_DECL,
+    ND_TYPEDEF,     // typedefの宣言 (svalにtypedef名，typeに別名の型を持つ．型名に書いたtypedef名は構文解析が別名の型へ置き換える)
     // 制御構文
     ND_IF,          // if文
     ND_WHILE,       // while文
@@ -144,10 +147,20 @@ struct node_t {
     bool is_decayed = false;
 };
 
+// typedef名1つ分の情報 (構文解析の前の先読みで集め，別名の型は型名として初めて読んだ時点で求める)
+struct typedef_entry_t {
+    int decl_pos;               // typedefの宣言の先頭(typedefのトークン)の位置
+    bool is_resolving = false;  // 別名の型を求めている途中か (循環した別名の検出用)
+    bool is_resolved = false;   // 別名の型を求め終えたか
+    type_t type;                // 別名の型 (別名の型を求め終えたときに有効)
+};
+
 // トークン列を受け取り，ASTを生成するパーサ
 //
-// パーサの責務は「トークンの並びが文法に合っているか」のチェックまで．
-//   エラーにするもの: 期待したトークンが来ない (例: 閉じ括弧がない，式が来るべき場所に ; がある)
+// パーサの責務は，次の2つのチェックまで．
+//   トークンの並びが文法に合っているか: 期待したトークンが来なければエラーにする (例: 閉じ括弧がない，式が来るべき場所に ; がある)
+//   typedef名の宣言が正しいか: 識別子を型名として読むかはtypedef名で決まるため，typedef名の宣言の誤りを意味解析まで見逃すと，
+//     原因の分からない構文の誤りとして現れる (例: typedef名と同じ名前の変数の宣言)
 //   見逃すもの: 構文としては正しいが意味的に不正な式．後段の意味解析で検査する．
 //     例: 代入の左辺が変数でない (1 + 2 = x)，未宣言の変数参照，未定義関数の呼び出し
 class Parser {
@@ -159,23 +172,32 @@ private:
     const std::vector<token_t> &tokens_;  // トークン列
     int pos_;                             // 現在の読み取り位置
     int anon_struct_count_;                // 無名構造体に割り当てる連番
+    // typedef名→その情報 (typedef名は宣言の順序によらず型名として読むため，構文解析の前にすべて集める)
+    std::map<std::string, typedef_entry_t> typedefs_;
 
     // ヘルパー
     const token_t &peek_token() const;                     // 現在のトークンを覗き見る (消費しない)
+    token_kind_t kind_at(int index) const;                 // 位置indexのトークン種別を返す (範囲外ならTK_EOF扱い)
     token_kind_t peek_kind_ahead(int offset) const;        // pos_+offset先のトークン種別を返す (範囲外ならTK_EOF扱い)
     bool token_kind_is(token_kind_t kind) const;           // 現在のトークンの種別が一致するか調べる (消費しない)
     token_t get_token();                                   // トークンを取得して進める (検証なし)
     token_t get_token(token_kind_t kind);                  // 指定種別のトークンを取得して進める，違えばエラー
     node_t *new_node(node_kind_t kind);                    // 現在のトークンの位置でASTノードを生成する
-    static bool is_type_start(token_kind_t kind);          // 型の先頭になりうるトークン種別かどうか返す
-    int count_type_tokens() const;                         // 現在位置から始まる型名(unsigned int *等)のトークン数を返す (消費しない)
+    bool is_type_start(int offset) const;                  // pos_+offset先のトークンが型の先頭になりうるかどうか返す
+    int count_type_tokens(int start) const;                // 位置startから始まる型名(unsigned int *等)のトークン数を返す (消費しない)
     static bool is_assign_op(token_kind_t kind);           // 代入演算子のトークン種別かどうか返す
     static std::string token_kind_name(token_kind_t kind); // トークン種別をエラーメッセージ用の文字列に変換する
     static long long parse_int_literal(const token_t &token);      // 整数リテラルのトークンを数値に変換する
     static long long parse_char_literal(const std::string &text);  // 文字リテラル文字列を文字コードに変換する
     static std::string parse_string_literal(const std::string &text);  // 文字列リテラルの引用符を除去しエスケープを解釈する
     type_t parse_type(bool allow_void);                    // 型名を読み，型情報を返す (allow_voidならvoidも受け付ける)
-    type_t parse_base_type(bool allow_void);               // parse_typeのうち，ポインタの*より前(修飾子と型キーワード)を読む
+    type_t parse_base_type(bool allow_void);               // parse_typeのうち，ポインタの*より前(修飾子と型キーワード・typedef名)を読む
+    // typedef名を型名として読み，別名の型を返す (未解決なら，そのtypedefの宣言へ読み取り位置を一時的に移して求める)
+    type_t resolve_typedef(const token_t &name);
+    void collect_typedef_names();                          // 構文解析の前に，グローバルスコープのtypedef名と宣言の位置を集める
+    int find_typedef_name(int type_start) const;           // typedefの直後から始まる型に続く名前の位置を返す (形が合わなければ-1)
+    int find_closing_brace(int open_index) const;          // 指定した位置の'{'に対応する'}'の位置を返す
+    void check_not_typedef_name(const std::string &name, const loc_t &loc) const;  // 宣言する名前がtypedef名と同じならエラーにする
     // 関数ポインタまたはその配列の宣言子を読み，関数ポインタの型を返す
     // pointee_return_typeには宣言子の前に読んだ型(関数ポインタが指す関数の戻り値型)を渡し，宣言子の中の名前はnameに書き込む
     // name_requiredがfalseなら名前を省け(引数の型に書く宣言子)，省いた場合はnameを空にする
@@ -193,10 +215,19 @@ private:
     // 構造体名省略時は無名構造体となり，その場での変数宣言を必須とする
     // 戻り値: [0]=構造体定義(ND_STRUCT_DECL)．変数も宣言する場合は[1]に変数宣言(ND_VAR_DECL)を追加する
     std::vector<node_t *> parse_struct_decl();
+    node_t *parse_struct_body();    // 構造体定義のうち，struct [構造体名] { メンバ宣言... } を読み，構造体定義(ND_STRUCT_DECL)を返す
     node_t *parse_struct_member();  // 構造体メンバ宣言 (型 名前 [配列サイズ] ;)
     // 列挙型の定義 enum [列挙型名] { 列挙子 [= 定数式], ... [,] } ;
     // 戻り値: 列挙型名があれば[0]に列挙型の定義(ND_ENUM_DECL)を置き，続けて列挙子ごとのconst intの変数宣言(ND_VAR_DECL)を並べる
     std::vector<node_t *> parse_enum_decl();
+    // 列挙型の定義のうち，enum [列挙型名] { 列挙子... } を読む (戻り値はparse_enum_declと同じ)
+    std::vector<node_t *> parse_enum_body();
+    // typedefの宣言 typedef 型 名前 ; (型には関数ポインタの宣言子と，構造体・列挙型の定義を書ける)
+    // 戻り値: 構造体・列挙型の定義を伴う場合はその定義をparse_struct_decl・parse_enum_declと同じ並びで置き，最後にtypedefの宣言(ND_TYPEDEF)を置く
+    std::vector<node_t *> parse_typedef_decl();
+    // typedefの直後から名前までを読み，別名の型を返す (名前はnameに書き込む)
+    // parses_definitionがtrueなら構造体・列挙型の定義を読んでdefinitionsに加え，falseなら定義の本体を読み飛ばす
+    type_t parse_typedef_type(bool parses_definition, std::vector<node_t *> &definitions, std::string &name);
     node_t *parse_return();     // return文
     node_t *parse_if();         // if文 (else if / else を含む)
     node_t *parse_while();      // while文

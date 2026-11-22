@@ -298,15 +298,17 @@ void Analyzer::collect_static_names() {
 // 宣言を書いたファイルの中にある同じ名前の識別子は，ローカル変数・引数の宣言を含めてすべて番号付きの名前へ置き換える．
 // これにより以降のパスはファイルを区別せず名前だけで解決でき，ほかのファイルからはstaticを付けた宣言を参照できない．
 // 後方で宣言された変数・構造体を宣言順によらず解決できるよう，宣言ノードを名前から引けるようにしておく．
-// 変数(const変数・列挙子を含む)・関数・ハードウェア変数・構造体名・列挙型名はすべて同じ名前空間にあり，互いに同じ名前にできない．
-// 構造体名・列挙型名・列挙子はプログラム全体で共有するため，staticを付けた宣言とも，ファイルによらず同じ名前にできない．
+// 変数(const変数・列挙子を含む)・関数・ハードウェア変数・構造体名・列挙型名・typedef名はすべて同じ名前空間にあり，互いに同じ名前にできない．
+// typedef名とほかの名前の重複は，ハードウェア変数との重複だけをこの関数が検査し，それ以外を構文解析が検査する．
+// 構造体名・列挙型名・列挙子・typedef名はプログラム全体で共有するため，staticを付けた宣言とも，ファイルによらず同じ名前にできない．
 // staticを付けた宣言は番号付きの名前へ置き換えてあるため，変数・関数の宣言を検査する時点では構造体名・列挙型名と一致しない．
 // そのため，staticを付けた宣言と構造体名・列挙型名の重複は，構造体・列挙型の定義を検査する際に，置き換える前の名前で調べる
 void Analyzer::index_global_decls() {
     for (node_t *child : this->root_->children) {
         // staticを付けていない変数・関数の宣言なら，取り込み元のstaticの宣言と同じ名前でないか検査する
-        // 構造体・列挙型の定義はここでは検査しない．staticの宣言との重複は，構造体・列挙型の定義の検査でファイルによらず検査するため
-        if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL) {
+        // 構造体・列挙型の定義とtypedefの宣言はここでは検査しない．staticの宣言との重複は，構造体・列挙型の定義の検査と構文解析が，
+        // ファイルによらず検査するため
+        if (!child->is_static && child->kind != ND_STRUCT_DECL && child->kind != ND_ENUM_DECL && child->kind != ND_TYPEDEF) {
             this->check_static_in_includer(child);
         }
         // 宣言を書いたファイルにstaticの宣言があれば，その名前を番号付きの名前へ置き換える
@@ -316,6 +318,15 @@ void Analyzer::index_global_decls() {
             rename_identifiers(child, found->second);
         }
 
+        // typedefの宣言なら，typedef名がハードウェア変数と重複しないか検査する
+        // (ほかの宣言との重複は，typedef名を型名として読む構文解析が，宣言の名前を読んだ時点で検査済み)
+        if (child->kind == ND_TYPEDEF) {
+            if (this->symbols_.count(child->sval)) {
+                throw std::string("compiler error: redefinition of '") + child->sval
+                      + "' as typedef at " + loc_to_string(child->loc);
+            }
+            continue;
+        }
         // 構造体の定義なら，構造体名がほかの名前と重複しないか検査して登録する
         if (child->kind == ND_STRUCT_DECL) {
             // 同じ名前の構造体が定義済みなら，再定義としてエラーにする
@@ -415,7 +426,7 @@ bool Analyzer::is_value_name_declared(const std::string &name) const {
 
 // ローカル変数・引数の名前が，構造体名・列挙型名・列挙子と同じならエラーにする
 // 構造体・列挙型の定義で付けた名前はプログラム全体で共有するため，シャドーイングを認めない
-void Analyzer::check_not_type_def_name(const node_t *decl) const {
+void Analyzer::check_not_struct_enum_name(const node_t *decl) const {
     // 同じ名前の構造体が定義済みなら，エラーにする
     if (this->struct_decl_nodes_.count(decl->sval)) {
         throw std::string("compiler error: '") + source_name(decl->sval) + "' is already declared as a struct at "
@@ -561,7 +572,7 @@ void Analyzer::resolve_struct_def(const std::string &name) {
             // 登録済みのメンバと同じ名前の場合
             if (registered.name == member->sval) {
                 throw std::string("compiler error: duplicate member '") + member->sval
-                      + "' in struct '" + name + "' at " + loc_to_string(member->loc);
+                      + "' in '" + struct_type_name(name) + "' at " + loc_to_string(member->loc);
             }
         }
 
@@ -603,9 +614,15 @@ const symbol_t *Analyzer::resolve_global_const(const std::string &name) {
 void Analyzer::begin_resolving(const node_t *decl) {
     // 解決中の宣言に再び到達した場合
     if (this->resolving_decls_.count(decl)) {
-        // 無名構造体の名前はパーサが割り当てた内部名でソースに現れないため，無名であることを示す
-        const std::string name = (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$')
-                                     ? "anonymous struct" : "'" + source_name(decl->sval) + "'";   // エラーメッセージに表示する宣言名
+        // エラーメッセージに表示する宣言名を決める (無名構造体の内部名はソースに現れないため，ソースに書いた形の型名にする)
+        const std::string type_name = struct_type_name(decl->sval);   // 構造体定義ならソースに書いた形の型名
+        const std::string name =
+            // typedef名を付けていない無名構造体なら，無名であることを示す
+            (decl->kind == ND_STRUCT_DECL && type_name == "anonymous struct") ? type_name
+            // typedef名を付けた無名構造体なら，typedef名
+            : (decl->kind == ND_STRUCT_DECL && decl->sval[0] == '$') ? "'" + type_name + "'"
+            // どちらでもなければ，宣言の名前
+            : "'" + source_name(decl->sval) + "'";
         throw std::string("compiler error: circular reference in declaration of ") + name
               + " at " + loc_to_string(decl->loc);
     }
@@ -691,6 +708,10 @@ void Analyzer::collect_globals() {
         // 構造体定義: メンバ構成を確定させる
         if (child->kind == ND_STRUCT_DECL) {
             this->resolve_struct_def(child->sval);
+        }
+        // typedefの宣言: 別名の型に現れる構造体が定義済みか確かめる (typedef名を使っていなくても，未定義の構造体の別名はエラーにする)
+        else if (child->kind == ND_TYPEDEF) {
+            this->check_struct_exists(child->type, child->loc);
         }
         // グローバル変数宣言: 初期化子を評価し，アドレスを割り当てて登録する
         else if (child->kind == ND_VAR_DECL) {
@@ -778,7 +799,7 @@ void Analyzer::collect_globals() {
                           + loc_to_string(param->loc);
                 }
                 // 構造体名・列挙型名・列挙子と同名の引数は禁止する
-                this->check_not_type_def_name(param);
+                this->check_not_struct_enum_name(param);
                 // ハードウェア変数と同名の引数は禁止する (ハードウェア変数のレジスタの誤上書き防止)
                 const auto hw_it = this->symbols_.find(param->sval);
                 if (hw_it != this->symbols_.end() && hw_it->second->location == LOC_REGISTER) {
@@ -1551,7 +1572,7 @@ void Analyzer::analyze_local_decl(node_t *decl) {
               + loc_to_string(decl->loc);
     }
     // 構造体名・列挙型名・列挙子と同名のローカル変数は宣言できない
-    this->check_not_type_def_name(decl);
+    this->check_not_struct_enum_name(decl);
     // ハードウェア変数と同名のローカル変数は宣言できない (ハードウェア変数のレジスタを上書きしないように禁止する)
     const symbol_t *shadowed = this->lookup_symbol(decl->sval);
     if (shadowed != nullptr && shadowed->location == LOC_REGISTER) {
@@ -1899,7 +1920,7 @@ const struct_member_t &Analyzer::find_member(const std::string &struct_name, con
     for (const struct_member_t &member : this->struct_defs_.at(struct_name).members) {
         if (member.name == expr->sval) return member;
     }
-    throw std::string("compiler error: struct '") + struct_name
+    throw std::string("compiler error: '") + struct_type_name(struct_name)
           + "' has no member '" + expr->sval + "' at " + loc_to_string(expr->loc);
 }
 

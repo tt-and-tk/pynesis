@@ -1,0 +1,5 @@
+// expect: compiler error: typedef of void is not supported at src_err/520.pn:3
+// 構文エラー: voidには別名を付けられない (異常系)
+typedef void V;
+void main(void) {
+}

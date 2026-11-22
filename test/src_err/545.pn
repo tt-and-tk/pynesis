@@ -1,0 +1,5 @@
+// expect: compiler error: expected type at src_err/545.pn:3
+// 構文エラー: typedefの型に，宣言されていない名前は書けない (異常系)
+typedef Unknown T;
+void main(void) {
+}

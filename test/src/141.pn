@@ -1,0 +1,11 @@
+// 取り込んだファイルで宣言したtypedef名を，取り込み元のファイルで使える
+#include "include/141_types.pn"
+stat_t stat;
+int r1;
+
+void main(void) {
+    stat.hits = 3;
+    stat.misses = 1;
+    count_t total = stat.hits + stat.misses;
+    r1 = total;                  // 4
+}

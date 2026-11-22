@@ -1,0 +1,6 @@
+#pragma once
+typedef struct {
+    count_t hits;                // このファイルの後方で宣言したtypedef名を使う
+    count_t misses;
+} stat_t;
+typedef int count_t;

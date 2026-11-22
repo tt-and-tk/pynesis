@@ -1,0 +1,5 @@
+// expect: compiler error: use of undeclared enum 'Undefined' at src_err/526.pn:3
+// 意味解析エラー: 定義されていない列挙型には，typedef名を使わなくても別名を付けられない (異常系)
+typedef enum Undefined E;
+void main(void) {
+}

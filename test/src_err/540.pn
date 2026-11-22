@@ -1,0 +1,7 @@
+// expect: compiler error: expected identifier but got '*' at src_err/540.pn:5
+// 構文エラー: 構造体の定義を伴うtypedefでは，閉じ波括弧の後ろに名前だけを書く (異常系)
+typedef struct {
+    int x;
+} *P;
+void main(void) {
+}

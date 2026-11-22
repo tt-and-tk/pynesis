@@ -1,0 +1,6 @@
+// expect: compiler error: circular reference in typedef 'A' at src_err/523.pn:3
+// 構文エラー: 互いに相手を別名の型にするtypedefは，別名の型が決まらない (異常系)
+typedef A B;
+typedef B A;
+void main(void) {
+}

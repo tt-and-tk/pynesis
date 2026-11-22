@@ -1,0 +1,6 @@
+// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/522.pn:4
+// 構文エラー: typedef名には符号修飾子を付けられない (異常系)
+typedef int T;
+unsigned T x;
+void main(void) {
+}
