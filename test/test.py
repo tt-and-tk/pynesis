@@ -2,7 +2,11 @@
 test/src/*.pn・test/src_bin/*.pn を全てコンパイルして test/asm/・test/asm_bin/ へ出力するテストスクリプト．
 コンパイラをビルドしてから各 .pn を .pt に変換し，期待値と一致するか確認する．
 src/ はROM用，src_bin/ はQosmosの実行ファイル用(--bin-mode)としてコンパイルする．
-期待値ファイル(asm_ans/・asm_bin_ans/)がなければ FAIL とする．
+- 次のケースは FAIL とする．
+  - コンパイルが失敗した
+  - 期待値ファイル(asm_ans/・asm_bin_ans/)がない
+  - 出力が期待値と一致しない
+- 入力ディレクトリか .pn ファイルがない組は，その旨を表示し，残りの組を実行した後にテスト全体を失敗とする．
 """
 
 import difflib
