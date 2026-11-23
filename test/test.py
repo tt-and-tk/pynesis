@@ -113,7 +113,7 @@ def main():
     compare_pass = []
     compare_fail = []
 
-    # 全ての組を実行する (入力ディレクトリかテストケースのない組があっても，残りの組は実行してから失敗とする)
+    # 全ての組を実行する (入力ディレクトリまたはテストケースがない組があっても，残りの組は実行してから失敗とする)
     all_found = True
     for suite in SUITES:
         if not run_suite(*suite, compile_success, compile_fail, compare_pass, compare_fail):
