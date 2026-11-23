@@ -16,7 +16,7 @@ GitHubリポジトリ名: `tt-and-tk/pynesis`．
 | `pyntaxis` | `assembler/` | 自作アセンブリ言語Pyntaxis(`.pt`) → SystemVerilog ROM(`.sv`)，または自作OS Qosmosの実行ファイルへのアセンブラ |
 | `pynesis`(このリポジトリ) | `compiler/` | 自作プログラミング言語Pynesis(`.pn`) → アセンブリ言語Pyntaxisへのコンパイラ．`pyntaxis`のソースファイルを取り込んで使用し，`.sv`または実行ファイルまで一貫変換も可能 |
 | `qurge` | `mypc/` | CPU・メモリ・ROM等のハードウェア全体のVivadoプロジェクトと，ROM上で動く自作OS Qosmos(シェルやファイルシステムなど．Pynesisで記述) |
-| `for-pynthesis-skills` | `for-pynthesis-skills/` | Pynthesisの各リポジトリで共有するissue起票・対応支援スキルとコーディング規約を提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先でもある |
+| `for-pynthesis-skills` | `for-pynthesis-skills/` | Pynthesisの各リポジトリで共有するissue起票・対応支援スキルと，方針の決め方・コーディング規約を提供する．特定のリポジトリが主担当と判断できない，全リポジトリに影響するissueの起票先でもある |
 
 ```
 入力(.pn) → [pynesis(このリポジトリ)のコンパイラ] → アセンブリ(.pt) → [pyntaxisのアセンブラ] → SystemVerilog ROM(.sv) → [Vivado] → PYNQ-Z2上のハードウェア(qurge)
