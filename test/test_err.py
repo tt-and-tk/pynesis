@@ -73,6 +73,8 @@ def judge(returncode, output, expected):
 def run_suite(src_name, extra_args, tmpdir, detected, failed):
     """1組のテストを実行し，結果を各リストへ追加する．入力ディレクトリかテストケースがなければ False を返す．"""
     src_dir = os.path.join(SCRIPT_DIR, src_name)
+
+    # 入力ディレクトリがなければ，その旨を表示してこの組を失敗とする
     if not os.path.isdir(src_dir):
         print(f"{src_name} ディレクトリが見つかりません: {src_dir}")
         return False
@@ -129,7 +131,7 @@ def main():
     detected = []    # エラー検出成功(コンパイラが期待どおりのコンパイルエラーを報告した)
     failed = []      # 失敗(エラー未検出・異常終了・エラーメッセージの出力漏れ・期待と異なるエラー)
 
-    # 全ての組を実行する (テストケースのない組があっても，残りの組は実行してから失敗とする)
+    # 全ての組を実行する (入力ディレクトリまたはテストケースがない組があっても，残りの組は実行してから失敗とする)
     all_found = True
     with tempfile.TemporaryDirectory() as tmpdir:
         for src_name, extra_args in SUITES:

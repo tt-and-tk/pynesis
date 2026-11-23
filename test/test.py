@@ -2,7 +2,12 @@
 test/src/*.pn・test/src_bin/*.pn を全てコンパイルして test/asm/・test/asm_bin/ へ出力するテストスクリプト．
 コンパイラをビルドしてから各 .pn を .pt に変換し，期待値と一致するか確認する．
 src/ はROM用，src_bin/ はQosmosの実行ファイル用(--bin-mode)としてコンパイルする．
-期待値ファイル(asm_ans/・asm_bin_ans/)がなければ FAIL とする．
+- 入力ディレクトリごとに1組のテストとし，その中の各 .pn を1件のテストケースとする．
+- 次の場合は失敗とする．
+  - テストケースのコンパイルが失敗した
+  - テストケースの期待値ファイル(asm_ans/・asm_bin_ans/)がない
+  - テストケースの出力が期待値と一致しない
+  - 組の入力ディレクトリかテストケースがない(その旨を表示し，残りの組は実行する)
 """
 
 import difflib
@@ -22,10 +27,15 @@ SUITES = [
 
 def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
               compile_success, compile_fail, compare_pass, compare_fail):
-    """1組のテストを実行し，結果を各リストへ追加する．テストケースが1件もなければ False を返す．"""
+    """1組のテストを実行し，結果を各リストへ追加する．入力ディレクトリかテストケースがなければ False を返す．"""
     src_dir = os.path.join(SCRIPT_DIR, src_name)
     asm_dir = os.path.join(SCRIPT_DIR, asm_name_dir)
     ans_dir = os.path.join(SCRIPT_DIR, ans_name_dir)
+
+    # 入力ディレクトリがなければ，その旨を表示してこの組を失敗とする
+    if not os.path.isdir(src_dir):
+        print(f"{src_name} ディレクトリが見つかりません: {src_dir}")
+        return False
 
     os.makedirs(asm_dir, exist_ok=True)
 
@@ -104,7 +114,7 @@ def main():
     compare_pass = []
     compare_fail = []
 
-    # 全ての組を実行する (テストケースのない組があっても，残りの組は実行してから失敗とする)
+    # 全ての組を実行する (入力ディレクトリまたはテストケースがない組があっても，残りの組は実行してから失敗とする)
     all_found = True
     for suite in SUITES:
         if not run_suite(*suite, compile_success, compile_fail, compare_pass, compare_fail):
