@@ -22,10 +22,15 @@ SUITES = [
 
 def run_suite(src_name, asm_name_dir, ans_name_dir, extra_args,
               compile_success, compile_fail, compare_pass, compare_fail):
-    """1組のテストを実行し，結果を各リストへ追加する．テストケースが1件もなければ False を返す．"""
+    """1組のテストを実行し，結果を各リストへ追加する．入力ディレクトリかテストケースがなければ False を返す．"""
     src_dir = os.path.join(SCRIPT_DIR, src_name)
     asm_dir = os.path.join(SCRIPT_DIR, asm_name_dir)
     ans_dir = os.path.join(SCRIPT_DIR, ans_name_dir)
+
+    # 入力ディレクトリがなければ，その旨を表示してこの組を失敗とする
+    if not os.path.isdir(src_dir):
+        print(f"{src_name} ディレクトリが見つかりません: {src_dir}")
+        return False
 
     os.makedirs(asm_dir, exist_ok=True)
 
@@ -104,7 +109,7 @@ def main():
     compare_pass = []
     compare_fail = []
 
-    # 全ての組を実行する (テストケースのない組があっても，残りの組は実行してから失敗とする)
+    # 全ての組を実行する (入力ディレクトリかテストケースのない組があっても，残りの組は実行してから失敗とする)
     all_found = True
     for suite in SUITES:
         if not run_suite(*suite, compile_success, compile_fail, compare_pass, compare_fail):

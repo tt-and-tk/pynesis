@@ -129,7 +129,7 @@ def main():
     detected = []    # エラー検出成功(コンパイラが期待どおりのコンパイルエラーを報告した)
     failed = []      # 失敗(エラー未検出・異常終了・エラーメッセージの出力漏れ・期待と異なるエラー)
 
-    # 全ての組を実行する (テストケースのない組があっても，残りの組は実行してから失敗とする)
+    # 全ての組を実行する (入力ディレクトリかテストケースのない組があっても，残りの組は実行してから失敗とする)
     all_found = True
     with tempfile.TemporaryDirectory() as tmpdir:
         for src_name, extra_args in SUITES:
