@@ -1,0 +1,47 @@
+.global f, main
+.reserve 28096
+
+main:
+    mov fh r0 r0 3
+    wmr fh r16 r0 -8
+    call f
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r1 5
+    mov fh r0 r0 24
+    sub r16 r0 r16
+    wmr fh r16 r1 4
+    wmr fh r16 r30 8
+    syscall
+    ret
+
+f:
+    mov fh r0 r0 4
+    sub r16 r0 r16
+    rmr fh r16 r0 0
+    mov fh r0 r1 0
+    ne r0 r1 .L0
+    mov fh r0 r0 0
+    mov fh r0 r1 2
+    sll r0 r1 r0
+    mov fh r0 r1 320
+    add r0 r1 r0
+    rm fh r0 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+.L0:
+    rmr fh r16 r0 0
+    mov fh r0 r1 1
+    sub r0 r1 r0
+    wmr fh r16 r0 -8
+    call f
+    mov fh r30 r0
+    mov fh r0 r30
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret
+    mov fh r0 r0 4
+    add r16 r0 r16
+    ret

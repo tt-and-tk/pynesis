@@ -1,8 +1,10 @@
 .global main
+.reserve 32416
+.stack 24
 
 main:
     mov fh r0 r0 1
-    wm fh r0 r0 32508
+    wm fh r0 r0 32484
     mov fh r0 r1 5
     mov fh r0 r0 24
     sub r16 r0 r16

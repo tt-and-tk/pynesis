@@ -1,4 +1,5 @@
 .global main
+.reserve 4
 
 main:
     ; r1を保存する

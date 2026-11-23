@@ -223,7 +223,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
 
     // グローバル変数・文字列リテラルだけで，置き場所(ROM用はメモリの前半，実行ファイル用は実行ファイル用の範囲)を
     // 使い切っていないか確認する
-    // (ROM用のスタック・実行ファイル用の命令列と合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
+    // (ROM用のスタックと合わせた容量の検査と，実行ファイル用の命令列・スタックと合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
     // 実行ファイル用の場合
     if (this->is_bin_mode_ && this->global_size_ > EXEC_AREA_SIZE) {
         throw std::string("compiler error: global variables (")
