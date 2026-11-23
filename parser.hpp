@@ -184,7 +184,7 @@ private:
     token_t get_token(token_kind_t kind);                  // 指定種別のトークンを取得して進める，違えばエラー
     node_t *new_node(node_kind_t kind);                    // 現在のトークンの位置でASTノードを生成する
     bool is_type_start(int offset) const;                  // pos_+offset先のトークンが型の先頭になりうるかどうか返す
-    int count_type_tokens(int start) const;                // 位置startから始まる型名(unsigned int *等)のトークン数を返す (消費しない)
+    int count_type_tokens(int start) const;                // typedef名の先読みで，位置startから始まる型名(unsigned int *等)のトークン数を返す (消費しない)
     static bool is_assign_op(token_kind_t kind);           // 代入演算子のトークン種別かどうか返す
     static std::string token_kind_name(token_kind_t kind); // トークン種別をエラーメッセージ用の文字列に変換する
     static long long parse_int_literal(const token_t &token);      // 整数リテラルのトークンを数値に変換する

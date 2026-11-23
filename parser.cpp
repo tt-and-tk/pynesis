@@ -178,7 +178,8 @@ bool Parser::is_type_start(int offset) const {
 }
 
 // 位置startから始まる型(const・符号修飾子・型キーワード(struct 構造体名・enum 列挙型名を含む)またはtypedef名・ポインタの*)が占めるトークン数を返す
-// 宣言の種類(関数定義か変数宣言か)と，typedefで付ける名前の位置を，型を読み進める前に判定するために使う
+// typedefで付ける名前の位置を，typedef名を集める先読みの途中で求めるために使う
+// (型を読む処理は，typedef名をすべて集め終えていることを前提とするため，先読みの途中では使えない)
 int Parser::count_type_tokens(int start) const {
     int index = start;   // 数えている位置
     // const修飾子がある場合
@@ -489,7 +490,12 @@ node_t *Parser::parse_program() {
         }
         // 型で始まるなら関数定義またはグローバル変数宣言
         else if (this->is_type_start(0)) {
-            const int offset = this->count_type_tokens(this->pos_);   // 型の直後のトークンまでの数
+            // 型を読んで型の直後のトークンまでの数を求め，型の先頭へ戻す
+            // (型の誤りを，ローカルの宣言と同じく型を読む処理に報告させるため．読んだ型を渡さず読み直すのは，変数宣言の解析をローカルの宣言と共有するため)
+            const int type_start = this->pos_;   // 型の先頭の位置
+            this->parse_type(true);
+            const int offset = this->pos_ - type_start;   // 型の直後のトークンまでの数
+            this->pos_ = type_start;
             // 型の直後が識別子でも'('(関数ポインタの宣言子)でもなければエラー
             if (this->peek_kind_ahead(offset) != TK_IDENT && this->peek_kind_ahead(offset) != TK_LPAREN) {
                 throw std::string("compiler error: expected identifier after type at ")

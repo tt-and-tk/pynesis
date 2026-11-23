@@ -1,0 +1,5 @@
+// expect: compiler error: expected type at src_err/561.pn:3
+// 構文解析エラー: グローバルスコープでも，const修飾子の後に型名が必要 (異常系)
+const x;
+void main(void) {
+}
