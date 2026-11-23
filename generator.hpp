@@ -39,7 +39,7 @@ private:
     std::map<std::string, int> func_frame_sizes_;             // 関数名→フレームのバイト数
     std::set<std::string> syscall_funcs_;                     // 組み込み関数syscallを呼ぶ関数の名前の集合
     bool has_asm_ = false;                                    // asm文を生成したか
-    bool has_int_to_func_cast_ = false;                       // 整数を関数ポインタへキャストする式を生成したか
+    bool has_int_func_cast_ = false;                          // 整数と関数ポインタの間でキャストする式を生成したか
     std::optional<int> stack_bytes_;                          // 見積もったスタックの量(バイト)．見積もれなかった場合は値を持たない
     int label_count_ = 0;                                     // 局所ラベル(.L0, .L1, ...)とasm文の%=の番号に使う連番カウンタ
     // break/continueの飛び先ラベルのスタック (最内が末尾)

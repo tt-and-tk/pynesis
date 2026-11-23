@@ -63,8 +63,8 @@ int compile_pn_to_asm(int argc, char **argv) {
             }
         }
 
-        // 実行ファイル用の場合 (命令列・グローバル変数・スタックは，シェルが割り振る領域の先頭から順に置くため，
-        //  それらの合計が，実行ファイル用の範囲に収まる必要がある．スタックの量を見積もれなかった場合は，シェルが割り振る既定の量で検査する)
+        // 実行ファイル用の場合 (命令列とグローバル変数はシェルが割り振る領域の先頭から順に置き，スタックは引数の置き場の手前から下へ伸びるため，
+        //  それらの合計が，実行ファイル用の範囲に収まる必要がある．スタックの量を見積もれなかった場合は，シェルと同じく既定の量で検査する)
         if (args.is_bin_mode) {
             const int code_bytes = instruction_count * INSTRUCTION_BYTES;                  // 命令列が占めるバイト数
             const int checked_stack_bytes = stack_bytes.value_or(EXEC_DEFAULT_STACK_SIZE);  // 検査に使うスタックの量
@@ -134,7 +134,7 @@ std::string compile_to_asm(const args_t &args, int global_base, int &global_size
 }
 
 // アセンブリの命令数を数える
-// (コード生成は，命令行を半角空白で字下げし，ラベル行・.global行を字下げせずに出力する．
+// (コード生成は，命令行を半角空白で字下げし，ラベル行・.global行・大きさの宣言の行を字下げせずに出力する．
 //  コメント行は命令行と同じく字下げするため，先頭の空白を除いた最初の文字が';'かどうかで見分ける)
 int count_instructions(const std::string &asm_text) {
     std::istringstream lines(asm_text);  // 1行ずつ読み出す元
@@ -148,7 +148,7 @@ int count_instructions(const std::string &asm_text) {
         if (
             // 空白だけの行や空行でない
             pos != std::string::npos
-            // かつ，字下げしている(ラベル行・.global行でない)
+            // かつ，字下げしている(ラベル行・.global行・大きさの宣言の行でない)
             && line[0] == ' '
             // かつ，コメント行でない
             && line[pos] != ';') {

@@ -114,6 +114,7 @@ void Generator::operator()() {
 //  スタックの量の見積もりとROM用のメモリの検査も，同じ理由で全関数を生成した後に行う)
 void Generator::gen_program() {
     std::ostringstream funcs_out;   // 生成した各関数の出力先
+    // 各関数の出力先を，宣言より後ろに書き出すための出力先へ向ける
     this->out_ = &funcs_out;
 
     // main関数を先頭に出力する (アセンブリはmainを一番最初に書く必要がある)
@@ -132,9 +133,10 @@ void Generator::gen_program() {
             this->gen_func(child);
         }
     }
+    // 宣言を書き出すため，出力先をアセンブリの出力先へ戻す
     this->out_ = &this->asm_out_;
 
-    // 全関数のフレームの大きさが確定したので，スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
+    // スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
     this->stack_bytes_ = this->estimate_stack_bytes();
     this->check_memory_usage();
 
@@ -948,9 +950,9 @@ void Generator::gen_unary(node_t *expr, int reg) {
 // 8/16ビットの整数型へは下位ビットへ切り詰めてから型の規則で拡張し，32ビットの整数型・ポインタへはビット列をそのまま使う
 void Generator::gen_cast(node_t *expr, int reg) {
     const type_t &type = expr->type;   // キャストした型
-    // 整数を関数ポインタへキャストする場合は，スタックの量を見積もれないプログラムとして記録する
-    // (呼び出し先がプログラムの外の番地や型の異なる関数になりえ，見積もりの呼び出しの経路に含められないため)
-    if (is_func_pointer(type) && !is_func_pointer(expr->children[0]->type)) this->has_int_to_func_cast_ = true;
+    // 整数と関数ポインタの間でキャストする場合は，スタックの量を見積もれないプログラムとして記録する
+    // (整数を経由すると，関数ポインタがプログラムの外の番地や型の異なる関数を指しえ，その呼び出し先を見積もりの呼び出しの経路に含められないため)
+    if (is_func_pointer(type) != is_func_pointer(expr->children[0]->type)) this->has_int_func_cast_ = true;
     // 変換する式をr{reg}に評価する
     this->gen_expr(expr->children[0], reg);
     // ポインタ・32ビットの整数型の場合 (ビット列は変わらないため，これ以上何もしない)
@@ -1185,6 +1187,7 @@ void Generator::gen_asm(const node_t *stmt) {
         }
 
         // .global宣言・大きさの宣言(.reserve・.stack)の場合 (プログラムの先頭にだけ書けるため)
+        // 宣言の名前ごとに，行の先頭と一致するかを調べる
         for (const std::string directive : {".global", ".reserve", ".stack"}) {
             if (code.compare(0, directive.size(), directive) == 0) {
                 throw "compiler error: '" + directive + "' cannot be written in asm template" + at;
@@ -2029,7 +2032,7 @@ int Generator::member_offset_bytes(const node_t *member_access) const {
 // プログラムが使うスタックの量(バイト)を，mainを起点に呼び出しの経路をたどって見積もる
 // 次の場合は見積もれないため，値を持たない結果を返す
 //   - 再帰呼び出しがある(深さが実行時にしか決まらない)
-//   - 実行ファイル用で，asm文か整数から関数ポインタへのキャストを含む(積む量を見積もりに含められない)
+//   - 実行ファイル用で，asm文か，整数と関数ポインタの間のキャストを含む(積む量を見積もりに含められない)
 // ROM用では，asm文などを含んでも見積もった量を返す
 // 実行ファイル用では，mainの終了のシステムコールがフレームを解放した後にSPから値を並べるため，見積もりをその量以上にする
 std::optional<int> Generator::estimate_stack_bytes() {
@@ -2038,12 +2041,20 @@ std::optional<int> Generator::estimate_stack_bytes() {
     bool is_recursive = false;                 // 探索中に再帰を見つけたか
     // mainを起点に，呼び出しの経路をたどってスタック使用量を求める
     const int stack_bytes = this->calc_stack_bytes("main", path, recorded, is_recursive);
+    // 再帰がある場合
     if (is_recursive) return std::nullopt;
 
     // ROM用の場合 (asm文などを含んでも，求めた量で検査する)
     if (!this->analysis_.is_bin_mode) return stack_bytes;
-    // 実行ファイル用の場合
-    if (this->has_asm_ || this->has_int_to_func_cast_) return std::nullopt;
+    // 実行ファイル用で，積む量を見積もりに含められない構文を含む場合
+    if (
+        // asm文を含む
+        this->has_asm_
+        // または，整数と関数ポインタの間のキャストを含む
+        || this->has_int_func_cast_) {
+        return std::nullopt;
+    }
+    // 実行ファイル用の場合 (mainの終了のシステムコールが並べる量を下回らないようにする)
     return std::max(stack_bytes, SYSCALL_ARGS_BYTES);
 }
 
