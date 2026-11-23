@@ -1,0 +1,6 @@
+// expect: compiler error: expected 'int', 'char' or 'short' after 'unsigned' at src_err/559.pn:3
+// 構文解析エラー: グローバルスコープの関数の戻り値型でも，符号修飾子(unsigned)は型名なしで単独では書けない (異常系)
+unsigned f(void) {
+}
+void main(void) {
+}
