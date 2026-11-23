@@ -491,7 +491,7 @@ node_t *Parser::parse_program() {
         // 型で始まるなら関数定義またはグローバル変数宣言
         else if (this->is_type_start(0)) {
             // 型を読んで型の直後のトークンまでの数を求め，型の先頭へ戻す
-            // (型の誤りを，ローカルの宣言と同じく型を読む処理に報告させるため)
+            // (型の誤りを，ローカルの宣言と同じく型を読む処理に報告させるため．読んだ型を渡さず読み直すのは，変数宣言の解析をローカルの宣言と共有するため)
             const int type_start = this->pos_;   // 型の先頭の位置
             this->parse_type(true);
             const int offset = this->pos_ - type_start;   // 型の直後のトークンまでの数
