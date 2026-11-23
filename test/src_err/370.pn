@@ -1,5 +1,5 @@
 // expect: compiler error: '.global' cannot be written in asm template at src_err/370.pn:4
-// コード生成エラー: asm文の雛形に.global宣言は書けない (異常系)
+// コード生成エラー: asm文の雛形に.global指令は書けない (異常系)
 void main(void) {
     asm(".global foo");
 }

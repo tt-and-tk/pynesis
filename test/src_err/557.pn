@@ -1,6 +1,6 @@
 // expect: compiler error: '.stack' cannot be written in asm template at src_err/557.pn:5
 // 生成エラー: asm文の雛形に.stackを書いた (異常系)
-// 大きさの宣言はプログラムの先頭にだけ書けるため
+// 指令は最初の関数ラベルより前にだけ書けるため
 void main(void) {
     asm(".stack 4");
 }

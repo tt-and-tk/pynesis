@@ -106,15 +106,15 @@ void Generator::operator()() {
 
 // プログラム全体を生成する
 // 出力は次の順に並べる
-//   1. 全関数名の.global宣言
-//   2. 大きさの宣言(実行ファイル用のみ．.reserveと，見積もれた場合の.stack)
+//   1. 全関数名を挙げる.global指令
+//   2. 領域の大きさの指令(実行ファイル用のみ．.reserveと，見積もれた場合の.stack)
 //   3. 各関数(main関数が先頭)
-// 各関数は宣言より先に別の出力先へ生成し，最後に宣言の後ろへ書き出す
+// 各関数は指令より先に別の出力先へ生成し，最後に指令の後ろへ書き出す
 // (実行ファイル用の.stackの値は，全関数のフレームの大きさが確定するまで決まらないため．
 //  スタックの量の見積もりとROM用のメモリの検査も，同じ理由で全関数を生成した後に行う)
 void Generator::gen_program() {
     std::ostringstream funcs_out;   // 生成した各関数の出力先
-    // 各関数の出力先を，宣言より後ろに書き出すための出力先へ向ける
+    // 各関数の出力先を，指令より後ろに書き出すための出力先へ向ける
     this->out_ = &funcs_out;
 
     // main関数を先頭に出力する (アセンブリはmainを一番最初に書く必要がある)
@@ -133,14 +133,14 @@ void Generator::gen_program() {
             this->gen_func(child);
         }
     }
-    // 宣言を書き出すため，出力先をアセンブリの出力先へ戻す
+    // 指令を書き出すため，出力先をアセンブリの出力先へ戻す
     this->out_ = &this->asm_out_;
 
     // スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
     this->stack_bytes_ = this->estimate_stack_bytes();
     this->check_memory_usage();
 
-    // .global宣言: 子を走査して全関数名を集める (アセンブリは定義前に全関数の宣言が必要)
+    // .global指令: 子を走査して全関数名を集める (アセンブリは定義前に全関数の宣言が必要)
     bool first = true;
     (*this->out_) << ".global ";
     for (node_t *child : this->root_->children) {
@@ -151,7 +151,7 @@ void Generator::gen_program() {
     }
     (*this->out_) << "\n";
 
-    // 実行ファイル用の場合，領域に必要な大きさを宣言する
+    // 実行ファイル用の場合，領域に必要な大きさの指令を書く
     // (グローバル変数・文字列リテラルは命令列の直後に置くため，その大きさを命令列の直後に確保する範囲とする．
     //  スタックの量を見積もれない場合は.stackを書かず，量を未定にする)
     if (this->analysis_.is_bin_mode) {
@@ -1186,8 +1186,8 @@ void Generator::gen_asm(const node_t *stmt) {
             continue;
         }
 
-        // .global宣言・大きさの宣言(.reserve・.stack)の場合 (プログラムの先頭にだけ書けるため)
-        // 宣言の名前ごとに，行の先頭と一致するかを調べる
+        // 指令(.global・.reserve・.stack)の場合 (アセンブラは最初の関数ラベルより前の指令だけを読むため)
+        // 指令の名前ごとに，行の先頭と一致するかを調べる
         for (const std::string directive : {".global", ".reserve", ".stack"}) {
             if (code.compare(0, directive.size(), directive) == 0) {
                 throw "compiler error: '" + directive + "' cannot be written in asm template" + at;

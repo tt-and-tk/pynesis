@@ -134,7 +134,7 @@ std::string compile_to_asm(const args_t &args, int global_base, int &global_size
 }
 
 // アセンブリの命令数を数える
-// (コード生成は，命令行を半角空白で字下げし，ラベル行・.global行・大きさの宣言の行を字下げせずに出力する．
+// (コード生成は，命令行を半角空白で字下げし，ラベル行・指令の行を字下げせずに出力する．
 //  コメント行は命令行と同じく字下げするため，先頭の空白を除いた最初の文字が';'かどうかで見分ける)
 int count_instructions(const std::string &asm_text) {
     std::istringstream lines(asm_text);  // 1行ずつ読み出す元
@@ -148,7 +148,7 @@ int count_instructions(const std::string &asm_text) {
         if (
             // 空白だけの行や空行でない
             pos != std::string::npos
-            // かつ，字下げしている(ラベル行・.global行・大きさの宣言の行でない)
+            // かつ，字下げしている(ラベル行・指令の行でない)
             && line[0] == ' '
             // かつ，コメント行でない
             && line[pos] != ';') {

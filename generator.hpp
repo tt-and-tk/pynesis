@@ -48,7 +48,7 @@ private:
     std::vector<std::string> continue_labels_;
 
     // 生成メソッド (gen_で始まる)
-    void gen_program();              // プログラム全体 (.global宣言 + 実行ファイル用は大きさの宣言 + main優先で各関数を出力)
+    void gen_program();              // プログラム全体 (.global指令 + 実行ファイル用は領域の大きさの指令 + main優先で各関数を出力)
     void gen_global_inits();         // グローバル変数の初期化 (mainの先頭に出力)
     void gen_func(node_t *func);     // 関数定義 (ラベル + フレームの確保 + 本体)
     void gen_func_body(node_t *func);  // 関数の本体ブロックと末尾の復帰
