@@ -183,10 +183,14 @@ int Parser::count_type_tokens(int start) const {
     int index = start;   // 数えている位置
     // const修飾子がある場合
     if (this->kind_at(index) == TK_CONST) index++;
-    const token_kind_t sign_kind = this->kind_at(index);   // 符号修飾子がありうる位置のトークン種別
+    const token_kind_t sign_kind = this->kind_at(index);                        // 符号修飾子がありうる位置のトークン種別
+    const bool has_sign = sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED;   // 符号修飾子が付いているか
     // 符号修飾子がある場合
-    if (sign_kind == TK_SIGNED || sign_kind == TK_UNSIGNED) index++;
+    if (has_sign) index++;
     const token_kind_t keyword_kind = this->kind_at(index);   // 型キーワードがありうる位置のトークン種別
+    // 符号修飾子の直後が識別子なら，符号修飾子までのトークン数を返す
+    // (符号修飾子の後に書ける型は予約語だけで，そこにある識別子は宣言する名前のため)
+    if (has_sign && keyword_kind == TK_IDENT) return index - start;
     // 構造体型・列挙型は，続く構造体名・列挙型名の分も数える
     if (keyword_kind == TK_STRUCT || keyword_kind == TK_ENUM) index++;
     index++;   // 型キーワード(構造体型・列挙型なら構造体名・列挙型名)またはtypedef名
