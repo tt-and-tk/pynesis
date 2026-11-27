@@ -327,8 +327,8 @@ void Generator::gen_return() {
         (*this->out_) << "    ret\n";
         return;
     }
-    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでシェルへ伝える
-    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない．OSは終了のシステムコールから実行ファイルへ戻らない)
+    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでQosmosへ伝える
+    // (QosmosはmainをCALLせずに実行し始めるため，retで戻る先がない．Qosmosは終了のシステムコールから実行ファイルへ戻らない)
     // 番号をr1に載せ，番号と終了状態だけを並べてシステムコールを呼ぶ(r0・r1を使えるのは，フレームを解放した後で値を保持していないため)
     (*this->out_) << "    mov fh r0 r1 " << SYSCALL_EXIT_NUMBER << "\n";
     this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
@@ -374,7 +374,7 @@ void Generator::gen_syscall(node_t *expr, int reg) {
 // 1つ目に渡すレジスタが番号を，2つ目以降が引数を持つ．渡さない引数の位置には何も書き込まない
 // SPを動かす量は，別に渡すもう1つのレジスタに載せる
 // 並べる位置は，SPから順に戻り値の置き場・番号・引数4つ(4バイトずつ)
-// (SPを先に下げるのは，SPより上にあるフレームや，シェルが置いたコマンド名と引数を壊さないため)
+// (SPを先に下げるのは，SPより上にあるフレームや，Qosmosが置いたコマンド名と引数を壊さないため)
 void Generator::gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg) {
     // SPを並べる値のバイト数だけ下げる
     (*this->out_) << "    mov fh r0 " << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";

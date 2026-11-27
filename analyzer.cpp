@@ -772,7 +772,7 @@ void Analyzer::collect_globals() {
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
             // mainの場合 (出力先ごとに決まった形でだけ定義できる．ROMは値を受け渡す呼び出し元が存在しないため戻り値も引数も持たず，
-            //  実行ファイルはシェルがコマンド名と引数を渡し，mainの戻り値を終了状態として受け取る)
+            //  実行ファイルはQosmosがコマンド名と引数を渡し，mainの戻り値を終了状態として受け取る)
             if (child->sval == "main") {
                 this->check_main_signature(child);
             }
@@ -1059,7 +1059,7 @@ void Analyzer::check_main_signature(const node_t *func) const {
     }
     signature += ")";
 
-    // 実行ファイルの場合 (シェルが引数を渡すため，引数を使わない形と受け取る形のどちらかにする)
+    // 実行ファイルの場合 (Qosmosが引数を渡すため，引数を使わない形と受け取る形のどちらかにする)
     if (this->is_bin_mode_) {
         if (signature != "int main(void)" && signature != "int main(int, char **)") {
             throw std::string("compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at ")
