@@ -1,7 +1,7 @@
-// expect: compiler error: global variables (32744 bytes) and stack (28 bytes) exceed first half of memory (32768 bytes)
+// expect: compiler error: global variables (32744 bytes) and stack (28 bytes) exceed kernel memory (32768 bytes)
 // コード生成エラー: 組み込み関数syscallと関数hを呼ぶ関数fでは，syscallで積む24バイトとhの呼び出しで積む量のうち大きい方を数える
 // mainのフレームはなく，fの呼び出しで戻り先の4バイトを積む．fの中では，フレームのないhの呼び出しで積む4バイトより，
-// syscallで積む24バイトの方が大きい．スタックの量は28バイトで，グローバル変数との合計がメモリの前半を4バイト超えることを検出する (異常系)
+// syscallで積む24バイトの方が大きい．スタックの量は28バイトで，グローバル変数との合計がカーネル用の範囲を4バイト超えることを検出する (異常系)
 int table[8186];                  // 32744バイト
 void h(void) {
 }

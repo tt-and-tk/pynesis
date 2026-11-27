@@ -1,4 +1,4 @@
-// expect: compiler error: global variables (16384 bytes) and stack (16388 bytes) exceed first half of memory (32768 bytes)
+// expect: compiler error: global variables (16384 bytes) and stack (16388 bytes) exceed kernel memory (32768 bytes)
 // 生成エラー: asm文の入力に書いた関数は，asm文を書いた関数から呼ばれうるものとしてスタックの量を見積もる (異常系)
 // mainのフレームはなく，fの呼び出しで戻り先の4バイトとfのフレーム16384バイトを積む
 int table[4096];

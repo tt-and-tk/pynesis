@@ -156,7 +156,7 @@ private:
     // node以下にSPのハードウェア変数へ書き込む式があればエラーにする (フレームを持つ関数の本体に対して使う)
     static void check_no_sp_write(const node_t *node);
     std::optional<int> estimate_stack_bytes();   // プログラムが使うスタックの量(バイト)を見積もる．見積もれない場合は値を持たない
-    void check_memory_usage();   // ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
+    void check_memory_usage();   // ROM用のグローバル変数とスタックがカーネル用の範囲に収まるか検査する
     // funcを呼び出してから戻るまでに使うスタックのバイト数(最大)を返す
     // path: 現在の探索経路(再帰の検出用)．recorded: 関数ごとに求めた使用量(再訪時に使い回す)
     // 再帰を見つけた場合はis_recursiveをtrueにする

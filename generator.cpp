@@ -136,7 +136,7 @@ void Generator::gen_program() {
     // 指令を書き出すため，出力先をアセンブリの出力先へ戻す
     this->out_ = &this->asm_out_;
 
-    // スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
+    // スタックの量を見積もり，ROM用ではグローバル変数と合わせてカーネル用の範囲に収まるか検査する
     this->stack_bytes_ = this->estimate_stack_bytes();
     this->check_memory_usage();
 
@@ -2058,8 +2058,8 @@ std::optional<int> Generator::estimate_stack_bytes() {
     return std::max(stack_bytes, SYSCALL_ARGS_BYTES);
 }
 
-// ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
-// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
+// ROM用のグローバル変数とスタックがカーネル用の範囲に収まるか検査する
+// スタックはカーネル用の範囲の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 // 実行ファイル用の場合と，スタックの量を見積もれなかった場合は検査しない
 void Generator::check_memory_usage() {
@@ -2068,11 +2068,11 @@ void Generator::check_memory_usage() {
     // スタックの量を見積もれなかった場合 (再帰があるため，検査しない)
     if (!this->stack_bytes_) return;
 
-    if (this->analysis_.global_size + *this->stack_bytes_ > RAM_HALF_SIZE) {
+    if (this->analysis_.global_size + *this->stack_bytes_ > KERNEL_MEMORY_SIZE) {
         throw std::string("compiler error: global variables (")
               + std::to_string(this->analysis_.global_size) + " bytes) and stack ("
-              + std::to_string(*this->stack_bytes_) + " bytes) exceed first half of memory ("
-              + std::to_string(RAM_HALF_SIZE) + " bytes)";
+              + std::to_string(*this->stack_bytes_) + " bytes) exceed kernel memory ("
+              + std::to_string(KERNEL_MEMORY_SIZE) + " bytes)";
     }
 }
 

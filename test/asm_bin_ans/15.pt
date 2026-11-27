@@ -1,5 +1,5 @@
 .global f, main
-.reserve 28096
+.reserve 93632
 
 main:
     mov fh r0 r0 3
