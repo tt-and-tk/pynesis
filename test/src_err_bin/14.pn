@@ -1,6 +1,6 @@
 // expect: compiler error: instructions (320 bytes), global variables (93636 bytes) and stack (4096 bytes) exceed area for executable (98048 bytes)
 // 生成エラー: 再帰呼び出しがありスタックの量を見積もれない場合は，Qosmosが割り振る既定の量(4096バイト)で検査する
-// 命令列・グローバル変数・既定のスタックの量の合計が，領域のうち実行ファイルが使える範囲(98048バイト)を4バイト超える (異常系)
+// 命令列・グローバル変数・既定のスタックの量の合計が，実行ファイル用の範囲(最も大きい領域から引数の置き場を除いた98048バイト)を4バイト超える (異常系)
 int table[23409];
 int f(int n) {
     if (n == 0) {
