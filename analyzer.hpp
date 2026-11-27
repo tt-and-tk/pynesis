@@ -19,7 +19,7 @@ const int EXEC_AREA_SIZE = EXEC_REGION_MAX_SIZE - EXEC_ARGS_AREA_SIZE;
 // Qosmosの取り決め: 実行ファイルのスタックの量が未定のときに，Qosmosが割り振るスタックの量(バイト)
 // (スタックの量を見積もれないプログラムが実行ファイル用の範囲に収まるかを，Qosmosが割り振る量と同じこの量で検査する)
 const int EXEC_DEFAULT_STACK_SIZE = 4096;
-// Qosmosの取り決め: 実行ファイルの終了をシェルへ伝えるシステムコールの番号
+// Qosmosの取り決め: 実行ファイルの終了をQosmosへ伝えるシステムコールの番号
 // (Qosmosの実行ファイル向けライブラリが定義する終了の機能の番号と揃える)
 const int SYSCALL_EXIT_NUMBER = 5;
 // Qosmosの取り決め: システムコールの命令を実行する時点で，SPから順に置く値の並びのバイト数
