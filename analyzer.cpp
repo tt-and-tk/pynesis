@@ -16,6 +16,8 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"USIZE",     {BASE_INT, false}, LOC_REGISTER, 0x14, true,  true},   // ユーザーモードの領域の大きさ
     {"EENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x15, true,  true},   // 例外ハンドラの番地
     {"ECAUSE",    {BASE_INT, false}, LOC_REGISTER, 0x16, true,  false},  // 例外の原因
+    {"IENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x17, true,  true},   // 割り込みハンドラの番地
+    {"TINTERVAL", {BASE_INT, false}, LOC_REGISTER, 0x18, true,  true},   // タイマー割り込みの間隔
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
     {"DIPSW",     {BASE_INT, false}, LOC_REGISTER, 0x21, true,  false},  // DIPスイッチ
     {"LED",       {BASE_INT, false}, LOC_REGISTER, 0x22, false, true},   // LED
