@@ -16,7 +16,7 @@ const int EXEC_REGION_MAX_SIZE = 98304;
 const int EXEC_ARGS_AREA_SIZE = 256;
 // 最も大きい領域のうち，命令列・グローバル変数・スタックを置ける範囲の大きさ(バイト)．以下，この範囲を実行ファイル用の範囲と呼ぶ
 const int EXEC_AREA_SIZE = EXEC_REGION_MAX_SIZE - EXEC_ARGS_AREA_SIZE;
-// Qosmosの取り決め: スタックの量が未定の実行ファイルのプロセスに割り振るスタックの量(バイト)
+// Qosmosの取り決め: 実行ファイルがスタックの量を未定としている場合に，そのプロセスへ割り振るスタックの量(バイト)
 // (スタックの量を見積もれないプログラムが実行ファイル用の範囲に収まるかも，この量で検査する)
 const int EXEC_DEFAULT_STACK_SIZE = 4096;
 // Qosmosの取り決め: プロセスの終了をQosmosへ伝えるシステムコールの番号
