@@ -4,7 +4,7 @@
 unsigned int user_sp;
 unsigned int kernel_sp;
 
-// システムコールハンドラ: SPをカーネルのスタックへ切り替えてから，ユーザーのSPへ戻してsysret()で戻る
+// システムコール・例外・割り込みに共通のハンドラ: SPをカーネルのスタックへ切り替えてから，ユーザーのSPへ戻してsysret()で戻る
 void handler(void) {
     user_sp = SP;           // 番地0x10から読み出す
     SP = kernel_sp;         // 番地0x10へ書き込む
