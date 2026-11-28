@@ -136,7 +136,7 @@ void Generator::gen_program() {
     // 指令を書き出すため，出力先をアセンブリの出力先へ戻す
     this->out_ = &this->asm_out_;
 
-    // スタックの量を見積もり，ROM用ではグローバル変数と合わせてメモリの前半に収まるか検査する
+    // スタックの量を見積もり，ROM用ではグローバル変数と合わせてカーネル用の範囲に収まるか検査する
     this->stack_bytes_ = this->estimate_stack_bytes();
     this->check_memory_usage();
 
@@ -327,8 +327,8 @@ void Generator::gen_return() {
         (*this->out_) << "    ret\n";
         return;
     }
-    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでシェルへ伝える
-    // (シェルはmainをCALLせずに実行し始めるため，retで戻る先がない．OSは終了のシステムコールから実行ファイルへ戻らない)
+    // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでQosmosへ伝える
+    // (QosmosはmainをCALLせずに実行し始めるため，retで戻る先がない．Qosmosは終了のシステムコールからプロセスへ戻らない)
     // 番号をr1に載せ，番号と終了状態だけを並べてシステムコールを呼ぶ(r0・r1を使えるのは，フレームを解放した後で値を保持していないため)
     (*this->out_) << "    mov fh r0 r1 " << SYSCALL_EXIT_NUMBER << "\n";
     this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
@@ -374,7 +374,7 @@ void Generator::gen_syscall(node_t *expr, int reg) {
 // 1つ目に渡すレジスタが番号を，2つ目以降が引数を持つ．渡さない引数の位置には何も書き込まない
 // SPを動かす量は，別に渡すもう1つのレジスタに載せる
 // 並べる位置は，SPから順に戻り値の置き場・番号・引数4つ(4バイトずつ)
-// (SPを先に下げるのは，SPより上にあるフレームや，シェルが置いたコマンド名と引数を壊さないため)
+// (SPを先に下げるのは，SPより上にあるフレームや，Qosmosが置いたコマンド名と引数を壊さないため)
 void Generator::gen_syscall_enter(const std::vector<std::string> &value_regs, const std::string &work_reg) {
     // SPを並べる値のバイト数だけ下げる
     (*this->out_) << "    mov fh r0 " << work_reg << " " << SYSCALL_ARGS_BYTES << "\n";
@@ -2058,8 +2058,8 @@ std::optional<int> Generator::estimate_stack_bytes() {
     return std::max(stack_bytes, SYSCALL_ARGS_BYTES);
 }
 
-// ROM用のグローバル変数とスタックがメモリの前半に収まるか検査する
-// スタックは前半の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
+// ROM用のグローバル変数とスタックがカーネル用の範囲に収まるか検査する
+// スタックはカーネル用の範囲の上端から下へ，グローバル変数は0番地から上へ伸びるため，両者が重なると
 // 互いの値を壊す(ハードウェアは検出しない)
 // 実行ファイル用の場合と，スタックの量を見積もれなかった場合は検査しない
 void Generator::check_memory_usage() {
@@ -2068,11 +2068,11 @@ void Generator::check_memory_usage() {
     // スタックの量を見積もれなかった場合 (再帰があるため，検査しない)
     if (!this->stack_bytes_) return;
 
-    if (this->analysis_.global_size + *this->stack_bytes_ > RAM_HALF_SIZE) {
+    if (this->analysis_.global_size + *this->stack_bytes_ > KERNEL_MEMORY_SIZE) {
         throw std::string("compiler error: global variables (")
               + std::to_string(this->analysis_.global_size) + " bytes) and stack ("
-              + std::to_string(*this->stack_bytes_) + " bytes) exceed first half of memory ("
-              + std::to_string(RAM_HALF_SIZE) + " bytes)";
+              + std::to_string(*this->stack_bytes_) + " bytes) exceed kernel memory ("
+              + std::to_string(KERNEL_MEMORY_SIZE) + " bytes)";
     }
 }
 

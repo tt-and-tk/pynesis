@@ -221,7 +221,7 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
         }
     }
 
-    // グローバル変数・文字列リテラルだけで，置き場所(ROM用はメモリの前半，実行ファイル用は実行ファイル用の範囲)を
+    // グローバル変数・文字列リテラルだけで，置き場所(ROM用はカーネル用の範囲，実行ファイル用は実行ファイル用の範囲)を
     // 使い切っていないか確認する
     // (ROM用のスタックと合わせた容量の検査と，実行ファイル用の命令列・スタックと合わせた容量の検査は，それらの大きさが確定するコード生成の後で行う)
     // 実行ファイル用の場合
@@ -231,10 +231,10 @@ std::map<std::string, const symbol_t *> Analyzer::operator()() {
               + std::to_string(EXEC_AREA_SIZE) + " bytes)";
     }
     // ROM用の場合
-    if (!this->is_bin_mode_ && this->global_size_ > RAM_HALF_SIZE) {
+    if (!this->is_bin_mode_ && this->global_size_ > KERNEL_MEMORY_SIZE) {
         throw std::string("compiler error: global variables (")
-              + std::to_string(this->global_size_) + " bytes) exceed half of memory ("
-              + std::to_string(RAM_HALF_SIZE) + " bytes)";
+              + std::to_string(this->global_size_) + " bytes) exceed kernel memory ("
+              + std::to_string(KERNEL_MEMORY_SIZE) + " bytes)";
     }
 
     return this->symbols_;
@@ -772,7 +772,7 @@ void Analyzer::collect_globals() {
         // シンボルを，関数本体の名前解決で探す範囲(スコープ)に登録してから本体の文を検査する
         else if (child->kind == ND_FUNC_DEF) {
             // mainの場合 (出力先ごとに決まった形でだけ定義できる．ROMは値を受け渡す呼び出し元が存在しないため戻り値も引数も持たず，
-            //  実行ファイルはシェルがコマンド名と引数を渡し，mainの戻り値を終了状態として受け取る)
+            //  実行ファイルはQosmosがコマンド名と引数を渡し，mainの戻り値を終了状態として受け取る)
             if (child->sval == "main") {
                 this->check_main_signature(child);
             }
@@ -1059,7 +1059,7 @@ void Analyzer::check_main_signature(const node_t *func) const {
     }
     signature += ")";
 
-    // 実行ファイルの場合 (シェルが引数を渡すため，引数を使わない形と受け取る形のどちらかにする)
+    // 実行ファイルの場合 (Qosmosが引数を渡すため，引数を使わない形と受け取る形のどちらかにする)
     if (this->is_bin_mode_) {
         if (signature != "int main(void)" && signature != "int main(int, char **)") {
             throw std::string("compiler error: 'main' must be 'int main(void)' or 'int main(int, char **)' at ")

@@ -1,5 +1,5 @@
-// expect: compiler error: global variables (16384 bytes) and stack (16396 bytes) exceed first half of memory (32768 bytes)
-// 生成エラー: グローバル変数とスタックの合計がメモリの前半(32768バイト)を超える (異常系)
+// expect: compiler error: global variables (16384 bytes) and stack (16396 bytes) exceed kernel memory (32768 bytes)
+// 生成エラー: グローバル変数とスタックの合計がカーネル用の範囲(32768バイト)を超える (異常系)
 // 呼び出しの段ごとにローカル変数のフレームが積まれるため，深いほどスタックを多く使う
 int table[4096];
 void f3(void) {

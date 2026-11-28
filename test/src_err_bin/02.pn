@@ -1,6 +1,6 @@
-// expect: compiler error: global variables (32516 bytes) exceed area for executable (32512 bytes)
-// 意味解析エラー: グローバル変数だけで，領域のうち実行ファイルが使える範囲(32512バイト)を超える (異常系)
-int table[8129];
+// expect: compiler error: global variables (98052 bytes) exceed area for executable (98048 bytes)
+// 意味解析エラー: グローバル変数だけで，実行ファイル用の範囲(最も大きい領域から引数の置き場を除いた98048バイト)を超える (異常系)
+int table[24513];
 int main(void) {
     table[0] = 0;
 }

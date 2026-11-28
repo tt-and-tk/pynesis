@@ -1,7 +1,7 @@
-// expect: compiler error: instructions (104 bytes), global variables (32000 bytes) and stack (4004 bytes) exceed area for executable (32512 bytes)
+// expect: compiler error: instructions (104 bytes), global variables (96000 bytes) and stack (4004 bytes) exceed area for executable (98048 bytes)
 // 生成エラー: 命令列とグローバル変数だけでは収まっても，見積もったスタックの量(関数fの4000バイトの配列を含む)を足すと，
-// 領域のうち実行ファイルが使える範囲(32512バイト)を超える (異常系)
-int table[8000];                  // 32000バイト
+// 実行ファイル用の範囲(最も大きい領域から引数の置き場を除いた98048バイト)を超える (異常系)
+int table[24000];                 // 96000バイト
 void f(void) {
     int buf[1000];                // 4000バイト
 }

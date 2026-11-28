@@ -1,5 +1,5 @@
-// expect: compiler error: global variables (32000 bytes) and stack (804 bytes) exceed first half of memory (32768 bytes)
-// 生成エラー: ROM用では，asm文を含んでもスタックの量を見積もり，グローバル変数と合わせてメモリの前半(32768バイト)に収まるか検査する (異常系)
+// expect: compiler error: global variables (32000 bytes) and stack (804 bytes) exceed kernel memory (32768 bytes)
+// 生成エラー: ROM用では，asm文を含んでもスタックの量を見積もり，グローバル変数と合わせてカーネル用の範囲(32768バイト)に収まるか検査する (異常系)
 int table[8000];                  // 32000バイト
 void f(void) {
     int buf[200];                 // 800バイト
