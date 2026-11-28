@@ -6,7 +6,7 @@
 
 // ハードウェア変数の定義表 (公開するのは，CPU内部レジスタと，ボード上の周辺機器を操作するレジスタ．どちらも，変数として読み書きするのはカーネルモードで動くOSだけ)
 // 読み書き可否は，表の各レジスタをカーネルモードのCPUの命令で読み出せるか・書き込めるかに合わせる．
-// 型は番地や状態を表すビット列として扱うため，全てunsigned int
+// 型は，どのレジスタも番地・大きさ・サイクル数・状態を表すビット列のいずれかで負の値を持たないため，全てunsigned int
 static const std::vector<symbol_t> g_hw_vars = {
     // 名前        型                置き場所       番地   読み   書き
     {"SP",        {BASE_INT, false}, LOC_REGISTER, 0x10, true,  true},   // スタックポインタ
@@ -16,6 +16,8 @@ static const std::vector<symbol_t> g_hw_vars = {
     {"USIZE",     {BASE_INT, false}, LOC_REGISTER, 0x14, true,  true},   // ユーザーモードの領域の大きさ
     {"EENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x15, true,  true},   // 例外ハンドラの番地
     {"ECAUSE",    {BASE_INT, false}, LOC_REGISTER, 0x16, true,  false},  // 例外の原因
+    {"IENTRY",    {BASE_INT, false}, LOC_REGISTER, 0x17, true,  true},   // 割り込みハンドラの番地
+    {"TINTERVAL", {BASE_INT, false}, LOC_REGISTER, 0x18, true,  true},   // 割り込み周期(クロックのサイクル数．0なら割り込まない)
     {"BTN",       {BASE_INT, false}, LOC_REGISTER, 0x20, true,  false},  // タクトスイッチ
     {"DIPSW",     {BASE_INT, false}, LOC_REGISTER, 0x21, true,  false},  // DIPスイッチ
     {"LED",       {BASE_INT, false}, LOC_REGISTER, 0x22, false, true},   // LED

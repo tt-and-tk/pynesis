@@ -5,14 +5,22 @@ main:
     mov fh r0 r17
     mov fh r0 r0 handler
     mov fh r0 r21
+    mov fh r0 r0 handler
+    mov fh r0 r23
     mov fh r0 r0 32768
     mov fh r0 r19
     mov fh r0 r0 16384
     mov fh r0 r20
+    mov fh r0 r0 100000
+    mov fh r0 r24
     mov fh r22 r0
     mov fh r0 r34
     mov fh r19 r0
     mov fh r20 r1
+    add r0 r1 r0
+    mov fh r0 r34
+    mov fh r23 r0
+    mov fh r24 r1
     add r0 r1 r0
     mov fh r0 r34
     sysret
