@@ -328,7 +328,7 @@ void Generator::gen_return() {
         return;
     }
     // 実行ファイルのmainは，戻り値(RAX)を終了状態として，終了のシステムコールでQosmosへ伝える
-    // (QosmosはmainをCALLせずに実行し始めるため，retで戻る先がない．Qosmosは終了のシステムコールから実行ファイルへ戻らない)
+    // (QosmosはmainをCALLせずに実行し始めるため，retで戻る先がない．Qosmosは終了のシステムコールからプロセスへ戻らない)
     // 番号をr1に載せ，番号と終了状態だけを並べてシステムコールを呼ぶ(r0・r1を使えるのは，フレームを解放した後で値を保持していないため)
     (*this->out_) << "    mov fh r0 r1 " << SYSCALL_EXIT_NUMBER << "\n";
     this->gen_syscall_enter({"r1", RAX_REGISTER}, "r0");
